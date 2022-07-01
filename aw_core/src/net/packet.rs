@@ -290,25 +290,27 @@ impl TagHeader {
     }
 
     pub fn deserialize(data: &[u8]) -> Result<(Self, usize), String> {
-        assert!(data.len() >= TagHeader::length());
+        if data.len() < TagHeader::length() {
+            return Err("Not enough data to deserialize TagHeader.".to_string());
+        }
 
         let mut reader = Cursor::new(data);
 
         let serialized_length = reader
             .read_u16::<BigEndian>()
-            .map_err(|_| "Could not read serialized_length")?;
+            .map_err(|_| "Could not read serialized_length.")?;
         let header_0 = reader
             .read_u16::<BigEndian>()
-            .map_err(|_| "Could not read header_0")?;
+            .map_err(|_| "Could not read header_0.")?;
         let opcode = reader
             .read_i16::<BigEndian>()
-            .map_err(|_| "Could not read opcode")?;
+            .map_err(|_| "Could not read opcode.")?;
         let header_1 = reader
             .read_u16::<BigEndian>()
-            .map_err(|_| "Could not read header_1")?;
+            .map_err(|_| "Could not read header_1.")?;
         let var_count = reader
             .read_u16::<BigEndian>()
-            .map_err(|_| "Could not read var_count")?;
+            .map_err(|_| "Could not read var_count.")?;
 
         Ok((
             Self {
