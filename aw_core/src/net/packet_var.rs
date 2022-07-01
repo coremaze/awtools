@@ -202,7 +202,9 @@ impl AWPacketVar {
 
         // This header data is big endian
         result.write_u16::<BigEndian>(var_id).unwrap();
-        result.write_u16::<BigEndian>(data_type << 12 | size).unwrap();
+        result
+            .write_u16::<BigEndian>(data_type << 12 | size)
+            .unwrap();
 
         // Little endian time 😎
         match &self {
@@ -227,7 +229,7 @@ impl AWPacketVar {
         Ok(result)
     }
 
-    pub fn deserialize(data: &[u8]) -> Result<Self, String> {
+    pub fn deserialize(data: &[u8]) -> Result<(Self, usize), String> {
         let mut reader = Cursor::new(data);
 
         // Header is big endian
@@ -286,7 +288,13 @@ impl AWPacketVar {
             }
         };
 
-        Ok(result)
+        Ok((result, reader.position().try_into().unwrap()))
+    }
+
+    pub fn serialize_len(&self) -> usize {
+        2 /* var id */
+        + 2 /* data type and size */
+        + self.get_data_size()
     }
 }
 
@@ -298,39 +306,47 @@ mod tests {
     pub fn test_byte() {
         let var = AWPacketVar::Byte(VarID::AFKStatus, 123u8);
         let data = var.serialize().unwrap();
-        let decoded = AWPacketVar::deserialize(&data).unwrap();
+        let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
+        assert!(var.serialize_len() == data.len());
     }
 
     #[test]
     pub fn test_int() {
         let var = AWPacketVar::Int(VarID::AFKStatus, 0x12345678);
         let data = var.serialize().unwrap();
-        let decoded = AWPacketVar::deserialize(&data).unwrap();
+        let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
+        assert!(var.serialize_len() == data.len());
     }
 
     #[test]
     pub fn test_float() {
         let var = AWPacketVar::Float(VarID::AFKStatus, 3.14159265);
         let data = var.serialize().unwrap();
-        let decoded = AWPacketVar::deserialize(&data).unwrap();
+        let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
+        assert!(var.serialize_len() == data.len());
     }
 
     #[test]
     pub fn test_string() {
         let var = AWPacketVar::String(VarID::AFKStatus, "Hello, World!".to_string());
         let data = var.serialize().unwrap();
-        let decoded = AWPacketVar::deserialize(&data).unwrap();
+        let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
+        assert!(var.serialize_len() == data.len());
     }
 
     #[test]
     pub fn test_data() {
-        let var = AWPacketVar::Data(VarID::AFKStatus, vec![0u8, 1, 3, 5, 7, 8, 4, 2, 5, 23, 111, 222]);
+        let var = AWPacketVar::Data(
+            VarID::AFKStatus,
+            vec![0u8, 1, 3, 5, 7, 8, 4, 2, 5, 23, 111, 222],
+        );
         let data = var.serialize().unwrap();
-        let decoded = AWPacketVar::deserialize(&data).unwrap();
+        let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
+        assert!(var.serialize_len() == data.len());
     }
 }
