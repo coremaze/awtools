@@ -88,6 +88,12 @@ impl AWCryptA4 {
     }
 }
 
+impl Default for AWCryptA4 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
