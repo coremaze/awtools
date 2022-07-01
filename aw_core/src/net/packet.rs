@@ -236,7 +236,7 @@ impl AWPacket {
 
     /// Examine serialized header to see what the state of this packet is.
     pub fn deserialize_check(src: &[u8]) -> Result<usize, DeserializeError> {
-        let (header, consumed) =
+        let (header, _) =
             TagHeader::deserialize(src).map_err(|_| DeserializeError::Length)?;
 
         if !header.is_valid() {
