@@ -201,26 +201,26 @@ impl AWPacketVar {
         // Assemble data
 
         // This header data is big endian
-        result.write_u16::<BigEndian>(var_id);
-        result.write_u16::<BigEndian>(data_type << 12 | size);
+        result.write_u16::<BigEndian>(var_id).unwrap();
+        result.write_u16::<BigEndian>(data_type << 12 | size).unwrap();
 
         // Little endian time 😎
         match &self {
             AWPacketVar::Byte(_, x) => {
-                result.write_u8(*x);
+                result.write_u8(*x).unwrap();
             }
             AWPacketVar::Int(_, x) => {
-                result.write_i32::<LittleEndian>(*x);
+                result.write_i32::<LittleEndian>(*x).unwrap();
             }
             AWPacketVar::Float(_, x) => {
-                result.write_f32::<LittleEndian>(*x);
+                result.write_f32::<LittleEndian>(*x).unwrap();
             }
             AWPacketVar::String(_, x) => {
-                result.write(&string_to_latin1(x));
-                result.write(&[0u8]);
+                result.write(&string_to_latin1(x)).unwrap();
+                result.write(&[0u8]).unwrap();
             }
             AWPacketVar::Data(_, x) => {
-                result.write(x);
+                result.write(x).unwrap();
             }
         };
 
