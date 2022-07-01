@@ -165,6 +165,21 @@ impl AWPacket {
             total_consumed,
         ))
     }
+
+    fn deserialize_check(src: &[u8]) -> Result<(), DeserializeError> {
+        let (header, consumed) = TagHeader::deserialize(src)
+            .map_err(|_| DeserializeError::Length)?;
+        
+        if !header.is_valid() {
+            return Err(DeserializeError::InvalidHeader);
+        }
+
+        if header.opcode == -1 && header.header_1 != 0 {
+            return Err(DeserializeError::Compressed);
+        }
+        
+        Ok(())
+    }
 }
 
 struct TagHeader {
@@ -234,6 +249,28 @@ impl TagHeader {
             reader.position().try_into().unwrap(),
         ))
     }
+
+    pub fn is_valid(&self) -> bool {
+        if self.header_1 <= 3 || self.opcode == PacketType::Tunnel as i16 {
+            if self.var_count > 1024 {
+                return false;
+            }
+            else {
+                if self.header_1 == 0 {
+                    return self.opcode == (PacketType::Tunnel as i16);
+                }
+                return true;
+            }
+        }
+        
+        return false;
+    }
+}
+
+enum DeserializeError {
+    Length,
+    InvalidHeader,
+    Compressed,
 }
 
 #[derive(FromPrimitive, Clone, Copy, Debug, PartialEq)]
