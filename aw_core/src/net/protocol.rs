@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 
 /// State of an instance of the AW protocol.
-struct AWProtocol {
+pub struct AWProtocol {
     stream: TcpStream,
     data: Vec<u8>,
     send_cipher: AWCryptA4,
@@ -92,8 +92,8 @@ impl AWProtocol {
         Ok(())
     }
 
-    /// Receive incoming bytes.
-    pub fn recv(&mut self) {
+    /// Receive incoming bytes, return success
+    pub fn recv(&mut self) -> Result<usize, String> {
         let mut buf = [0u8; 0x8000];
         if let Ok(bytes_read) = self.stream.read(&mut buf) {
             // Decrypt incoming bytes if we have a key.
@@ -101,38 +101,71 @@ impl AWProtocol {
                 cipher.decrypt_in_place(&mut buf[..bytes_read]);
             }
             self.data.extend(&buf[..bytes_read]);
+
+            if bytes_read == 0 {
+                Err("Connection closed.".to_string())
+            } else {
+                Ok(bytes_read)
+            }
+        } else {
+            Err("Could not receive bytes.".to_string())
         }
     }
 
-    /// Get next packet (if any) from the data which has been received.
-    pub fn get_available_packet(&mut self) -> Option<AWPacket> {
+    fn decompress_packet(&mut self, serialized_len: usize) {
+        // Decompress it and replace the front of the recv buf with the decompressed packet.
+        let compressed_data = &self.data[..serialized_len];
+        if let Ok(decompressed) = AWPacket::decompress(compressed_data) {
+            self.remove_from_buf(serialized_len);
+            self.insert_into_buf(&decompressed);
+        }
+    }
+
+    fn deserialize_packet(&mut self, serialized_len: usize) -> Result<Option<AWPacket>, String> {
+        match AWPacket::deserialize(&self.data[..serialized_len]) {
+            Ok((packet, consumed_bytes)) => {
+                // Successfully deserialized a packet, now remove the data from the recv buf.
+                self.remove_from_buf(consumed_bytes);
+                return Ok(Some(packet));
+            }
+            Err(_) => {
+                // Failed to deserialize packet
+                self.recv()?;
+            }
+        }
+        Ok(None)
+    }
+
+    fn check_and_deserialize_packet(&mut self) -> Result<Option<AWPacket>, String> {
         match AWPacket::deserialize_check(&self.data) {
             // Received a packet that appears well formed, attempt to deserialize
             Ok(serialized_len) => {
-                match AWPacket::deserialize(&self.data) {
-                    Ok((packet, consumed_bytes)) => {
-                        // Successfully deserialized a packet, now remove the data from the recv buf.
-                        self.remove_from_buf(consumed_bytes);
-                        Some(packet)
-                    }
-                    Err(_) => None,
-                }
+                return self.deserialize_packet(serialized_len);
             }
             Err(err) => match err {
-                DeserializeError::Length | DeserializeError::InvalidHeader => None,
+                DeserializeError::Length | DeserializeError::InvalidHeader => {
+                    self.recv()?;
+                }
                 // Received a packet that is still compressed.
                 DeserializeError::Compressed(serialized_len) => {
-                    let compressed_data = &self.data[..serialized_len];
-                    // Decompress it and replace the front of the recv buf with the decompressed packet.
-                    if let Ok(decompressed) = AWPacket::decompress(compressed_data) {
-                        self.remove_from_buf(serialized_len);
-                        self.insert_into_buf(&decompressed);
-                        // There should now be a valid packet in the recv buf, so try again.
-                        return self.get_available_packet();
-                    }
-                    None
+                    self.decompress_packet(serialized_len);
                 }
             },
+        }
+        Ok(None)
+    }
+
+    /// Get next packet (if any) from the data which has been received.
+    pub fn recv_next_packet(&mut self) -> Option<AWPacket> {
+        loop {
+            match self.check_and_deserialize_packet() {
+                // If we get a packet, return it
+                Ok(Some(packet)) => return Some(packet),
+                // If there is an error that prevented getting a packet, stop
+                Err(_) => return None,
+                // If there was no error but no packet, try again
+                _ => continue,
+            }
         }
     }
 }
@@ -158,8 +191,7 @@ mod tests {
                 match stream {
                     Ok(stream) => {
                         let mut proto = AWProtocol::new(stream);
-                        proto.recv();
-                        let packet = proto.get_available_packet().unwrap();
+                        let packet = proto.recv_next_packet().unwrap();
                         tx.send(packet).unwrap();
                         break;
                     }
