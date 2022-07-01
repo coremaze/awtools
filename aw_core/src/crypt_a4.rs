@@ -2,7 +2,8 @@
 use rand::{thread_rng, RngCore};
 
 #[derive(Clone)]
-struct AWCryptA4 {
+pub struct AWCryptA4 {
+    initial_key: Vec<u8>,
     prga_index_a: usize,
     prga_index_b: usize,
     sbox: [u8; 256],
@@ -35,10 +36,16 @@ impl AWCryptA4 {
         }
 
         Self {
+            initial_key: key.to_vec(),
             prga_index_a: 0,
             prga_index_b: 0,
             sbox,
         }
+    }
+
+    /// Get the initial key value used to set up the cipher
+    pub fn get_key(&self) -> Vec<u8> {
+        self.initial_key.clone()
     }
 
     /// Get the next XOR byte in the RC4 cipher.

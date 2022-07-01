@@ -1,12 +1,16 @@
 //! Packet (de)serialization for AW
 use crate::net::packet_var::{AWPacketVar, VarID};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use std::io::Cursor;
+use std::io::{Cursor, Read, Write};
 
+/// Packet which can be sent over an AWProtocol.
 #[derive(Debug, PartialEq)]
-struct AWPacket {
+pub struct AWPacket {
     vars: Vec<AWPacketVar>,
     opcode: PacketType,
     header_0: u16,
@@ -14,6 +18,7 @@ struct AWPacket {
 }
 
 impl AWPacket {
+    /// Create a new packet with a given type.
     pub fn new(opcode: PacketType) -> Self {
         Self {
             vars: Vec::new(),
@@ -23,10 +28,25 @@ impl AWPacket {
         }
     }
 
+    /// Get the type of the packet.
+    pub fn get_opcode(&self) -> PacketType {
+        self.opcode
+    }
+
+    pub fn set_header_0(&mut self, header_0: u16) {
+        self.header_0 = header_0;
+    }
+
+    pub fn set_header_1(&mut self, header_1: u16) {
+        self.header_1 = header_1;
+    }
+
+    /// Add a variable to the packet.
     pub fn add_var(&mut self, var: AWPacketVar) {
         self.vars.push(var);
     }
 
+    /// Get a variable from a packet.
     pub fn get_var(&self, var_id: VarID) -> Option<&AWPacketVar> {
         for var in &self.vars {
             if var.get_var_id() == var_id {
@@ -91,6 +111,7 @@ impl AWPacket {
         None
     }
 
+    /// The expected length of the packet after serialization.
     fn serialize_len(&self) -> usize {
         let mut size = TagHeader::length();
 
@@ -101,6 +122,7 @@ impl AWPacket {
         size
     }
 
+    /// Encode the given packet.
     pub fn serialize(&self) -> Result<Vec<u8>, String> {
         let serialize_len = self.serialize_len();
 
@@ -127,6 +149,52 @@ impl AWPacket {
         Ok(result)
     }
 
+    /// Serialize a packet, and then compress it if possible.
+    pub fn compressible_serialize(&self) -> Result<Vec<u8>, String> {
+        let serialized_bytes = self.serialize()?;
+        if serialized_bytes.len() > 160 {
+            // Serialize the packet and compress it
+            let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
+            encoder.write_all(&serialized_bytes).unwrap();
+            let compressed_bytes = encoder
+                .finish()
+                .map_err(|_| "Failed to compress".to_string())?;
+
+            // Add a new uncompressed header to the beginning
+            let new_header = TagHeader {
+                serialized_length: (compressed_bytes.len() + TagHeader::length()) as u16,
+                header_0: 0,
+                opcode: -1,
+                header_1: if self.header_1 != 0 { self.header_1 } else { 1 },
+                var_count: 0,
+            };
+
+            let mut result = new_header.serialize();
+            result.extend(compressed_bytes);
+
+            return Ok(result);
+        }
+
+        Ok(serialized_bytes)
+    }
+
+    /// Decompress a compressed packet and return its decompressed serialized bytes.
+    pub fn decompress(data: &[u8]) -> Result<Vec<u8>, String> {
+        if data.len() < TagHeader::length() {
+            return Err("Data not long enough to do any decompression".to_string());
+        }
+
+        let compressed_data = &data[TagHeader::length()..];
+        let mut decoder = ZlibDecoder::new(compressed_data);
+        let mut decompressed_bytes = Vec::<u8>::with_capacity(data.len());
+        if decoder.read_to_end(&mut decompressed_bytes).is_err() {
+            return Err("Failed to decode compressed data".to_string());
+        }
+
+        Ok(decompressed_bytes)
+    }
+
+    /// Decode a packet and return an instance if successful.
     pub fn deserialize(mut data: &[u8]) -> Result<(Self, usize), String> {
         let mut total_consumed: usize = 0;
         let (header, consumed) = TagHeader::deserialize(data)?;
@@ -166,22 +234,26 @@ impl AWPacket {
         ))
     }
 
-    fn deserialize_check(src: &[u8]) -> Result<(), DeserializeError> {
-        let (header, consumed) = TagHeader::deserialize(src)
-            .map_err(|_| DeserializeError::Length)?;
-        
+    /// Examine serialized header to see what the state of this packet is.
+    pub fn deserialize_check(src: &[u8]) -> Result<usize, DeserializeError> {
+        let (header, consumed) =
+            TagHeader::deserialize(src).map_err(|_| DeserializeError::Length)?;
+
         if !header.is_valid() {
             return Err(DeserializeError::InvalidHeader);
         }
 
         if header.opcode == -1 && header.header_1 != 0 {
-            return Err(DeserializeError::Compressed);
+            return Err(DeserializeError::Compressed(
+                header.serialized_length.into(),
+            ));
         }
-        
-        Ok(())
+
+        Ok(header.serialized_length.into())
     }
 }
 
+#[derive(Debug)]
 struct TagHeader {
     /// The length of the packet
     pub serialized_length: u16,
@@ -254,27 +326,27 @@ impl TagHeader {
         if self.header_1 <= 3 || self.opcode == PacketType::Tunnel as i16 {
             if self.var_count > 1024 {
                 return false;
-            }
-            else {
+            } else {
                 if self.header_1 == 0 {
                     return self.opcode == (PacketType::Tunnel as i16);
                 }
                 return true;
             }
         }
-        
-        return false;
+
+        false
     }
 }
 
-enum DeserializeError {
+#[derive(Debug)]
+pub enum DeserializeError {
     Length,
     InvalidHeader,
-    Compressed,
+    Compressed(usize),
 }
 
 #[derive(FromPrimitive, Clone, Copy, Debug, PartialEq)]
-enum PacketType {
+pub enum PacketType {
     PublicKeyResponse = 1,
     StreamKeyResponse = 2,
 

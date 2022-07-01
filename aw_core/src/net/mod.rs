@@ -1,3 +1,6 @@
+mod protocol;
+pub use protocol::*;
+
 mod packet;
 pub use packet::*;
 

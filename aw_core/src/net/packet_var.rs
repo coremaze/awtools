@@ -181,7 +181,7 @@ impl AWPacketVar {
             AWPacketVar::Byte(_, _) => 1,
             AWPacketVar::Int(_, _) => 4,
             AWPacketVar::Float(_, _) => 4,
-            AWPacketVar::String(_, string) => string_to_latin1(&string).len() + 1,
+            AWPacketVar::String(_, string) => string_to_latin1(string).len() + 1,
             AWPacketVar::Data(_, buf) => buf.len(),
         }
     }
@@ -218,11 +218,11 @@ impl AWPacketVar {
                 result.write_f32::<LittleEndian>(*x).unwrap();
             }
             AWPacketVar::String(_, x) => {
-                result.write(&string_to_latin1(x)).unwrap();
-                result.write(&[0u8]).unwrap();
+                result.write_all(&string_to_latin1(x)).unwrap();
+                result.write_all(&[0u8]).unwrap();
             }
             AWPacketVar::Data(_, x) => {
-                result.write(x).unwrap();
+                result.write_all(x).unwrap();
             }
         };
 

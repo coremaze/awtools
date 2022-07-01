@@ -14,3 +14,4 @@ base64 = "0.13.0"
 byteorder = "1.4.3"
 num-traits = "0.2.15"
 num-derive = "0.3.3"
+flate2 = { version = "1.0.17", features = ["zlib"], default-features = false }
