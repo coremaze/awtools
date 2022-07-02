@@ -1,5 +1,5 @@
 [workspace]
-members = ["licgen", "licinfo"]
+members = ["licgen", "licinfo", "universe"]
 
 [profile.release]
 strip = true
