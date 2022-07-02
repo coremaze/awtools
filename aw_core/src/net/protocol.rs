@@ -238,6 +238,9 @@ impl AWProtocol {
                     // There may be data that has already been sent, so we need to decrypt it now.
                     // self.recv_cipher.as_mut().unwrap().decrypt_in_place(&mut self.data);
                 }
+                ProtocolMessage::Encrypt(should) => {
+                    self.encrypt_data(should);
+                },
                 ProtocolMessage::Disconnect => {
                     self.dead = true;
                 }
@@ -290,6 +293,7 @@ pub enum ProtocolMessage {
     Packet(AWPacket),
     Disconnect,
     StreamKey(Vec<u8>),
+    Encrypt(bool),
 }
 
 #[cfg(test)]

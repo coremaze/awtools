@@ -67,6 +67,7 @@ impl UniverseServer {
                     self.clients[client_num].dead = true;
                 }
                 ProtocolMessage::StreamKey(_) => todo!(),
+                ProtocolMessage::Encrypt(_) => todo!(),
             }
         }
     }
@@ -75,6 +76,7 @@ impl UniverseServer {
         match packet.get_opcode() {
             PacketType::PublicKeyRequest => self.handle_public_key_request(client_num, &packet),
             PacketType::StreamKeyResponse => self.handle_stream_key_response(client_num, &packet),
+            PacketType::PublicKeyResponse => self.handle_public_key_response(client_num, &packet),
             _ => {
                 println!("Unhandled packet {packet:?}");
             }
@@ -179,6 +181,31 @@ impl UniverseServer {
             if let Ok(a4_key) = client.rsa.decrypt_private(&encrypted_a4_key) {
                 client.connection.set_recv_key(&a4_key);
                 self.send_attribs(client_num);
+            }
+        }
+    }
+
+    fn handle_public_key_response(&mut self, client_num: usize, packet: &AWPacket) {
+        let client = &mut self.clients[client_num];
+        if let Some(rsa_key_bytes) = packet.get_data(VarID::EncryptionKey) {
+            // Decode their public key
+            let mut public_rsa = AWCryptRSA::default();
+            public_rsa.randomize();
+            if public_rsa.decode_public_key(&rsa_key_bytes).is_err() {
+                return;
+            }
+            
+            // Encrypt our RC4 key using the client's RSA key
+            match public_rsa.encrypt_public(&client.connection.get_send_key()) {
+                Ok(encrypted_a4) => {
+                    let mut response = AWPacket::new(PacketType::StreamKeyResponse);
+                    response.add_var(AWPacketVar::Data(VarID::EncryptionKey, encrypted_a4));
+                    client.connection.send(response);
+                    client.connection.encrypt_data(true);
+                },
+                Err(e) => {
+                    println!("Failed to encrypt: {e:?}");
+                },
             }
         }
     }
