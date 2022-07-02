@@ -25,7 +25,7 @@ impl AWCryptA4 {
         // Start sbox as [0..256; 256]
         let mut sbox: [u8; 256] = [0u8; 256];
         for (i, x) in sbox.iter_mut().enumerate() {
-            *x = (i % u8::MAX as usize) as u8;
+            *x = (i & u8::MAX as usize) as u8;
         }
 
         // ksa
@@ -56,7 +56,7 @@ impl AWCryptA4 {
         self.sbox.swap(self.prga_index_a, self.prga_index_b);
 
         let result_index = (self.sbox[self.prga_index_a] as usize
-            + self.sbox[self.prga_index_a] as usize)
+            + self.sbox[self.prga_index_b] as usize)
             % self.sbox.len();
 
         self.sbox[result_index]
@@ -103,7 +103,7 @@ mod tests {
         let mut a4_encrypt = AWCryptA4::new();
         let mut a4_decrypt = a4_encrypt.clone();
         let data = (0u32..2048)
-            .map(|x| (x % (u8::MAX as u32)) as u8)
+            .map(|x| (x & (u8::MAX as u32)) as u8)
             .collect::<Vec<u8>>();
         let encrypted_data = a4_encrypt.encrypt(&data);
         let decrypted_data = a4_decrypt.decrypt(&encrypted_data);
@@ -119,7 +119,7 @@ mod tests {
         let mut a4_encrypt = AWCryptA4::new();
         let mut a4_inplace = a4_encrypt.clone();
         let mut data = (0u32..2048)
-            .map(|x| (x % (u8::MAX as u32)) as u8)
+            .map(|x| (x & (u8::MAX as u32)) as u8)
             .collect::<Vec<u8>>();
 
         let encrypted_data = a4_encrypt.encrypt(&data);
