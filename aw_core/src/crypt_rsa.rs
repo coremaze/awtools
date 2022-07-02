@@ -15,10 +15,19 @@ pub enum RSAKey {
 impl AWCryptRSA {
     pub fn new() -> Self {
         let random_struct = RandomStruct::new();
+
+        let proto_key = RSAProtoKey {
+            bits: 512,
+            use_fermat4: true,
+        };
+
+        let (pub_key, priv_key) = generate_pem_keys(&proto_key)
+            .expect("Failed to generate RSA keys");
+
         Self {
             random_struct,
-            public_key: None,
-            private_key: None,
+            public_key: Some(pub_key),
+            private_key: Some(priv_key),
         }
     }
 
@@ -33,8 +42,26 @@ impl AWCryptRSA {
         Ok(())
     }
 
+    pub fn encode_private_key(&self) -> Option<Vec<u8>> {
+        if let Some(key) = &self.private_key {
+            Some(key.encode())
+        }
+        else {
+            None
+        }
+    }
+
     pub fn set_public_key(&mut self, public_key: RSAPublicKey) {
         self.public_key = Some(public_key);
+    }
+
+    pub fn encode_public_key(&self) -> Option<Vec<u8>> {
+        if let Some(key) = &self.public_key {
+            Some(key.encode())
+        }
+        else {
+            None
+        }
     }
 
     pub fn decode_public_key(&mut self, data: &[u8]) -> Result<(), RSAError> {
