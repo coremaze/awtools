@@ -4,6 +4,9 @@ use crate::net::packet::{AWPacket, DeserializeError, PacketType};
 use crate::ReasonCode;
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::thread;
+
 
 /// State of an instance of the AW protocol.
 pub struct AWProtocol {
@@ -12,17 +15,32 @@ pub struct AWProtocol {
     send_cipher: AWCryptA4,
     should_encrypt: bool,
     recv_cipher: Option<AWCryptA4>,
+    dead: bool,
+    inbound_packets: Sender<ProtocolMessage>,
+    outbound_packets: Receiver<ProtocolMessage>,
+    other_inbound_packets: Option<Receiver<ProtocolMessage>>,
+    other_outbound_packets: Option<Sender<ProtocolMessage>>,
+    last_packet_type: Option<PacketType>,
 }
 
 impl AWProtocol {
     /// Create a new AWProtocol instance given a TCP stream that has already been established.
     pub fn new(stream: TcpStream) -> Self {
+        let (outbound_packets_tx, outbound_packets_rx) = channel::<ProtocolMessage>();
+        let (inbound_packets_tx, inbound_packets_rx) = channel::<ProtocolMessage>();
+  
         Self {
             stream,
             data: Vec::new(),
             send_cipher: AWCryptA4::new(),
             should_encrypt: false,
             recv_cipher: None,
+            dead: false,
+            last_packet_type: None,
+            inbound_packets: inbound_packets_tx,
+            outbound_packets: outbound_packets_rx,
+            other_inbound_packets: Some(inbound_packets_rx),
+            other_outbound_packets: Some(outbound_packets_tx),
         }
     }
 
@@ -168,6 +186,105 @@ impl AWProtocol {
             }
         }
     }
+
+    /// Returns whether there is anything to handle on a connection, including whether there has been an error.
+    pub fn needs_action(&mut self) -> bool {
+        // If we already have bytes, they need to be handled
+        if self.data.len() > 0 {
+            return true;
+        }
+
+        // If there are bytes on the socket, they need to be handled
+        self.stream.set_nonblocking(true).unwrap();
+        let mut buf = [0u8; 1];
+        let peek = self.stream.peek(&mut buf);
+        self.stream.set_nonblocking(false).unwrap();
+
+        // If the peek operation would block, that means it does not have data
+        match peek {
+            Err(x) if x.kind() == std::io::ErrorKind::WouldBlock => false,
+            Ok(_) => true,
+            _ => false,
+        }
+    }
+
+    fn process_loop(mut self) {
+        while !self.dead {
+            self.handle_inbound_packets();
+
+            // If we were just sent a stream key, we need to wait until it is decrypted and sent here.
+            if let Some(PacketType::StreamKeyResponse) = self.last_packet_type {
+                while self.recv_cipher.is_none() {
+                    self.handle_messages();
+                }
+            }
+
+            self.handle_messages();
+        }
+
+        drop(self);
+    }
+
+    fn handle_messages(&mut self) {
+        if let Ok(message) = self.outbound_packets.try_recv() {
+            match message {
+                ProtocolMessage::Packet(mut packet) => {
+                    if self.send(&mut packet, true).is_err() {
+                        self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
+                        self.dead = true;
+                    }
+                },
+                ProtocolMessage::StreamKey(key) => {
+                    self.recv_cipher = Some(AWCryptA4::from_key(&key));
+                    // There may be data that has already been sent, so we need to decrypt it now.
+                    // self.recv_cipher.as_mut().unwrap().decrypt_in_place(&mut self.data);
+                },
+                ProtocolMessage::Disconnect => {
+                    self.dead = true;
+                },
+            }
+        }
+    }
+
+    fn handle_inbound_packets(&mut self) {
+        if self.needs_action() {
+            match self.recv_next_packet() {
+                Some(packet) => {
+                    self.last_packet_type = Some(packet.get_opcode());
+                    if self.inbound_packets.send(ProtocolMessage::Packet(packet)).is_err() {
+                        self.dead = true;
+                    }
+                }
+                None => {
+                    self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
+                    self.dead = true;
+                }
+            }
+        } 
+    }
+
+    pub fn start_process_loop(mut self) -> (Sender<ProtocolMessage>, Receiver<ProtocolMessage>) {
+        let outbound = self.other_outbound_packets
+            .take()
+            .expect("outbound packet channel already taken");
+        let inbound = self.other_inbound_packets
+            .take()
+            .expect("inbound packet channel already taken");
+
+        thread::spawn(|| {
+            self.process_loop();
+        });
+
+        (outbound, inbound)
+    }
+}
+
+#[derive(Debug)]
+pub enum ProtocolMessage {
+    // Might need a packet group later
+    Packet(AWPacket),
+    Disconnect,
+    StreamKey(Vec<u8>),
 }
 
 #[cfg(test)]
