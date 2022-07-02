@@ -186,12 +186,13 @@ impl AWPacket {
 
         let compressed_data = &data[TagHeader::length()..];
         let mut decoder = ZlibDecoder::new(compressed_data);
-        let mut decompressed_bytes = Vec::<u8>::with_capacity(data.len());
-        if decoder.read_to_end(&mut decompressed_bytes).is_err() {
-            return Err("Failed to decode compressed data".to_string());
+        let mut decompressed_bytes = Vec::<u8>::new();
+        match decoder.read_to_end(&mut decompressed_bytes) {
+            Ok(_) => Ok(decompressed_bytes),
+            Err(x) => {
+                return Err("Failed to decode compressed data".to_string());
+            },
         }
-
-        Ok(decompressed_bytes)
     }
 
     /// Decode a packet and return an instance if successful.
@@ -236,8 +237,7 @@ impl AWPacket {
 
     /// Examine serialized header to see what the state of this packet is.
     pub fn deserialize_check(src: &[u8]) -> Result<usize, DeserializeError> {
-        let (header, _) =
-            TagHeader::deserialize(src).map_err(|_| DeserializeError::Length)?;
+        let (header, _) = TagHeader::deserialize(src).map_err(|_| DeserializeError::Length)?;
 
         if !header.is_valid() {
             return Err(DeserializeError::InvalidHeader);
