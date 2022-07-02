@@ -1,4 +1,4 @@
-use crate::{AWProtocol, ProtocolMessage, AWPacket};
+use crate::{AWPacket, AWProtocol, ProtocolMessage};
 use std::sync::mpsc::{Receiver, Sender};
 
 pub struct AWConnection {
@@ -10,10 +10,7 @@ impl AWConnection {
     pub fn new(protocol: AWProtocol) -> Self {
         let (outbound, inbound) = protocol.start_process_loop();
 
-        Self {
-            outbound,
-            inbound,
-        }
+        Self { outbound, inbound }
     }
 
     pub fn send(&mut self, packet: AWPacket) {
@@ -22,7 +19,9 @@ impl AWConnection {
 
     pub fn set_recv_key(&mut self, key: &[u8]) {
         println!("Sending key");
-        self.outbound.send(ProtocolMessage::StreamKey(key.to_vec())).ok();
+        self.outbound
+            .send(ProtocolMessage::StreamKey(key.to_vec()))
+            .ok();
     }
 
     pub fn recv(&mut self) -> Vec<ProtocolMessage> {
@@ -31,10 +30,10 @@ impl AWConnection {
             match self.inbound.try_recv() {
                 Ok(message) => {
                     result.push(message);
-                },
+                }
                 Err(_) => {
                     break;
-                },
+                }
             }
         }
         result

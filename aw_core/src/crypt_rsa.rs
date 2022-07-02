@@ -21,8 +21,8 @@ impl AWCryptRSA {
             use_fermat4: true,
         };
 
-        let (pub_key, priv_key) = generate_pem_keys(&proto_key)
-            .expect("Failed to generate RSA keys");
+        let (pub_key, priv_key) =
+            generate_pem_keys(&proto_key).expect("Failed to generate RSA keys");
 
         Self {
             random_struct,
@@ -45,8 +45,7 @@ impl AWCryptRSA {
     pub fn encode_private_key(&self) -> Option<Vec<u8>> {
         if let Some(key) = &self.private_key {
             Some(key.encode())
-        }
-        else {
+        } else {
             None
         }
     }
@@ -58,8 +57,7 @@ impl AWCryptRSA {
     pub fn encode_public_key(&self) -> Option<Vec<u8>> {
         if let Some(key) = &self.public_key {
             Some(key.encode())
-        }
-        else {
+        } else {
             None
         }
     }

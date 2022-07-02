@@ -191,7 +191,7 @@ impl AWPacket {
             Ok(_) => Ok(decompressed_bytes),
             Err(x) => {
                 return Err("Failed to decode compressed data".to_string());
-            },
+            }
         }
     }
 

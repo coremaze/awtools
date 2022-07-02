@@ -7,7 +7,6 @@ use std::net::TcpStream;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
-
 /// State of an instance of the AW protocol.
 pub struct AWProtocol {
     stream: TcpStream,
@@ -28,7 +27,7 @@ impl AWProtocol {
     pub fn new(stream: TcpStream) -> Self {
         let (outbound_packets_tx, outbound_packets_rx) = channel::<ProtocolMessage>();
         let (inbound_packets_tx, inbound_packets_rx) = channel::<ProtocolMessage>();
-  
+
         Self {
             stream,
             data: Vec::new(),
@@ -233,15 +232,15 @@ impl AWProtocol {
                         self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
                         self.dead = true;
                     }
-                },
+                }
                 ProtocolMessage::StreamKey(key) => {
                     self.recv_cipher = Some(AWCryptA4::from_key(&key));
                     // There may be data that has already been sent, so we need to decrypt it now.
                     // self.recv_cipher.as_mut().unwrap().decrypt_in_place(&mut self.data);
-                },
+                }
                 ProtocolMessage::Disconnect => {
                     self.dead = true;
-                },
+                }
             }
         }
     }
@@ -251,7 +250,11 @@ impl AWProtocol {
             match self.recv_next_packet() {
                 Some(packet) => {
                     self.last_packet_type = Some(packet.get_opcode());
-                    if self.inbound_packets.send(ProtocolMessage::Packet(packet)).is_err() {
+                    if self
+                        .inbound_packets
+                        .send(ProtocolMessage::Packet(packet))
+                        .is_err()
+                    {
                         self.dead = true;
                     }
                 }
@@ -260,14 +263,16 @@ impl AWProtocol {
                     self.dead = true;
                 }
             }
-        } 
+        }
     }
 
     pub fn start_process_loop(mut self) -> (Sender<ProtocolMessage>, Receiver<ProtocolMessage>) {
-        let outbound = self.other_outbound_packets
+        let outbound = self
+            .other_outbound_packets
             .take()
             .expect("outbound packet channel already taken");
-        let inbound = self.other_inbound_packets
+        let inbound = self
+            .other_inbound_packets
             .take()
             .expect("inbound packet channel already taken");
 
