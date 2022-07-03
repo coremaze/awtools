@@ -18,7 +18,7 @@ fn main() {
             start_universe(config);
         }
         Err(err) => {
-            eprintln!("Could not get universe configuration: {}", err.to_string());
+            eprintln!("Could not get universe configuration: {err}");
         }
     }
 }
