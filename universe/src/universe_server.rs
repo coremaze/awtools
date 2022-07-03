@@ -3,6 +3,7 @@ use aw_core::*;
 use crate::{
     client::{Client, ClientManager},
     config,
+    database::Database,
     license::LicenseGenerator,
     packet_handler,
 };
@@ -12,21 +13,24 @@ pub struct UniverseServer {
     config: config::UniverseConfig,
     license_generator: LicenseGenerator,
     client_manager: ClientManager,
+    database: Database,
     listener: TcpListener,
 }
 
 impl UniverseServer {
-    pub fn new(config: config::UniverseConfig) -> Self {
-        let ip = SocketAddrV4::new(config.ip, config.port);
+    pub fn new(config: config::Config) -> Result<Self, String> {
+        let database = Database::new(config.mysql)?;
+        let ip = SocketAddrV4::new(config.universe.ip, config.universe.port);
         let listener = TcpListener::bind(&ip).unwrap();
         listener.set_nonblocking(true).unwrap();
 
-        Self {
-            config,
+        Ok(Self {
+            config: config.universe,
             license_generator: LicenseGenerator::new(&ip),
             client_manager: Default::default(),
+            database,
             listener,
-        }
+        })
     }
 
     pub fn run(&mut self) {

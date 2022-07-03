@@ -9,15 +9,27 @@ mod attributes;
 pub mod license;
 pub use attributes::{send_attributes, Attribute};
 pub mod config;
+mod database;
 pub mod packet_handler;
 
 fn main() {
-    match config::UniverseConfig::get() {
+    match config::Config::get() {
         Ok(config) => {
-            UniverseServer::new(config).run();
+            start_universe(config);
         }
         Err(err) => {
             eprintln!("Could not get universe configuration: {}", err.to_string());
+        }
+    }
+}
+
+fn start_universe(config: config::Config) {
+    match UniverseServer::new(config) {
+        Ok(mut universe) => {
+            universe.run();
+        }
+        Err(err) => {
+            eprintln!("Could not create universe: {err}");
         }
     }
 }
