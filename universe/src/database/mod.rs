@@ -31,11 +31,8 @@ impl Database {
         let port = &config.port;
         let database_name = &config.database;
         let uri = format!("mysql://{username}:{password}@{hostname}:{port}/{database_name}");
-        let pool = Pool::new(uri.as_str()).map_err(|err| {
-            format!(
-                "Could not create database connection pool: {err}"
-            )
-        })?;
+        let pool = Pool::new(uri.as_str())
+            .map_err(|err| format!("Could not create database connection pool: {err}"))?;
 
         let db = Self { pool, config };
 
