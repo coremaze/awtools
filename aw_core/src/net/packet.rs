@@ -189,9 +189,7 @@ impl AWPacket {
         let mut decompressed_bytes = Vec::<u8>::new();
         match decoder.read_to_end(&mut decompressed_bytes) {
             Ok(_) => Ok(decompressed_bytes),
-            Err(x) => {
-                return Err("Failed to decode compressed data".to_string());
-            }
+            Err(_) => Err("Failed to decode compressed data".to_string()),
         }
     }
 
