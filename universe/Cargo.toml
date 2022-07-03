@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 aw_core = { path = "../aw_core" }
+num-traits = "0.2.15"
+num-derive = "0.3.3"
