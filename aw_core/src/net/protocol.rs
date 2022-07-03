@@ -189,7 +189,7 @@ impl AWProtocol {
     /// Returns whether there is anything to handle on a connection, including whether there has been an error.
     pub fn needs_action(&mut self) -> bool {
         // If we already have bytes, they need to be handled
-        if self.data.len() > 0 {
+        if !self.data.is_empty() {
             return true;
         }
 
@@ -240,7 +240,7 @@ impl AWProtocol {
                 }
                 ProtocolMessage::Encrypt(should) => {
                     self.encrypt_data(should);
-                },
+                }
                 ProtocolMessage::Disconnect => {
                     self.dead = true;
                 }
@@ -337,7 +337,7 @@ mod tests {
             "Hello, World!".to_string(),
         ));
         let data = (0..=255).collect::<Vec<u8>>();
-        packet.add_var(AWPacketVar::Data(VarID::Attrib_BetaWorld, data));
+        packet.add_var(AWPacketVar::Data(VarID::AttributeBetaWorld, data));
 
         // Send the test packet to other thread.
         let _ = proto.send(&mut packet, true);
