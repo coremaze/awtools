@@ -43,11 +43,7 @@ impl AWCryptRSA {
     }
 
     pub fn encode_private_key(&self) -> Option<Vec<u8>> {
-        if let Some(key) = &self.private_key {
-            Some(key.encode())
-        } else {
-            None
-        }
+        self.private_key.as_ref().map(|key| key.encode())
     }
 
     pub fn set_public_key(&mut self, public_key: RSAPublicKey) {
@@ -55,11 +51,7 @@ impl AWCryptRSA {
     }
 
     pub fn encode_public_key(&self) -> Option<Vec<u8>> {
-        if let Some(key) = &self.public_key {
-            Some(key.encode())
-        } else {
-            None
-        }
+        self.public_key.as_ref().map(|key| key.encode())
     }
 
     pub fn decode_public_key(&mut self, data: &[u8]) -> Result<(), RSAError> {
