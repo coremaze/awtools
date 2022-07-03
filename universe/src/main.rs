@@ -8,8 +8,16 @@ pub use universe_server::UniverseServer;
 mod attributes;
 pub mod license;
 pub use attributes::{send_attributes, Attribute};
+pub mod config;
 pub mod packet_handler;
 
 fn main() {
-    UniverseServer::new(Ipv4Addr::from_str("127.0.0.1").unwrap(), 6670).run();
+    match config::UniverseConfig::get() {
+        Ok(config) => {
+            UniverseServer::new(config).run();
+        }
+        Err(err) => {
+            eprintln!("Could not get universe configuration: {}", err.to_string());
+        }
+    }
 }

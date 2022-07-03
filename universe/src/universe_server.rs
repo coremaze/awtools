@@ -1,25 +1,28 @@
 use aw_core::*;
 
-use crate::license::LicenseGenerator;
 use crate::{
     client::{Client, ClientManager},
+    config,
+    license::LicenseGenerator,
     packet_handler,
 };
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 
 pub struct UniverseServer {
+    config: config::UniverseConfig,
     license_generator: LicenseGenerator,
     client_manager: ClientManager,
     listener: TcpListener,
 }
 
 impl UniverseServer {
-    pub fn new(ip_address: Ipv4Addr, port: u16) -> Self {
-        let ip = SocketAddrV4::new(ip_address, port);
+    pub fn new(config: config::UniverseConfig) -> Self {
+        let ip = SocketAddrV4::new(config.ip, config.port);
         let listener = TcpListener::bind(&ip).unwrap();
         listener.set_nonblocking(true).unwrap();
 
         Self {
+            config,
             license_generator: LicenseGenerator::new(&ip),
             client_manager: Default::default(),
             listener,
@@ -27,6 +30,10 @@ impl UniverseServer {
     }
 
     pub fn run(&mut self) {
+        println!(
+            "Starting universe on {}:{}",
+            self.config.ip, self.config.port
+        );
         loop {
             self.accept_new_clients();
             self.service_clients();

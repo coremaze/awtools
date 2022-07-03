@@ -9,3 +9,5 @@ edition = "2021"
 aw_core = { path = "../aw_core" }
 num-traits = "0.2.15"
 num-derive = "0.3.3"
+toml = "0.5.9"
+serde = "1.0.138"
