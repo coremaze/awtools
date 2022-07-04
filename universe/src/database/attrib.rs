@@ -89,7 +89,7 @@ impl AttribDB for Database {
             )
             .map_err(|_| ReasonCode::DatabaseError)?;
 
-        if rows.len() == 0 {
+        if rows.is_empty() {
             // Add the attribute if it is not already existent
             conn.exec_drop(
                 r"INSERT INTO awu_attrib (ID, Value) VALUES(:id, :value);",

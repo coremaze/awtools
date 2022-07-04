@@ -1,10 +1,9 @@
-use crate::client;
-use crate::database::citizen::{CitizenDB, CitizenQuery};
-use crate::license::LicenseGenerator;
 use crate::{
     attributes,
     client::{Client, ClientManager, ClientType},
     database::Database,
+    database::citizen::CitizenQuery,
+    license::LicenseGenerator
 };
 use aw_core::*;
 use num_traits::FromPrimitive;
@@ -178,14 +177,16 @@ fn validate_human_login(
     credentials: &LoginCredentials,
     client_manager: &ClientManager,
     database: &Database,
-) -> Result<(Option<CitizenQuery>), ReasonCode> {
+) -> Result<Option<CitizenQuery>, ReasonCode> {
+
     let username = credentials
         .username
         .as_ref()
         .ok_or(ReasonCode::NoSuchCitizen)?;
 
-    if username.starts_with("\"") {
-        client_manager.check_tourist(&username)?;
+    // A user is a tourist if they have quotes around their name
+    if username.starts_with('"') {
+        client_manager.check_tourist(username)?;
         Ok(None)
     } else {
         let cit = client_manager.check_citizen(

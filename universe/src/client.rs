@@ -134,7 +134,7 @@ impl ClientManager {
         }
 
         // Name cannot be bot or tourist
-        if username.starts_with("[") || username.starts_with("\"") {
+        if username.starts_with('[') || username.starts_with('"') {
             return Err(ReasonCode::NoSuchCitizen);
         }
 
@@ -161,7 +161,7 @@ impl ClientManager {
 
         // Get login citizen
         let login_citizen = db
-            .citizen_by_name(&username)
+            .citizen_by_name(username)
             .or(Err(ReasonCode::NoSuchCitizen))?;
 
         // Is login password correct?
@@ -190,29 +190,27 @@ impl ClientManager {
 
 fn check_valid_name(name: &str, is_tourist: bool) -> Result<(), ReasonCode> {
     let mut name = name.to_string();
+
+    if is_tourist {
+        // Tourist names must start and end with quotes
+        if !name.starts_with('"') || !name.ends_with('"') {
+            return Err(ReasonCode::NoSuchCitizen);
+        }
+
+        // Strip quotes to continue check
+        name.remove(0);
+        name.remove(name.len() - 1);
+    }
+    
     if name.len() < 2 {
         return Err(ReasonCode::NameTooShort);
     }
 
-    if is_tourist {
-        if name.chars().nth(0) != Some('"') || name.chars().nth(name.len() - 1) != Some('"') {
-            return Err(ReasonCode::NoSuchCitizen);
-        }
-
-        // Strip quotes and check again
-        name.remove(0);
-        name.remove(name.len() - 1);
-
-        if name.len() < 2 {
-            return Err(ReasonCode::NameTooShort);
-        }
-    }
-
-    if name.chars().nth(name.len() - 1) == Some(' ') {
+    if name.ends_with(' ') {
         return Err(ReasonCode::NameEndsWithBlank);
     }
 
-    if name.chars().nth(0) == Some(' ') {
+    if name.starts_with(' ') {
         return Err(ReasonCode::NameContainsInvalidBlank);
     }
 
