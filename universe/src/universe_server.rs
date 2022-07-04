@@ -7,7 +7,7 @@ use crate::{
     license::LicenseGenerator,
     packet_handler,
 };
-use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
+use std::net::{SocketAddrV4, TcpListener};
 
 pub struct UniverseServer {
     config: config::UniverseConfig,
