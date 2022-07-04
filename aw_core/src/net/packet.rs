@@ -514,7 +514,7 @@ mod tests {
     pub fn test_serialize() {
         let mut packet = AWPacket::new(PacketType::Address);
         packet.add_var(AWPacketVar::String(VarID::AFKStatus, "Hello".to_string()));
-        packet.add_var(AWPacketVar::Byte(VarID::Attrib_AllowTourists, 1));
+        packet.add_var(AWPacketVar::Byte(VarID::AttributeAllowTourists, 1));
         let serialized = packet.serialize().unwrap();
         let (deserialized, _) = AWPacket::deserialize(&serialized).unwrap();
         assert!(packet == deserialized);
