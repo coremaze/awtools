@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::config::UniverseConfig;
 
-use super::{Database, fetch_string, fetch_int};
+use super::{fetch_int, fetch_string, Database};
 use aw_core::ReasonCode;
 use mysql::prelude::*;
 use mysql::*;
@@ -122,26 +122,21 @@ impl AttribDB for Database {
 
         // Get all attributes from database
         let rows: Vec<Row> = conn
-        .exec(
-            r"SELECT * FROM awu_attrib;",
-            Params::Empty
-        )
-        .map_err(|_| ReasonCode::DatabaseError)?;
+            .exec(r"SELECT * FROM awu_attrib;", Params::Empty)
+            .map_err(|_| ReasonCode::DatabaseError)?;
 
         // Add each valid response to the result
         for row in &rows {
-            let id = fetch_int(row, "ID")
-                .ok_or(ReasonCode::DatabaseError)?;
+            let id = fetch_int(row, "ID").ok_or(ReasonCode::DatabaseError)?;
 
-            let value = fetch_string(row, "Value")
-                .ok_or(ReasonCode::DatabaseError)?;
-            
+            let value = fetch_string(row, "Value").ok_or(ReasonCode::DatabaseError)?;
+
             // Convert numeric ID back to Attributes
             if let Some(attribute) = Attribute::from_i64(id) {
                 result.insert(attribute, value);
             }
         }
-        
+
         Ok(result)
     }
 }

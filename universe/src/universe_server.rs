@@ -78,7 +78,9 @@ impl UniverseServer {
         log::debug!("Handling packet {packet:?}");
         match packet.get_opcode() {
             PacketType::PublicKeyRequest => packet_handler::public_key_request(client),
-            PacketType::StreamKeyResponse => packet_handler::stream_key_response(client, packet, &self.database),
+            PacketType::StreamKeyResponse => {
+                packet_handler::stream_key_response(client, packet, &self.database)
+            }
             PacketType::PublicKeyResponse => packet_handler::public_key_response(client, packet),
             PacketType::Login => packet_handler::login(
                 client,
