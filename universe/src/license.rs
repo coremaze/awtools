@@ -3,6 +3,22 @@ use aw_core::*;
 use crate::client::UserInfo;
 use std::net::SocketAddrV4;
 
+/// Generates licenses for sending to clients.
+/// 
+/// ActiveWorlds relies on providing Universe owners with a license containing
+/// information about the Universe's attributes and capabilities which is then
+/// encrypted with a private RSA key held by ActiveWorlds, Inc. The most
+/// important of this information is the IP address and port of the Universe,
+/// since clients will decrypt this license with the public RSA key and then
+/// check to see if they are the IP and port being connected to. If this
+/// process fails, the client will refuse to connect.
+/// 
+/// Since the RSA key length used for this process was only 512 bits, it was
+/// possible to factor n back into primes p and q in order to derive the
+/// private key. We use this in order to allow unmodified ActiveWorlds clients
+/// to connect.
+/// 
+/// This also provides compatibility with the Vortex ActiveWorlds 5.1 client.
 pub struct LicenseGenerator {
     ip: SocketAddrV4,
 }

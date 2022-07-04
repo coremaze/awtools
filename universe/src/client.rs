@@ -10,6 +10,7 @@ use crate::{
 use aw_core::ReasonCode;
 use num_derive::FromPrimitive;
 
+/// Game-related client state
 #[derive(Default)]
 pub struct UserInfo {
     pub build_version: Option<i32>,
