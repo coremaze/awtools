@@ -13,6 +13,8 @@ pub struct Config {
 pub struct UniverseConfig {
     pub ip: Ipv4Addr,
     pub port: u16,
+    pub user_list: bool,
+    pub allow_citizen_changes: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -47,6 +49,8 @@ impl Default for UniverseConfig {
         Self {
             ip: Ipv4Addr::new(127, 0, 0, 1),
             port: 6670,
+            user_list: true,
+            allow_citizen_changes: true,
         }
     }
 }

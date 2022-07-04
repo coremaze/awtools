@@ -1,6 +1,6 @@
 use mysql::*;
 
-use crate::config::MysqlConfig;
+use crate::config::{MysqlConfig, UniverseConfig};
 
 use self::attrib::AttribDB;
 use self::cav::CavDB;
@@ -25,7 +25,7 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn new(config: MysqlConfig) -> Result<Self, String> {
+    pub fn new(config: MysqlConfig, universe_config: &UniverseConfig) -> Result<Self, String> {
         let username = &config.username;
         let password = &config.password;
         let hostname = &config.hostname;
@@ -37,7 +37,7 @@ impl Database {
 
         let db = Self { pool, config };
 
-        db.init_tables();
+        db.init_tables(universe_config);
 
         Ok(db)
     }
@@ -46,8 +46,8 @@ impl Database {
         Ok(self.pool.get_conn()?)
     }
 
-    fn init_tables(&self) {
-        self.init_attrib();
+    fn init_tables(&self, universe_config: &UniverseConfig) {
+        self.init_attrib(universe_config);
         self.init_citizen();
         self.init_contact();
         self.init_license();

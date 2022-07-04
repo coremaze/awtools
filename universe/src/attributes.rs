@@ -1,30 +1,4 @@
 use crate::{AWPacket, AWPacketVar, Client, PacketType, VarID};
-pub enum Attribute {
-    AllowTourists = 0,
-    UnknownBilling1 = 1,
-    BetaBrowser = 2,
-    MinimumBrowser = 3,
-    LatestBrowser = 4,
-    UniverseBuild = 5,
-    CitizenChanges = 6,
-    UnknownBilling7 = 7,
-    BillingMethod = 8,
-    BillingUnknown9 = 9,
-    SearchTabURL = 10,
-    Timestamp = 11,
-    WelcomeMessage = 12,
-    BetaWorld = 13,
-    MinimumWorld = 14,
-    LatestWorld = 15,
-    DefaultStartWorld = 16,
-    Userlist = 17,
-    NotepadTabURL = 18,
-    MailTemplate = 19,
-    MailFile = 20,
-    MailCommand = 21,
-    PAVObjectPath = 22,
-    UnknownUniverseSetting = 23,
-}
 
 pub fn send_attributes(client: &Client) {
     let mut packet = AWPacket::new(PacketType::Attributes);
