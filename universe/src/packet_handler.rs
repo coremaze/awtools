@@ -1,9 +1,9 @@
 use crate::{
     attributes,
     client::{Client, ClientManager, ClientType},
-    database::Database,
     database::citizen::CitizenQuery,
-    license::LicenseGenerator
+    database::Database,
+    license::LicenseGenerator,
 };
 use aw_core::*;
 use num_traits::FromPrimitive;
@@ -199,7 +199,6 @@ fn validate_human_login(
     client_manager: &ClientManager,
     database: &Database,
 ) -> Result<Option<CitizenQuery>, ReasonCode> {
-
     let username = credentials
         .username
         .as_ref()
@@ -220,4 +219,8 @@ fn validate_human_login(
         )?;
         Ok(Some(cit))
     }
+}
+
+pub fn heartbeat(client: &Client) {
+    log::info!("Received heartbeat from {}", client.addr.ip());
 }

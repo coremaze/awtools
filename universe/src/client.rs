@@ -1,4 +1,8 @@
-use std::cell::{Ref, RefCell, RefMut};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    net::SocketAddr,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::{
     database::{
@@ -7,7 +11,7 @@ use crate::{
     },
     AWConnection, AWCryptRSA,
 };
-use aw_core::ReasonCode;
+use aw_core::{AWPacket, PacketType, ReasonCode};
 use num_derive::FromPrimitive;
 
 /// Game-related client state
@@ -25,15 +29,24 @@ pub struct Client {
     pub dead: RefCell<bool>,
     pub rsa: AWCryptRSA,
     user_info: RefCell<UserInfo>,
+    pub addr: SocketAddr,
+    pub last_heartbeat: u64,
 }
 
 impl Client {
-    pub fn new(connection: AWConnection) -> Self {
+    pub fn new(connection: AWConnection, addr: SocketAddr) -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Current time is before the unix epoch.")
+            .as_secs();
+
         Self {
             connection,
             dead: RefCell::new(false),
             rsa: AWCryptRSA::new(),
             user_info: RefCell::new(Default::default()),
+            addr,
+            last_heartbeat: now,
         }
     }
 
@@ -187,6 +200,25 @@ impl ClientManager {
 
         Ok(login_citizen)
     }
+
+    pub fn send_heartbeats(&mut self) {
+        for client in &mut self.clients {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Current time is before the unix epoch.")
+                .as_secs();
+
+            // 30 seconds between each heartbeat
+            let next_heartbeat = client.last_heartbeat + 30;
+
+            if next_heartbeat <= now {
+                log::info!("Sending heartbeat to {}", client.addr.ip());
+                let packet = AWPacket::new(PacketType::Heartbeat);
+                client.connection.send(packet);
+                client.last_heartbeat = now;
+            }
+        }
+    }
 }
 
 fn check_valid_name(name: &str, is_tourist: bool) -> Result<(), ReasonCode> {
@@ -202,7 +234,7 @@ fn check_valid_name(name: &str, is_tourist: bool) -> Result<(), ReasonCode> {
         name.remove(0);
         name.remove(name.len() - 1);
     }
-    
+
     if name.len() < 2 {
         return Err(ReasonCode::NameTooShort);
     }

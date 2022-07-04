@@ -43,12 +43,13 @@ impl UniverseServer {
             self.accept_new_clients();
             self.service_clients();
             self.client_manager.remove_dead_clients();
+            self.client_manager.send_heartbeats();
         }
     }
 
     fn accept_new_clients(&mut self) {
-        while let Ok((stream, _addr)) = self.listener.accept() {
-            let client = Client::new(AWConnection::new(AWProtocol::new(stream)));
+        while let Ok((stream, addr)) = self.listener.accept() {
+            let client = Client::new(AWConnection::new(AWProtocol::new(stream)), addr);
             self.client_manager.add_client(client);
         }
     }
@@ -89,6 +90,7 @@ impl UniverseServer {
                 &self.license_generator,
                 &self.database,
             ),
+            PacketType::Heartbeat => packet_handler::heartbeat(client),
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }
