@@ -4,6 +4,7 @@ use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use std::io::{Cursor, Read, Write};
+use crate::encoding::{string_to_latin1, latin1_to_string};
 
 #[derive(FromPrimitive)]
 pub enum DataType {
@@ -142,18 +143,6 @@ pub enum VarID {
     TrialUser = 302,
 
     Unknown = 65535,
-}
-
-fn latin1_to_string(s: &[u8]) -> String {
-    s.iter()
-        .map(|&c| c as char)
-        .collect::<String>()
-        .trim_end_matches('\0') // Strip off any null terminator
-        .to_string()
-}
-
-fn string_to_latin1(s: &str) -> Vec<u8> {
-    s.chars().map(|c| c as u8).collect()
 }
 
 impl AWPacketVar {

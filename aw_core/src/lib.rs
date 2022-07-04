@@ -12,3 +12,5 @@ pub use net::*;
 
 mod reason_code;
 pub use reason_code::ReasonCode;
+
+pub mod encoding;

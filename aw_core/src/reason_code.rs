@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub enum ReasonCode {
     Success = 0,
     CitizenshipExpired = 1,
