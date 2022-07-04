@@ -1,5 +1,4 @@
 use aw_core::*;
-use std::{net::Ipv4Addr, str::FromStr};
 
 mod client;
 pub use client::{Client, ClientType};
