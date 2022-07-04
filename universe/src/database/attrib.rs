@@ -1,14 +1,17 @@
+use std::collections::HashMap;
+
 use crate::config::UniverseConfig;
 
-use super::Database;
+use super::{Database, fetch_string, fetch_int};
 use aw_core::ReasonCode;
 use mysql::prelude::*;
 use mysql::*;
+use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
 type Result<T, E> = std::result::Result<T, E>;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, FromPrimitive, Eq, Hash, PartialEq)]
 pub enum Attribute {
     AllowTourists = 0,
     UnknownBilling1 = 1,
@@ -39,6 +42,7 @@ pub enum Attribute {
 pub trait AttribDB {
     fn init_attrib(&self, universe_config: &UniverseConfig);
     fn attrib_set(&self, attribute_id: Attribute, value: &str) -> Result<(), ReasonCode>;
+    fn attrib_get(&self) -> Result<HashMap<Attribute, String>, ReasonCode>;
 }
 
 impl AttribDB for Database {
@@ -110,6 +114,35 @@ impl AttribDB for Database {
         }
 
         Ok(())
+    }
+
+    fn attrib_get(&self) -> Result<HashMap<Attribute, String>, ReasonCode> {
+        let mut result = HashMap::<Attribute, String>::new();
+        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
+
+        // Get all attributes from database
+        let rows: Vec<Row> = conn
+        .exec(
+            r"SELECT * FROM awu_attrib;",
+            Params::Empty
+        )
+        .map_err(|_| ReasonCode::DatabaseError)?;
+
+        // Add each valid response to the result
+        for row in &rows {
+            let id = fetch_int(row, "ID")
+                .ok_or(ReasonCode::DatabaseError)?;
+
+            let value = fetch_string(row, "Value")
+                .ok_or(ReasonCode::DatabaseError)?;
+            
+            // Convert numeric ID back to Attributes
+            if let Some(attribute) = Attribute::from_i64(id) {
+                result.insert(attribute, value);
+            }
+        }
+        
+        Ok(result)
     }
 }
 

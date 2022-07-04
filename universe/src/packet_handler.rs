@@ -20,11 +20,11 @@ pub fn public_key_request(client: &Client) {
     client.connection.send(packet);
 }
 
-pub fn stream_key_response(client: &Client, packet: &AWPacket) {
+pub fn stream_key_response(client: &Client, packet: &AWPacket, database: &Database) {
     if let Some(encrypted_a4_key) = packet.get_data(VarID::EncryptionKey) {
         if let Ok(a4_key) = client.rsa.decrypt_private(&encrypted_a4_key) {
             client.connection.set_recv_key(&a4_key);
-            attributes::send_attributes(client);
+            attributes::send_attributes(client, database);
         }
     }
 }
