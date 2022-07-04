@@ -19,7 +19,7 @@ pub struct UniverseServer {
 
 impl UniverseServer {
     pub fn new(config: config::Config) -> Result<Self, String> {
-        let database = Database::new(config.mysql)?;
+        let database = Database::new(config.mysql, &config.universe)?;
         let ip = SocketAddrV4::new(config.universe.ip, config.universe.port);
         let listener = TcpListener::bind(&ip).unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -34,9 +34,10 @@ impl UniverseServer {
     }
 
     pub fn run(&mut self) {
-        println!(
+        log::info!(
             "Starting universe on {}:{}",
-            self.config.ip, self.config.port
+            self.config.ip,
+            self.config.port
         );
         loop {
             self.accept_new_clients();
@@ -74,6 +75,7 @@ impl UniverseServer {
     }
 
     fn handle_packet(&self, packet: &AWPacket, client: &Client) {
+        log::debug!("Handling packet {packet:?}");
         match packet.get_opcode() {
             PacketType::PublicKeyRequest => packet_handler::public_key_request(client),
             PacketType::StreamKeyResponse => packet_handler::stream_key_response(client, packet),
@@ -86,7 +88,7 @@ impl UniverseServer {
                 &self.database,
             ),
             _ => {
-                println!("Unhandled packet {packet:?}");
+                log::info!("Unhandled packet {packet:?}");
             }
         }
     }
