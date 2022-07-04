@@ -83,6 +83,7 @@ impl UniverseServer {
                 packet,
                 &self.client_manager,
                 &self.license_generator,
+                &self.database,
             ),
             _ => {
                 println!("Unhandled packet {packet:?}");

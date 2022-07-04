@@ -1,10 +1,10 @@
 //! Packet variable (de)serialization for AW
 
+use crate::encoding::{latin1_to_string, string_to_latin1};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use std::io::{Cursor, Read, Write};
-use crate::encoding::{string_to_latin1, latin1_to_string};
 
 #[derive(FromPrimitive)]
 pub enum DataType {

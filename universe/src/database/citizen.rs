@@ -34,6 +34,7 @@ pub struct CitizenQuery {
 
 pub trait CitizenDB {
     fn init_citizen(&self);
+    fn citizen_by_name(&self, name: &str) -> Result<CitizenQuery, ReasonCode>;
     fn citizen_by_number(&self, citizen_id: u32) -> Result<CitizenQuery, ReasonCode>;
     fn citizen_add(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode>;
 }
@@ -107,6 +108,29 @@ impl CitizenDB for Database {
                 Ok(_) => println!("Citizen #1 created as {} / {}", admin.name, admin.password),
                 Err(_) => eprintln!("Failed to create citizen #1"),
             };
+        }
+    }
+
+    fn citizen_by_name(&self, name: &str) -> Result<CitizenQuery, ReasonCode> {
+        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
+
+        let rows: Vec<Row> = conn
+            .exec(
+                r"SELECT * FROM awu_citizen WHERE Name=:name",
+                params! {
+                    "name" => name,
+                },
+            )
+            .map_err(|_| ReasonCode::DatabaseError)?;
+
+        if rows.len() > 1 {
+            return Err(ReasonCode::DatabaseError);
+        }
+
+        if let Some(user) = rows.first() {
+            fetch_citizen(user)
+        } else {
+            Err(ReasonCode::DatabaseError)
         }
     }
 

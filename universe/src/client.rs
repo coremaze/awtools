@@ -1,12 +1,22 @@
 use std::cell::{Ref, RefCell, RefMut};
 
-use crate::{AWConnection, AWCryptRSA};
+use crate::{
+    database::{
+        citizen::{CitizenDB, CitizenQuery},
+        Database,
+    },
+    AWConnection, AWCryptRSA,
+};
+use aw_core::ReasonCode;
 use num_derive::FromPrimitive;
 
 #[derive(Default)]
 pub struct UserInfo {
     pub build_version: Option<i32>,
     pub session_id: Option<u16>,
+    pub citizen_id: Option<u32>,
+    pub username: Option<String>,
+    pub client_type: Option<ClientType>,
 }
 
 pub struct Client {
@@ -89,4 +99,126 @@ impl ClientManager {
     pub fn remove_dead_clients(&mut self) {
         self.clients = self.clients.drain(..).filter(|x| !x.is_dead()).collect();
     }
+
+    pub fn check_tourist(&self, username: &str) -> Result<(), ReasonCode> {
+        check_valid_name(username, true)?;
+
+        for other_client in self.clients() {
+            if let Some(other_username) = &other_client.info().username {
+                if other_username == username {
+                    return Err(ReasonCode::NameAlreadyUsed);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn check_citizen(
+        &self,
+        db: &Database,
+        client: &Client,
+        username: &Option<String>,
+        password: &Option<String>,
+        priv_id: Option<u32>,
+        priv_pass: &Option<String>,
+    ) -> Result<CitizenQuery, ReasonCode> {
+        // Name and password must be present
+        let password = password.as_ref().ok_or(ReasonCode::InvalidPassword)?;
+        if password.is_empty() {
+            return Err(ReasonCode::InvalidPassword);
+        }
+
+        let username = username.as_ref().ok_or(ReasonCode::NoSuchCitizen)?;
+        if username.is_empty() {
+            return Err(ReasonCode::NoSuchCitizen);
+        }
+
+        // Name cannot be bot or tourist
+        if username.starts_with("[") || username.starts_with("\"") {
+            return Err(ReasonCode::NoSuchCitizen);
+        }
+
+        // Checks if acquiring a privilege
+        if let Some(priv_id) = priv_id.filter(|x| *x != 0) {
+            // Get acting citizen
+            let priv_citizen = db
+                .citizen_by_number(priv_id)
+                .map_err(|_| ReasonCode::NoSuchActingCitizen)?;
+
+            // Is it enabled?
+            if priv_citizen.enabled == 0 && priv_citizen.id != 1 {
+                return Err(ReasonCode::NoSuchActingCitizen);
+            }
+
+            // Is the priv pass present and correct?
+            let priv_pass = priv_pass
+                .as_ref()
+                .ok_or(ReasonCode::ActingPasswordInvalid)?;
+            if *priv_pass != priv_citizen.priv_pass {
+                return Err(ReasonCode::ActingPasswordInvalid);
+            }
+        }
+
+        // Get login citizen
+        let login_citizen = db
+            .citizen_by_name(&username)
+            .or(Err(ReasonCode::NoSuchCitizen))?;
+
+        // Is login password correct?
+        if login_citizen.password != *password {
+            return Err(ReasonCode::InvalidPassword);
+        }
+
+        // Is it enabled?
+        if login_citizen.enabled == 0 {
+            return Err(ReasonCode::CitizenDisabled);
+        }
+
+        // Is this citizen already logged in?
+        for other_client in self.clients() {
+            if other_client.info().citizen_id == Some(login_citizen.id) {
+                // Don't give an error if the client is already logged in as this user.
+                if client as *const Client != other_client as *const Client {
+                    return Err(ReasonCode::IdentityAlreadyInUse);
+                }
+            }
+        }
+
+        Ok(login_citizen)
+    }
+}
+
+fn check_valid_name(name: &str, is_tourist: bool) -> Result<(), ReasonCode> {
+    let mut name = name.to_string();
+    if name.len() < 2 {
+        return Err(ReasonCode::NameTooShort);
+    }
+
+    if is_tourist {
+        if name.chars().nth(0) != Some('"') || name.chars().nth(name.len() - 1) != Some('"') {
+            return Err(ReasonCode::NoSuchCitizen);
+        }
+
+        // Strip quotes and check again
+        name.remove(0);
+        name.remove(name.len() - 1);
+
+        if name.len() < 2 {
+            return Err(ReasonCode::NameTooShort);
+        }
+    }
+
+    if name.chars().nth(name.len() - 1) == Some(' ') {
+        return Err(ReasonCode::NameEndsWithBlank);
+    }
+
+    if name.chars().nth(0) == Some(' ') {
+        return Err(ReasonCode::NameContainsInvalidBlank);
+    }
+
+    if !name.chars().all(char::is_alphanumeric) {
+        return Err(ReasonCode::NameContainsNonalphanumericChar);
+    }
+
+    Ok(())
 }
