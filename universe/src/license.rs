@@ -1,6 +1,4 @@
 use aw_core::*;
-
-use crate::client::UserInfo;
 use std::net::SocketAddrV4;
 
 /// Generates licenses for sending to clients.
@@ -28,11 +26,11 @@ impl LicenseGenerator {
         Self { ip: *ip }
     }
 
-    pub fn create_license_data(&self, user: &UserInfo) -> Vec<u8> {
-        let key = match user.build_version {
-            /* Vortex 5.1 or */ Some(1217) |
-            /* Miuchiz R7    */ Some(2007)  => include_bytes!("keys/vortex.priv"),
-            /* Regular AW    */ _ => include_bytes!("keys/aw.priv"), 
+    pub fn create_license_data(&self, browser_build: i32) -> Vec<u8> {
+        let key = match browser_build {
+            /* Vortex 5.1 */ 1217 => include_bytes!("keys/vortex.priv"),
+            /* Miuchiz R7 */ 2007 => include_bytes!("keys/vortex.priv"),
+            /* Regular AW */ _ => include_bytes!("keys/aw.priv"),
         };
 
         let mut rsa = AWCryptRSA::default();

@@ -17,11 +17,25 @@ use num_derive::FromPrimitive;
 /// Game-related client state
 #[derive(Default)]
 pub struct UserInfo {
-    pub build_version: Option<i32>,
-    pub session_id: Option<u16>,
-    pub citizen_id: Option<u32>,
-    pub username: Option<String>,
     pub client_type: Option<ClientType>,
+    pub entity: Option<Entity>,
+}
+
+pub struct PlayerInfo {
+    pub build: i32,
+    pub session_id: u16,
+    pub citizen_id: Option<u32>,
+    pub username: String,
+}
+
+pub struct WorldInfo {
+    pub build: i32,
+    pub server_port: u16,
+}
+
+pub enum Entity {
+    Player(PlayerInfo),
+    World(WorldInfo),
 }
 
 pub struct Client {
@@ -94,9 +108,11 @@ impl ClientManager {
     }
 
     pub fn get_client_by_session_id(&self, session_id: u16) -> Option<&Client> {
-        for client in &self.clients {
-            if (*client.user_info.borrow()).session_id == Some(session_id) {
-                return Some(client);
+        for client in self.clients() {
+            if let Some(Entity::Player(info)) = &client.info().entity {
+                if info.session_id == session_id {
+                    return Some(client);
+                }
             }
         }
         None
@@ -118,12 +134,13 @@ impl ClientManager {
         check_valid_name(username, true)?;
 
         for other_client in self.clients() {
-            if let Some(other_username) = &other_client.info().username {
-                if other_username == username {
+            if let Some(Entity::Player(info)) = &other_client.info().entity {
+                if info.username == username {
                     return Err(ReasonCode::NameAlreadyUsed);
                 }
             }
         }
+
         Ok(())
     }
 
@@ -190,10 +207,12 @@ impl ClientManager {
 
         // Is this citizen already logged in?
         for other_client in self.clients() {
-            if other_client.info().citizen_id == Some(login_citizen.id) {
-                // Don't give an error if the client is already logged in as this user.
-                if client as *const Client != other_client as *const Client {
-                    return Err(ReasonCode::IdentityAlreadyInUse);
+            if let Some(Entity::Player(info)) = &other_client.info().entity {
+                if info.citizen_id == Some(login_citizen.id) {
+                    // Don't give an error if the client is already logged in as this user.
+                    if client as *const Client != other_client as *const Client {
+                        return Err(ReasonCode::IdentityAlreadyInUse);
+                    }
                 }
             }
         }

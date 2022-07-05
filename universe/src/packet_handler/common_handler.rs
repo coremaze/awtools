@@ -1,9 +1,5 @@
-use crate::{
-    attributes,
-    client::Client,
-    database::Database,
-};
-use aw_core::{AWPacket, VarID, PacketType, AWPacketVar, AWCryptRSA};
+use crate::{attributes, client::Client, database::Database};
+use aw_core::{AWCryptRSA, AWPacket, AWPacketVar, PacketType, VarID};
 
 /// Handle a client requesting the server's public RSA key.
 /// We generate a new RSA key pair for each client since AW

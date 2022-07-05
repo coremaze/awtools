@@ -1,5 +1,5 @@
 use crate::{
-    client::{Client, ClientManager, ClientType},
+    client::{Client, ClientManager, ClientType, Entity, PlayerInfo},
     database::citizen::CitizenQuery,
     database::Database,
     license::LicenseGenerator,
@@ -43,7 +43,7 @@ pub fn login(
     database: &Database,
 ) {
     let _client_version = packet.get_int(VarID::BrowserVersion);
-    let _browser_build = packet.get_int(VarID::BrowserBuild);
+    let browser_build = packet.get_int(VarID::BrowserBuild);
 
     let credentials = LoginCredentials::from_packet(packet);
 
@@ -56,7 +56,15 @@ pub fn login(
                 // Promote to citizen
                 (Some(citizen), Some(ClientType::UnspecifiedHuman)) => {
                     client.info_mut().client_type = Some(ClientType::Citizen);
-                    client.info_mut().username = Some(citizen.name);
+
+                    let client_entity = Entity::Player(PlayerInfo {
+                        build: browser_build.unwrap_or(0),
+                        session_id: client_manager.create_session_id(),
+                        citizen_id: Some(citizen.id),
+                        username: citizen.name,
+                    });
+
+                    client.info_mut().entity = Some(client_entity);
 
                     // Add packet variables with citizen info
                     response.add_var(AWPacketVar::Int(VarID::BetaUser, citizen.beta as i32));
@@ -76,7 +84,15 @@ pub fn login(
                 // Promote to tourist
                 (None, Some(ClientType::UnspecifiedHuman)) => {
                     client.info_mut().client_type = Some(ClientType::Tourist);
-                    client.info_mut().username = Some(credentials.username.unwrap_or_default());
+
+                    let client_entity = Entity::Player(PlayerInfo {
+                        build: browser_build.unwrap_or(0),
+                        session_id: client_manager.create_session_id(),
+                        citizen_id: None,
+                        username: credentials.username.unwrap_or_default(),
+                    });
+
+                    client.info_mut().entity = Some(client_entity);
                 }
                 (_, Some(ClientType::Bot)) => {
                     todo!();
@@ -91,24 +107,19 @@ pub fn login(
         Err(reason) => reason,
     };
 
-    // Assign user a session ID
-    let new_session_id = client_manager.create_session_id();
-    client.info_mut().session_id = Some(new_session_id);
-
     // Inform the client of their displayed username and their new session ID
-    response.add_var(AWPacketVar::String(
-        VarID::CitizenName,
-        client.info().username.clone().unwrap_or_default(),
-    ));
-    response.add_var(AWPacketVar::Int(
-        VarID::SessionID,
-        client.info().session_id.unwrap_or_default() as i32,
-    ));
+    if let Some(Entity::Player(info)) = &client.info_mut().entity {
+        response.add_var(AWPacketVar::String(
+            VarID::CitizenName,
+            info.username.clone(),
+        ));
+        response.add_var(AWPacketVar::Int(VarID::SessionID, info.session_id as i32));
+    }
 
     // Add license data (Specific to the IP/port binding that the client sees!)
     response.add_var(AWPacketVar::Data(
         VarID::UniverseLicense,
-        license_generator.create_license_data(&client.info()),
+        license_generator.create_license_data(browser_build.unwrap_or(0)),
     ));
 
     response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
