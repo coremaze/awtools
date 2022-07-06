@@ -23,8 +23,8 @@ impl AWPacket {
         Self {
             vars: Vec::new(),
             opcode,
-            header_0: 0,
-            header_1: 0,
+            header_0: 0, // Defaults to 2 in AW 6
+            header_1: 2, // Defaults to 3 in AW 6
         }
     }
 
