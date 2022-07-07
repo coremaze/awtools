@@ -246,10 +246,12 @@ pub fn user_list(client: &Client, packet: &AWPacket, client_manager: &ClientMana
                 VarID::UserListPrivilegeID,
                 info.privilege_id.unwrap_or(0),
             ));
-            p.add_var(AWPacketVar::Uint(
-                VarID::UserListAddress,
-                ip_to_num(client.addr.ip()),
-            ));
+            if client.has_admin_permissions() {
+                p.add_var(AWPacketVar::Uint(
+                    VarID::UserListAddress,
+                    ip_to_num(client.addr.ip()),
+                ));
+            }
             p.add_var(AWPacketVar::Byte(VarID::UserListState, 1)); // TODO: this means online
             p.add_var(AWPacketVar::String(
                 VarID::UserListWorldName,
