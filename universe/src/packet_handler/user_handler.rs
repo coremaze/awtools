@@ -1,3 +1,8 @@
+use std::{
+    net::IpAddr,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
 use crate::{
     client::{Client, ClientManager, ClientType, Entity, PlayerInfo},
     database::citizen::CitizenQuery,
@@ -61,6 +66,7 @@ pub fn login(
                         build: browser_build.unwrap_or(0),
                         session_id: client_manager.create_session_id(),
                         citizen_id: Some(citizen.id),
+                        privilege_id: credentials.privilege_id,
                         username: citizen.name,
                     });
 
@@ -89,6 +95,7 @@ pub fn login(
                         build: browser_build.unwrap_or(0),
                         session_id: client_manager.create_session_id(),
                         citizen_id: None,
+                        privilege_id: None,
                         username: credentials.username.unwrap_or_default(),
                     });
 
@@ -180,4 +187,97 @@ fn validate_human_login(
 
 pub fn heartbeat(client: &Client) {
     log::info!("Received heartbeat from {}", client.addr.ip());
+}
+
+fn ip_to_num(ip: IpAddr) -> u32 {
+    let mut res: u32 = 0;
+    if let std::net::IpAddr::V4(v4) = ip {
+        for octet in v4.octets().iter().rev() {
+            res <<= 8;
+            res |= *octet as u32;
+        }
+    }
+    res
+}
+
+pub fn user_list(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Current time is before the unix epoch.")
+        .as_secs() as i32;
+
+    // I am not entirely sure what the purpose of this is, but it has some sort
+    // of relation to 3 days. It sends our values back to us with this, so we
+    // can use this to deny the client from spamming for updates, which causes
+    // flickering of the user list with very large numbers of players.
+    let time_val = packet.get_int(VarID::UserList3DayUnknown).unwrap_or(0);
+    if now.saturating_sub(3) < time_val {
+        return;
+    }
+
+    // Group packets into larger transmissions for efficiency
+    let mut group = AWPacketGroup::new();
+
+    for client in client_manager.clients() {
+        if let Some(Entity::Player(info)) = &client.info().entity {
+            // Make a new UserList packet for each user in this list
+            let mut p = AWPacket::new(PacketType::UserList);
+
+            // Client also expects var 178 as a string, but don't know what it is for.
+            // p.add_var(AWPacketVar::String(VarID::UserList178, format!("178")));
+            p.add_var(AWPacketVar::String(
+                VarID::UserListName,
+                info.username.clone(),
+            ));
+
+            // ID is supposed to be an ID relating to the user list so it can
+            // be updated when a user changes state, but using the session id
+            // for this is convenient for now.
+            p.add_var(AWPacketVar::Int(VarID::UserListID, info.session_id.into()));
+
+            p.add_var(AWPacketVar::Int(
+                VarID::UserListCitizenID,
+                info.citizen_id.unwrap_or(0) as i32,
+            ));
+            p.add_var(AWPacketVar::Int(
+                VarID::UserListPrivilegeID,
+                info.privilege_id.unwrap_or(0) as i32,
+            ));
+            p.add_var(AWPacketVar::Int(
+                VarID::UserListAddress,
+                ip_to_num(client.addr.ip()) as i32,
+            ));
+            p.add_var(AWPacketVar::Byte(VarID::UserListState, 1)); // TODO: this means online
+            p.add_var(AWPacketVar::String(
+                VarID::UserListWorldName,
+                "NO WORLD".to_string(),
+            )); // TODO: No worlds yet
+
+            if let Err(p) = group.push(p) {
+                // If the current group is full, send it and start a new one
+                client.connection.send_group(group);
+                group = AWPacketGroup::new();
+
+                let mut more = AWPacket::new(PacketType::UserListResult);
+                // Yes, expect another UserList packet from the server
+                more.add_var(AWPacketVar::Byte(VarID::UserListMore, 1));
+                more.add_var(AWPacketVar::Int(VarID::UserList3DayUnknown, now));
+                group.push(more).ok();
+                group.push(p).ok();
+            }
+        }
+    }
+
+    // Send packet indicating that the server is done
+    let mut p = AWPacket::new(PacketType::UserListResult);
+    p.add_var(AWPacketVar::Byte(VarID::UserListMore, 0));
+    p.add_var(AWPacketVar::Int(VarID::UserList3DayUnknown, now));
+
+    if let Err(p) = group.push(p) {
+        client.connection.send_group(group);
+        group = AWPacketGroup::new();
+        group.push(p).ok();
+    }
+
+    client.connection.send_group(group);
 }

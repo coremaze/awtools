@@ -74,27 +74,33 @@ impl AWProtocol {
         self.data.extend(data2);
     }
 
-    /// Send a packet.
-    pub fn send(&mut self, packet: &mut AWPacket, compression: bool) -> Result<(), ReasonCode> {
-        match packet.get_opcode() {
-            PacketType::PublicKeyResponse
-            | PacketType::StreamKeyResponse
-            | PacketType::Attributes
-            | PacketType::Login
-            | PacketType::Tunnel => {
-                packet.set_header_1(1);
+    /// Send packets.
+    pub fn send(&mut self, packets: &mut [AWPacket], compression: bool) -> Result<(), ReasonCode> {
+        for packet in packets.iter_mut() {
+            match packet.get_opcode() {
+                PacketType::PublicKeyResponse
+                | PacketType::StreamKeyResponse
+                | PacketType::Attributes
+                | PacketType::Login
+                | PacketType::Tunnel => {
+                    packet.set_header_1(1);
+                }
+                _ => {}
             }
-            _ => {}
         }
 
-        // Try to compress the packet if possible, otherwise serialize normally.
+        // Serialize one or more packets
+        let mut serialized_bytes = Vec::<u8>::new();
+        for packet in packets.iter() {
+            serialized_bytes.extend(packet.serialize().map_err(|_| ReasonCode::SendFailed)?);
+        }
+
+        // Try to compress the serialized packet
         let mut bytes_to_send = if compression {
-            packet
-                .compressible_serialize()
-                .map_err(|_| ReasonCode::SendFailed)
+            AWPacket::compress_if_needed(&serialized_bytes).map_err(|_| ReasonCode::SendFailed)?
         } else {
-            packet.serialize().map_err(|_| ReasonCode::SendFailed)
-        }?;
+            serialized_bytes
+        };
 
         // If the other end of the connection has been given our encryption key, we need to encrypt.
         if self.should_encrypt {
@@ -227,8 +233,14 @@ impl AWProtocol {
     fn handle_messages(&mut self) {
         if let Ok(message) = self.outbound_packets.try_recv() {
             match message {
-                ProtocolMessage::Packet(mut packet) => {
-                    if self.send(&mut packet, true).is_err() {
+                ProtocolMessage::Packet(packet) => {
+                    if self.send(&mut [packet], true).is_err() {
+                        self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
+                        self.dead = true;
+                    }
+                }
+                ProtocolMessage::PacketGroup(mut packets) => {
+                    if self.send(&mut packets, true).is_err() {
                         self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
                         self.dead = true;
                     }
@@ -289,8 +301,8 @@ impl AWProtocol {
 
 #[derive(Debug)]
 pub enum ProtocolMessage {
-    // Might need a packet group later
     Packet(AWPacket),
+    PacketGroup(Vec<AWPacket>),
     Disconnect,
     StreamKey(Vec<u8>),
     Encrypt(bool),
@@ -331,7 +343,7 @@ mod tests {
         let mut proto = AWProtocol::new(stream);
 
         // Construct a test packet.
-        let mut packet = AWPacket::new(PacketType::Attributes);
+        let mut packet = AWPacket::new(PacketType::AvatarAdd);
         packet.add_var(AWPacketVar::String(
             VarID::AFKStatus,
             "Hello, World!".to_string(),
@@ -340,7 +352,7 @@ mod tests {
         packet.add_var(AWPacketVar::Data(VarID::AttributeBetaWorld, data));
 
         // Send the test packet to other thread.
-        let _ = proto.send(&mut packet, true);
+        let _ = proto.send(&mut [packet.clone()], true);
 
         // Get the packet that the other thread deserialized.
         let packet_2 = rx.recv().unwrap();

@@ -1,4 +1,4 @@
-use crate::{AWPacket, AWProtocol, ProtocolMessage};
+use crate::{AWPacket, AWPacketGroup, AWProtocol, ProtocolMessage};
 use std::sync::mpsc::{Receiver, Sender};
 
 pub struct AWConnection {
@@ -21,6 +21,12 @@ impl AWConnection {
 
     pub fn send(&self, packet: AWPacket) {
         self.outbound.send(ProtocolMessage::Packet(packet)).ok();
+    }
+
+    pub fn send_group(&self, packets: AWPacketGroup) {
+        self.outbound
+            .send(ProtocolMessage::PacketGroup(packets.packets))
+            .ok();
     }
 
     pub fn set_recv_key(&self, key: &[u8]) {

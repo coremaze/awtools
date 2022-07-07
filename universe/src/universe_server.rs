@@ -70,7 +70,11 @@ impl UniverseServer {
                 ProtocolMessage::Disconnect => {
                     client.kill();
                 }
-                ProtocolMessage::StreamKey(_) | ProtocolMessage::Encrypt(_) => {}
+                ProtocolMessage::StreamKey(_)
+                | ProtocolMessage::Encrypt(_)
+                | ProtocolMessage::PacketGroup(_) => {
+                    panic!("Should not receive these message types on this end.");
+                }
             }
         }
     }
@@ -92,6 +96,7 @@ impl UniverseServer {
             ),
             PacketType::Heartbeat => packet_handler::heartbeat(client),
             PacketType::WorldServerStart => packet_handler::world_server_start(client, packet),
+            PacketType::UserList => packet_handler::user_list(client, packet, &self.client_manager),
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }

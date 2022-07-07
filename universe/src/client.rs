@@ -21,18 +21,22 @@ pub struct UserInfo {
     pub entity: Option<Entity>,
 }
 
+#[derive(Debug)]
 pub struct PlayerInfo {
     pub build: i32,
     pub session_id: u16,
     pub citizen_id: Option<u32>,
+    pub privilege_id: Option<u32>,
     pub username: String,
 }
 
+#[derive(Debug)]
 pub struct WorldInfo {
     pub build: i32,
     pub server_port: u16,
 }
 
+#[derive(Debug)]
 pub enum Entity {
     Player(PlayerInfo),
     World(WorldInfo),
@@ -127,6 +131,9 @@ impl ClientManager {
     }
 
     pub fn remove_dead_clients(&mut self) {
+        for client in self.clients().iter().filter(|x| x.is_dead()) {
+            log::info!("Disconnected {}", client.addr.ip());
+        }
         self.clients = self.clients.drain(..).filter(|x| !x.is_dead()).collect();
     }
 

@@ -15,7 +15,7 @@ pub enum DataType {
     Data = 5,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum AWPacketVar {
     Byte(VarID, u8),
     Int(VarID, i32),
@@ -115,10 +115,12 @@ pub enum VarID {
     UniverseLicense = 171,
     UserListAddress = 176,
     UserListCitizenID = 177,
+    UserList178 = 178,
     UserListID = 180,
     UserListMore = 181,
     UserListName = 182,
     UserListPrivilegeID = 183,
+    UserList3DayUnknown = 184,
     UserListState = 185,
     UserListWorldName = 186,
     WorldFreeEntry = 187,

@@ -9,7 +9,7 @@ use num_traits::FromPrimitive;
 use std::io::{Cursor, Read, Write};
 
 /// Packet which can be sent over an AWProtocol.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct AWPacket {
     vars: Vec<AWPacketVar>,
     opcode: PacketType,
@@ -149,9 +149,8 @@ impl AWPacket {
         Ok(result)
     }
 
-    /// Serialize a packet, and then compress it if possible.
-    pub fn compressible_serialize(&self) -> Result<Vec<u8>, String> {
-        let serialized_bytes = self.serialize()?;
+    /// Compress data of one or more packets if large enough
+    pub fn compress_if_needed(serialized_bytes: &[u8]) -> Result<Vec<u8>, String> {
         if serialized_bytes.len() > 160 {
             // Serialize the packet and compress it
             let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
@@ -165,7 +164,7 @@ impl AWPacket {
                 serialized_length: (compressed_bytes.len() + TagHeader::length()) as u16,
                 header_0: 0,
                 opcode: -1,
-                header_1: if self.header_1 != 0 { self.header_1 } else { 1 },
+                header_1: 1, // if self.header_1 != 0 { self.header_1 } else { 1 },
                 var_count: 0,
             };
 
@@ -175,7 +174,7 @@ impl AWPacket {
             return Ok(result);
         }
 
-        Ok(serialized_bytes)
+        Ok(serialized_bytes.to_vec())
     }
 
     /// Decompress a compressed packet and return its decompressed serialized bytes.
@@ -248,6 +247,37 @@ impl AWPacket {
         }
 
         Ok(header.serialized_length.into())
+    }
+}
+
+pub struct AWPacketGroup {
+    pub packets: Vec<AWPacket>,
+}
+
+impl AWPacketGroup {
+    pub fn new() -> Self {
+        Self {
+            packets: Vec::new(),
+        }
+    }
+    pub fn push(&mut self, packet: AWPacket) -> Result<usize, AWPacket> {
+        let total_len = self.serialize_len() + packet.serialize_len();
+        if total_len < 0x8000 {
+            self.packets.push(packet);
+            Ok(total_len)
+        } else {
+            Err(packet)
+        }
+    }
+
+    pub fn serialize_len(&self) -> usize {
+        self.packets.iter().map(|p| p.serialize_len()).sum()
+    }
+}
+
+impl Default for AWPacketGroup {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
