@@ -56,6 +56,10 @@ impl AWPacket {
         None
     }
 
+    pub fn get_vars(&self) -> &[AWPacketVar] {
+        &self.vars
+    }
+
     pub fn get_byte(&self, var_id: VarID) -> Option<u8> {
         for var in &self.vars {
             match var {

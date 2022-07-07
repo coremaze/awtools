@@ -8,6 +8,8 @@ use crate::{
     database::citizen::CitizenQuery,
     database::Database,
     license::LicenseGenerator,
+    attributes,
+    attributes::set_attribute,
 };
 use aw_core::*;
 use num_traits::FromPrimitive;
@@ -280,4 +282,27 @@ pub fn user_list(client: &Client, packet: &AWPacket, client_manager: &ClientMana
     }
 
     client.connection.send_group(group);
+}
+
+pub fn attribute_change(client: &Client, packet: &AWPacket, database: &Database, client_manager: &ClientManager) {
+    // Only admins should be able to change Universe attributes
+    if !client.has_admin_permissions() {
+        log::info!("Client {} tried to set attributes but is not an admin",
+            client.addr.ip());
+        return;
+    }
+
+    for var in packet.get_vars().iter() {
+        if let AWPacketVar::String(id, val) = var {
+            log::info!("Client {} setting {:?} to {:?}", 
+                client.addr.ip(),
+                id,
+                val);
+            set_attribute(*id, &val, database).ok();
+        }
+    }    
+
+    for client in client_manager.clients() {
+        attributes::send_attributes(client, database);
+    }
 }

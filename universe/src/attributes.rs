@@ -160,3 +160,40 @@ pub fn get_attributes(database: &Database) -> HashMap<Attribute, String> {
 
     result
 }
+
+pub fn set_attribute(var_id: VarID, value: &str, database: &Database) -> Result<(), ()> {
+    let id = match var_id {
+        VarID::AttributeAllowTourists => Attribute::AllowTourists,
+        VarID::AttributeUnknownBilling1 => Attribute::UnknownBilling1,
+        VarID::AttributeBetaBrowser => Attribute::BetaBrowser,
+        VarID::AttributeMinimumBrowser => Attribute::MinimumBrowser,
+        VarID::AttributeLatestBrowser => Attribute::LatestBrowser,
+        VarID::AttributeUniverseBuild => Attribute::UniverseBuild,
+        VarID::AttributeCitizenChanges => Attribute::CitizenChanges,
+        VarID::AttributeUnknownBilling7 => Attribute::UnknownBilling7,
+        VarID::AttributeBillingMethod => Attribute::BillingMethod,
+        VarID::AttributeBillingUnknown9 => Attribute::BillingUnknown9,
+        VarID::AttributeSearchTabURL => Attribute::SearchTabURL,
+        VarID::AttributeTimestamp => Attribute::Timestamp,
+        VarID::AttributeWelcomeMessage => Attribute::WelcomeMessage,
+        VarID::AttributeBetaWorld => Attribute::BetaWorld,
+        VarID::AttributeMinimumWorld => Attribute::MinimumWorld,
+        VarID::AttributeLatestWorld => Attribute::LatestWorld,
+        VarID::AttributeDefaultStartWorld => Attribute::DefaultStartWorld,
+        VarID::AttributeUserlist => Attribute::Userlist,
+        VarID::AttributeNotepadTabURL => Attribute::NotepadTabURL,
+        VarID::AttributeMailTemplate => Attribute::MailTemplate,
+        VarID::AttributeMailFile => Attribute::MailFile,
+        VarID::AttributeMailCommand => Attribute::MailCommand,
+        VarID::AttributePAVObjectPath => Attribute::PAVObjectPath,
+        VarID::AttributeUnknownUniverseSetting => Attribute::UnknownUniverseSetting,
+        _ => {
+            return Err(());
+        }
+    };
+
+    database.attrib_set(id, value)
+        .map_err(|_| ())?;
+
+    Ok(())
+}

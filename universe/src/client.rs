@@ -42,6 +42,24 @@ pub enum Entity {
     World(WorldInfo),
 }
 
+impl Entity {
+    pub fn is_player(&self) -> bool {
+        if let Entity::Player(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_world(&self) -> bool {
+        if let Entity::World(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 pub struct Client {
     pub connection: AWConnection,
     pub dead: RefCell<bool>,
@@ -82,6 +100,14 @@ impl Client {
 
     pub fn info(&self) -> Ref<UserInfo> {
         self.user_info.borrow()
+    }
+
+    pub fn has_admin_permissions(&self) -> bool {
+        if let Some(Entity::Player(info)) = &self.info().entity {
+            info.citizen_id == Some(1) || info.privilege_id == Some(1)
+        } else {
+            false
+        }
     }
 }
 

@@ -97,6 +97,7 @@ impl UniverseServer {
             PacketType::Heartbeat => packet_handler::heartbeat(client),
             PacketType::WorldServerStart => packet_handler::world_server_start(client, packet),
             PacketType::UserList => packet_handler::user_list(client, packet, &self.client_manager),
+            PacketType::AttributeChange => packet_handler::attribute_change(client, packet, &self.database, &self.client_manager),
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }
