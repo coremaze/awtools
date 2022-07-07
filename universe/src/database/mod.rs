@@ -2,13 +2,13 @@ use mysql::*;
 
 use crate::config::{MysqlConfig, UniverseConfig};
 
-use self::attrib::AttribDB;
-use self::cav::CavDB;
-use self::citizen::CitizenDB;
-use self::contact::ContactDB;
-use self::eject::EjectDB;
-use self::license::LicenseDB;
-use self::telegram::TelegramDB;
+pub use self::attrib::AttribDB;
+pub use self::cav::CavDB;
+pub use self::citizen::CitizenDB;
+pub use self::contact::ContactDB;
+pub use self::eject::EjectDB;
+pub use self::license::LicenseDB;
+pub use self::telegram::TelegramDB;
 pub mod attrib;
 pub mod cav;
 pub mod citizen;

@@ -6,6 +6,7 @@ use std::{
 use crate::{
     client::{Client, ClientManager, ClientType, Entity, PlayerInfo},
     database::citizen::CitizenQuery,
+    database::CitizenDB,
     database::Database,
     license::LicenseGenerator,
     attributes,
@@ -305,4 +306,176 @@ pub fn attribute_change(client: &Client, packet: &AWPacket, database: &Database,
     for client in client_manager.clients() {
         attributes::send_attributes(client, database);
     }
+}
+
+pub fn citizen_next(client: &Client, packet: &AWPacket, database: &Database) {
+    let mut rc = ReasonCode::Success;
+    let mut response = AWPacket::new(PacketType::CitizenInfo);
+    
+    if !client.has_admin_permissions() {
+        log::info!("Client {} tried to use CitizenNext but is not an admin",
+        client.addr.ip());
+        rc = ReasonCode::Unauthorized;
+    } else if let Some(Entity::Player(info)) = &client.info().entity {
+        let citizen_id = packet.get_int(VarID::CitizenNumber).unwrap_or(0);
+        match database.citizen_by_number(citizen_id.saturating_add(1) as u32) {
+            Ok(citizen) => {
+                let same_citizen_id = Some(citizen.id) == info.citizen_id;
+                let is_admin = client.has_admin_permissions();
+                let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
+                for v in vars {
+                    response.add_var(v);
+                }
+            }
+            Err(_) => {
+                rc = ReasonCode::NoSuchCitizen;
+            }
+        }
+    }
+
+    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+
+    client.connection.send(response);
+}
+
+pub fn citizen_prev(client: &Client, packet: &AWPacket, database: &Database) {
+    let mut rc = ReasonCode::Success;
+    let mut response = AWPacket::new(PacketType::CitizenInfo);
+    
+    if !client.has_admin_permissions() {
+        log::info!("Client {} tried to use CitizenPrev but is not an admin",
+        client.addr.ip());
+        rc = ReasonCode::Unauthorized;
+    } else if let Some(Entity::Player(info)) = &client.info().entity {
+        let citizen_id = packet.get_int(VarID::CitizenNumber).unwrap_or(0);
+        match database.citizen_by_number(citizen_id.saturating_sub(1) as u32) {
+            Ok(citizen) => {
+                let same_citizen_id = Some(citizen.id) == info.citizen_id;
+                let is_admin = client.has_admin_permissions();
+                let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
+                for v in vars {
+                    response.add_var(v);
+                }
+            }
+            Err(_) => {
+                rc = ReasonCode::NoSuchCitizen;
+            }
+        }
+    }
+
+    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+
+    client.connection.send(response);
+}
+
+pub fn citizen_lookup_by_name(client: &Client, packet: &AWPacket, database: &Database) {
+    let mut rc = ReasonCode::Success;
+    let mut response = AWPacket::new(PacketType::CitizenInfo);
+    
+    if !client.has_admin_permissions() {
+        log::info!("Client {} tried to use CitizenLookupByName but is not an admin",
+        client.addr.ip());
+        rc = ReasonCode::Unauthorized;
+    } else if let Some(Entity::Player(info)) = &client.info().entity {
+        match packet.get_string(VarID::CitizenName) {
+            Some(citizen_name) => {
+                match database.citizen_by_name(&citizen_name) {
+                    Ok(citizen) => {
+                        let same_citizen_id = Some(citizen.id) == info.citizen_id;
+                        let is_admin = client.has_admin_permissions();
+                        let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
+                        for v in vars {
+                            response.add_var(v);
+                        }
+                    }
+                    Err(_) => {
+                        rc = ReasonCode::NoSuchCitizen;
+                    }
+                }
+            }
+            None => {
+                rc = ReasonCode::NoSuchCitizen;
+            }
+        }
+
+    }
+
+    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+
+    client.connection.send(response);
+}
+
+pub fn citizen_lookup_by_number(client: &Client, packet: &AWPacket, database: &Database) {
+    let mut rc = ReasonCode::Success;
+    let mut response = AWPacket::new(PacketType::CitizenInfo);
+    
+    if !client.has_admin_permissions() {
+        log::info!("Client {} tried to use CitizenLookupByNumber but is not an admin",
+        client.addr.ip());
+        rc = ReasonCode::Unauthorized;
+    } else if let Some(Entity::Player(info)) = &client.info().entity {
+        match packet.get_int(VarID::CitizenNumber) {
+            Some(citizen_id) => {
+                match database.citizen_by_number(citizen_id as u32) {
+                    Ok(citizen) => {
+                        let same_citizen_id = Some(citizen.id) == info.citizen_id;
+                        let is_admin = client.has_admin_permissions();
+                        let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
+                        for v in vars {
+                            response.add_var(v);
+                        }
+                    }
+                    Err(_) => {
+                        rc = ReasonCode::NoSuchCitizen;
+                    }
+                }
+            }
+            None => {
+                rc = ReasonCode::NoSuchCitizen;
+            }
+        }
+
+    }
+
+    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+
+    client.connection.send(response);
+}
+
+fn citizen_info_vars(citizen: &CitizenQuery, self_vars: bool, admin_vars: bool) -> Vec<AWPacketVar> {
+    let mut vars = Vec::<AWPacketVar>::new();
+
+    vars.push(AWPacketVar::Int(VarID::CitizenNumber, citizen.id as i32));
+    vars.push(AWPacketVar::String(VarID::CitizenName, citizen.name.clone()));
+    vars.push(AWPacketVar::String(VarID::CitizenURL, citizen.url.clone()));
+    vars.push(AWPacketVar::Byte(VarID::TrialUser, citizen.trial as u8));
+    vars.push(AWPacketVar::Byte(VarID::CAVEnabled, citizen.cav_enabled as u8));
+
+    if citizen.cav_enabled != 0 {
+        vars.push(AWPacketVar::Int(VarID::CAVTemplate, citizen.cav_template as i32));
+    } else {
+        vars.push(AWPacketVar::Int(VarID::CAVTemplate, 0));
+    }
+
+    if self_vars || admin_vars {
+        vars.push(AWPacketVar::Int(VarID::CitizenImmigration, citizen.immigration as i32));
+        vars.push(AWPacketVar::Int(VarID::CitizenExpiration, citizen.expiration as i32));
+        vars.push(AWPacketVar::Int(VarID::CitizenLastLogin, citizen.last_login as i32));
+        vars.push(AWPacketVar::Int(VarID::CitizenTotalTime, citizen.total_time as i32));
+        vars.push(AWPacketVar::Int(VarID::CitizenBotLimit, citizen.bot_limit as i32));
+        vars.push(AWPacketVar::Byte(VarID::BetaUser, citizen.beta as u8));
+        vars.push(AWPacketVar::Byte(VarID::CitizenEnabled, citizen.enabled as u8));
+        vars.push(AWPacketVar::Int(VarID::CitizenPrivacy, citizen.privacy as i32));
+        vars.push(AWPacketVar::String(VarID::CitizenPassword, citizen.password.clone()));
+        vars.push(AWPacketVar::String(VarID::CitizenEmail, citizen.email.clone()));
+        vars.push(AWPacketVar::String(VarID::CitizenPrivilegePassword, citizen.priv_pass.clone()));
+        vars.push(AWPacketVar::Int(VarID::CitizenImmigration, citizen.immigration as i32));
+
+        if admin_vars {
+            vars.push(AWPacketVar::String(VarID::CitizenComment, citizen.comment.clone()));
+            vars.push(AWPacketVar::Int(VarID::IdentifyUserIP, citizen.last_address as i32));
+        }
+    }
+
+    vars
 }
