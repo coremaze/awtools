@@ -192,8 +192,7 @@ pub fn set_attribute(var_id: VarID, value: &str, database: &Database) -> Result<
         }
     };
 
-    database.attrib_set(id, value)
-        .map_err(|_| ())?;
+    database.attrib_set(id, value).map_err(|_| ())?;
 
     Ok(())
 }

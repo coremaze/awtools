@@ -97,11 +97,20 @@ impl UniverseServer {
             PacketType::Heartbeat => packet_handler::heartbeat(client),
             PacketType::WorldServerStart => packet_handler::world_server_start(client, packet),
             PacketType::UserList => packet_handler::user_list(client, packet, &self.client_manager),
-            PacketType::AttributeChange => packet_handler::attribute_change(client, packet, &self.database, &self.client_manager),
+            PacketType::AttributeChange => packet_handler::attribute_change(
+                client,
+                packet,
+                &self.database,
+                &self.client_manager,
+            ),
             PacketType::CitizenNext => packet_handler::citizen_next(client, packet, &self.database),
             PacketType::CitizenPrev => packet_handler::citizen_prev(client, packet, &self.database),
-            PacketType::CitizenLookupByName => packet_handler::citizen_lookup_by_name(client, packet, &self.database),
-            PacketType::CitizenLookupByNumber => packet_handler::citizen_lookup_by_number(client, packet, &self.database),
+            PacketType::CitizenLookupByName => {
+                packet_handler::citizen_lookup_by_name(client, packet, &self.database)
+            }
+            PacketType::CitizenLookupByNumber => {
+                packet_handler::citizen_lookup_by_number(client, packet, &self.database)
+            }
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }
