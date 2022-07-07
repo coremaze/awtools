@@ -36,7 +36,7 @@ impl LoginCredentials {
             username: packet.get_string(VarID::LoginUsername),
             password: packet.get_string(VarID::Password),
             email: packet.get_string(VarID::Email),
-            privilege_id: packet.get_int(VarID::PrivilegeUserID).map(|x| x as u32),
+            privilege_id: packet.get_uint(VarID::PrivilegeUserID),
             privilege_password: packet.get_string(VarID::PrivilegePassword),
         }
     }
@@ -76,16 +76,16 @@ pub fn login(
                     client.info_mut().entity = Some(client_entity);
 
                     // Add packet variables with citizen info
-                    response.add_var(AWPacketVar::Int(VarID::BetaUser, citizen.beta as i32));
-                    response.add_var(AWPacketVar::Int(VarID::TrialUser, citizen.trial as i32));
-                    response.add_var(AWPacketVar::Int(VarID::CitizenNumber, citizen.id as i32));
-                    response.add_var(AWPacketVar::Int(
+                    response.add_var(AWPacketVar::Uint(VarID::BetaUser, citizen.beta));
+                    response.add_var(AWPacketVar::Uint(VarID::TrialUser, citizen.trial));
+                    response.add_var(AWPacketVar::Uint(VarID::CitizenNumber, citizen.id));
+                    response.add_var(AWPacketVar::Uint(
                         VarID::CitizenPrivacy,
-                        citizen.privacy as i32,
+                        citizen.privacy,
                     ));
-                    response.add_var(AWPacketVar::Int(
+                    response.add_var(AWPacketVar::Uint(
                         VarID::CAVEnabled,
-                        citizen.cav_enabled as i32,
+                        citizen.cav_enabled,
                     ));
 
                     // TODO: update login time and last address
@@ -238,17 +238,17 @@ pub fn user_list(client: &Client, packet: &AWPacket, client_manager: &ClientMana
             // for this is convenient for now.
             p.add_var(AWPacketVar::Int(VarID::UserListID, info.session_id.into()));
 
-            p.add_var(AWPacketVar::Int(
+            p.add_var(AWPacketVar::Uint(
                 VarID::UserListCitizenID,
-                info.citizen_id.unwrap_or(0) as i32,
+                info.citizen_id.unwrap_or(0),
             ));
-            p.add_var(AWPacketVar::Int(
+            p.add_var(AWPacketVar::Uint(
                 VarID::UserListPrivilegeID,
-                info.privilege_id.unwrap_or(0) as i32,
+                info.privilege_id.unwrap_or(0),
             ));
-            p.add_var(AWPacketVar::Int(
+            p.add_var(AWPacketVar::Uint(
                 VarID::UserListAddress,
-                ip_to_num(client.addr.ip()) as i32,
+                ip_to_num(client.addr.ip()),
             ));
             p.add_var(AWPacketVar::Byte(VarID::UserListState, 1)); // TODO: this means online
             p.add_var(AWPacketVar::String(
@@ -323,8 +323,8 @@ pub fn citizen_next(client: &Client, packet: &AWPacket, database: &Database) {
         );
         rc = ReasonCode::Unauthorized;
     } else if let Some(Entity::Player(info)) = &client.info().entity {
-        let citizen_id = packet.get_int(VarID::CitizenNumber).unwrap_or(0);
-        match database.citizen_by_number(citizen_id.saturating_add(1) as u32) {
+        let citizen_id = packet.get_uint(VarID::CitizenNumber).unwrap_or(0);
+        match database.citizen_by_number(citizen_id.saturating_add(1)) {
             Ok(citizen) => {
                 let same_citizen_id = Some(citizen.id) == info.citizen_id;
                 let is_admin = client.has_admin_permissions();
@@ -355,8 +355,8 @@ pub fn citizen_prev(client: &Client, packet: &AWPacket, database: &Database) {
         );
         rc = ReasonCode::Unauthorized;
     } else if let Some(Entity::Player(info)) = &client.info().entity {
-        let citizen_id = packet.get_int(VarID::CitizenNumber).unwrap_or(0);
-        match database.citizen_by_number(citizen_id.saturating_sub(1) as u32) {
+        let citizen_id = packet.get_uint(VarID::CitizenNumber).unwrap_or(0);
+        match database.citizen_by_number(citizen_id.saturating_sub(1)) {
             Ok(citizen) => {
                 let same_citizen_id = Some(citizen.id) == info.citizen_id;
                 let is_admin = client.has_admin_permissions();
@@ -423,8 +423,8 @@ pub fn citizen_lookup_by_number(client: &Client, packet: &AWPacket, database: &D
         );
         rc = ReasonCode::Unauthorized;
     } else if let Some(Entity::Player(info)) = &client.info().entity {
-        match packet.get_int(VarID::CitizenNumber) {
-            Some(citizen_id) => match database.citizen_by_number(citizen_id as u32) {
+        match packet.get_uint(VarID::CitizenNumber) {
+            Some(citizen_id) => match database.citizen_by_number(citizen_id) {
                 Ok(citizen) => {
                     let same_citizen_id = Some(citizen.id) == info.citizen_id;
                     let is_admin = client.has_admin_permissions();
@@ -455,7 +455,7 @@ fn citizen_info_vars(
 ) -> Vec<AWPacketVar> {
     let mut vars = Vec::<AWPacketVar>::new();
 
-    vars.push(AWPacketVar::Int(VarID::CitizenNumber, citizen.id as i32));
+    vars.push(AWPacketVar::Uint(VarID::CitizenNumber, citizen.id));
     vars.push(AWPacketVar::String(
         VarID::CitizenName,
         citizen.name.clone(),
@@ -468,43 +468,43 @@ fn citizen_info_vars(
     ));
 
     if citizen.cav_enabled != 0 {
-        vars.push(AWPacketVar::Int(
+        vars.push(AWPacketVar::Uint(
             VarID::CAVTemplate,
-            citizen.cav_template as i32,
+            citizen.cav_template,
         ));
     } else {
         vars.push(AWPacketVar::Int(VarID::CAVTemplate, 0));
     }
 
     if self_vars || admin_vars {
-        vars.push(AWPacketVar::Int(
+        vars.push(AWPacketVar::Uint(
             VarID::CitizenImmigration,
-            citizen.immigration as i32,
+            citizen.immigration,
         ));
-        vars.push(AWPacketVar::Int(
+        vars.push(AWPacketVar::Uint(
             VarID::CitizenExpiration,
-            citizen.expiration as i32,
+            citizen.expiration,
         ));
-        vars.push(AWPacketVar::Int(
+        vars.push(AWPacketVar::Uint(
             VarID::CitizenLastLogin,
-            citizen.last_login as i32,
+            citizen.last_login,
         ));
-        vars.push(AWPacketVar::Int(
+        vars.push(AWPacketVar::Uint(
             VarID::CitizenTotalTime,
-            citizen.total_time as i32,
+            citizen.total_time,
         ));
-        vars.push(AWPacketVar::Int(
+        vars.push(AWPacketVar::Uint(
             VarID::CitizenBotLimit,
-            citizen.bot_limit as i32,
+            citizen.bot_limit,
         ));
         vars.push(AWPacketVar::Byte(VarID::BetaUser, citizen.beta as u8));
         vars.push(AWPacketVar::Byte(
             VarID::CitizenEnabled,
             citizen.enabled as u8,
         ));
-        vars.push(AWPacketVar::Int(
+        vars.push(AWPacketVar::Uint(
             VarID::CitizenPrivacy,
-            citizen.privacy as i32,
+            citizen.privacy,
         ));
         vars.push(AWPacketVar::String(
             VarID::CitizenPassword,
@@ -518,9 +518,9 @@ fn citizen_info_vars(
             VarID::CitizenPrivilegePassword,
             citizen.priv_pass.clone(),
         ));
-        vars.push(AWPacketVar::Int(
+        vars.push(AWPacketVar::Uint(
             VarID::CitizenImmigration,
-            citizen.immigration as i32,
+            citizen.immigration,
         ));
 
         if admin_vars {
@@ -528,9 +528,9 @@ fn citizen_info_vars(
                 VarID::CitizenComment,
                 citizen.comment.clone(),
             ));
-            vars.push(AWPacketVar::Int(
+            vars.push(AWPacketVar::Uint(
                 VarID::IdentifyUserIP,
-                citizen.last_address as i32,
+                citizen.last_address,
             ));
         }
     }

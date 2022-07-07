@@ -19,6 +19,7 @@ pub enum DataType {
 pub enum AWPacketVar {
     Byte(VarID, u8),
     Int(VarID, i32),
+    Uint(VarID, u32),
     Float(VarID, f32),
     String(VarID, String),
     Data(VarID, Vec<u8>),
@@ -152,6 +153,7 @@ impl AWPacketVar {
         match &self {
             AWPacketVar::Byte(var_id, _) => *var_id,
             AWPacketVar::Int(var_id, _) => *var_id,
+            AWPacketVar::Uint(var_id, _) => *var_id,
             AWPacketVar::Float(var_id, _) => *var_id,
             AWPacketVar::String(var_id, _) => *var_id,
             AWPacketVar::Data(var_id, _) => *var_id,
@@ -162,6 +164,9 @@ impl AWPacketVar {
         match self {
             AWPacketVar::Byte(_, _) => DataType::Byte,
             AWPacketVar::Int(_, _) => DataType::Int,
+            // Uint being DataType::Int is intentional. This does not have its
+            // own ID, it is only for convenience.
+            AWPacketVar::Uint(_, _) => DataType::Int, 
             AWPacketVar::Float(_, _) => DataType::Float,
             AWPacketVar::String(_, _) => DataType::String,
             AWPacketVar::Data(_, _) => DataType::Data,
@@ -172,6 +177,7 @@ impl AWPacketVar {
         match self {
             AWPacketVar::Byte(_, _) => 1,
             AWPacketVar::Int(_, _) => 4,
+            AWPacketVar::Uint(_, _) => 4,
             AWPacketVar::Float(_, _) => 4,
             AWPacketVar::String(_, string) => string_to_latin1(string).len() + 1,
             AWPacketVar::Data(_, buf) => buf.len(),
@@ -205,6 +211,9 @@ impl AWPacketVar {
             }
             AWPacketVar::Int(_, x) => {
                 result.write_i32::<LittleEndian>(*x).unwrap();
+            }
+            AWPacketVar::Uint(_, x) => {
+                result.write_u32::<LittleEndian>(*x).unwrap();
             }
             AWPacketVar::Float(_, x) => {
                 result.write_f32::<LittleEndian>(*x).unwrap();

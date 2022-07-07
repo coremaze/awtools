@@ -82,6 +82,18 @@ impl AWPacket {
         None
     }
 
+    // Convenience conversion to u32
+    pub fn get_uint(&self, var_id: VarID) -> Option<u32> {
+        for var in &self.vars {
+            match var {
+                AWPacketVar::Int(id, x) if *id == var_id => return Some(*x as u32),
+                _ => {}
+            }
+        }
+
+        None
+    }
+
     pub fn get_float(&self, var_id: VarID) -> Option<f32> {
         for var in &self.vars {
             match var {
