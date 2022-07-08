@@ -132,6 +132,7 @@ impl UniverseServer {
             PacketType::WorldList => {
                 packet_handler::world_list(client, packet, &self.client_manager)
             }
+            PacketType::WorldLookup => packet_handler::world_lookup(client, packet, &self.client_manager),
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }

@@ -1,6 +1,6 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
-    net::SocketAddr,
+    net::{SocketAddr, IpAddr},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -28,6 +28,7 @@ pub struct PlayerInfo {
     pub citizen_id: Option<u32>,
     pub privilege_id: Option<u32>,
     pub username: String,
+    pub nonce: Option<[u8; 256]>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -42,6 +43,10 @@ pub struct World {
     pub name: String,
     pub status: WorldStatus,
     pub rating: u8, // Convert to enum later
+    pub ip: IpAddr,
+    pub port: u16,
+    pub max_users: u32,
+    pub world_size: u32,
 }
 
 impl World {

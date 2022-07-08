@@ -41,8 +41,8 @@ pub fn world_start(
     database: &Database,
     client_manager: &ClientManager,
 ) {
-    let world_build = match &client.info().entity {
-        Some(Entity::WorldServer(info)) => info.build,
+    let (world_build, world_port) = match &client.info().entity {
+        Some(Entity::WorldServer(info)) => (info.build, info.server_port),
         _ => {
             return;
         }
@@ -99,6 +99,10 @@ pub fn world_start(
             WorldStatus::NotPermitted
         },
         rating: world_rating,
+        ip: client.addr.ip().clone(),
+        port: world_port,
+        max_users: lic.users,
+        world_size: lic.world_size,
     };
     let new_world_list_packet = new_world.make_list_packet();
 

@@ -106,6 +106,7 @@ pub enum VarID {
     PrivilegeUsername = 99,
     PrivilegeUserID = 100,
     PrivilegePassword = 101,
+    PlayerPort = 120,
     ReasonCode = 121,
     SessionID = 140,
     TelegramCitizenName = 141,
