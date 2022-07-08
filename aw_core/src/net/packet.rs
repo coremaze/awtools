@@ -266,6 +266,7 @@ impl AWPacket {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct AWPacketGroup {
     pub packets: Vec<AWPacket>,
 }

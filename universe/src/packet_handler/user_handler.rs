@@ -1039,25 +1039,7 @@ fn send_full_world_list(client: &Client, client_manager: &ClientManager) {
 
     for world in &world_list {
         // Make a new WorldList packet for each world in this list
-        let mut p = AWPacket::new(PacketType::WorldList);
-
-        p.add_var(AWPacketVar::String(
-            VarID::WorldListName,
-            world.name.clone(),
-        ));
-
-        p.add_var(AWPacketVar::Byte(
-            VarID::WorldListStatus,
-            world.status as u8,
-        ));
-
-        // TODO: Count users
-        p.add_var(AWPacketVar::Int(VarID::WorldListUsers, 1234));
-
-        p.add_var(AWPacketVar::Byte(
-            VarID::WorldListRating,
-            world.rating as u8,
-        ));
+        let p = world.make_list_packet();
 
         if let Err(p) = group.push(p) {
             // If the current group is full, send it and start a new one

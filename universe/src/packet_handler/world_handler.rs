@@ -1,10 +1,12 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
-    client::{Client, ClientManager, ClientType, Entity, World, WorldServerInfo, WorldStatus},
+    client::{
+        self, Client, ClientManager, ClientType, Entity, World, WorldServerInfo, WorldStatus,
+    },
     database::{attrib::Attribute, license::LicenseQuery, AttribDB, Database, LicenseDB},
 };
-use aw_core::{AWPacket, AWPacketVar, PacketType, ReasonCode, VarID};
+use aw_core::{AWPacket, AWPacketGroup, AWPacketVar, PacketType, ReasonCode, VarID};
 
 pub fn world_server_start(client: &Client, packet: &AWPacket) {
     if let Some(client_type) = client.info().client_type {
@@ -89,17 +91,20 @@ pub fn world_start(
     }
 
     // Add a new world to the client's list of worlds
+    let new_world = World {
+        name: lic.name.clone(),
+        status: if world_free_entry != 0 {
+            WorldStatus::Permitted
+        } else {
+            WorldStatus::NotPermitted
+        },
+        rating: world_rating,
+    };
+    let new_world_list_packet = new_world.make_list_packet();
+
     let mut entity = client.info_mut().entity.take();
     if let Some(Entity::WorldServer(server_info)) = &mut entity {
-        server_info.worlds.push(World {
-            name: lic.name.clone(),
-            status: if world_free_entry != 0 {
-                WorldStatus::Permitted
-            } else {
-                WorldStatus::NotPermitted
-            },
-            rating: world_rating,
-        });
+        server_info.worlds.push(new_world);
     }
     client.info_mut().entity = entity;
 
@@ -122,11 +127,71 @@ pub fn world_start(
         ReasonCode::Success as i32,
     ));
 
-    log::info!("Starting world {p:?}");
-
-    // TODO: Add world to clients' world list
-
     client.connection.send(p);
+
+    // Send update about new world to all players
+    for player_client in client_manager.clients() {
+        if let Some(Entity::Player(_)) = &player_client.info().entity {
+            player_client.connection.send(new_world_list_packet.clone());
+            let mut player_packet = AWPacket::new(PacketType::WorldListResult);
+            player_packet.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
+            player_client.connection.send(player_packet);
+        }
+    }
+}
+
+pub fn world_server_hide_all(server: &mut WorldServerInfo) {
+    for world in &mut server.worlds {
+        world.status = WorldStatus::Hidden;
+    }
+}
+
+pub fn world_server_update_all(server: &WorldServerInfo, client_manager: &ClientManager) {
+    let world_packets = server
+        .worlds
+        .iter()
+        .map(|x| x.make_list_packet())
+        .collect::<Vec<AWPacket>>();
+
+    // Group packets into larger transmissions for efficiency
+    let mut groups: Vec<AWPacketGroup> = Vec::new();
+    let mut group = AWPacketGroup::new();
+
+    for world_packet in world_packets {
+        if let Err(p) = group.push(world_packet) {
+            groups.push(group);
+            group = AWPacketGroup::new();
+
+            let mut more = AWPacket::new(PacketType::WorldListResult);
+            // Yes, expect another WorldList packet from the server
+            more.add_var(AWPacketVar::Byte(VarID::WorldListMore, 1));
+            more.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, -1));
+            group.push(more).ok();
+            group.push(p).ok();
+        }
+    }
+
+    // Send packet indicating that the server is done
+    let mut p = AWPacket::new(PacketType::WorldListResult);
+    p.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
+    p.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, 0));
+
+    if let Err(p) = group.push(p) {
+        groups.push(group);
+        group = AWPacketGroup::new();
+        group.push(p).ok();
+    }
+
+    groups.push(group);
+
+    // Send update to all players
+    for client in client_manager.clients() {
+        if let Some(Entity::Player(_)) = client.info().entity {
+            for group in &groups {
+                client.connection.send_group(group.clone());
+            }
+        }
+    }
 }
 
 pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {

@@ -9,9 +9,9 @@ use crate::{
         citizen::{CitizenDB, CitizenQuery},
         Database,
     },
-    AWConnection, AWCryptRSA,
+    packet_handler, AWConnection, AWCryptRSA,
 };
-use aw_core::{AWPacket, PacketType, ReasonCode};
+use aw_core::{AWPacket, AWPacketVar, PacketType, ReasonCode, VarID};
 use num_derive::FromPrimitive;
 
 /// Game-related client state
@@ -42,6 +42,23 @@ pub struct World {
     pub name: String,
     pub status: WorldStatus,
     pub rating: u8, // Convert to enum later
+}
+
+impl World {
+    pub fn make_list_packet(&self) -> AWPacket {
+        let mut p = AWPacket::new(PacketType::WorldList);
+
+        p.add_var(AWPacketVar::String(VarID::WorldListName, self.name.clone()));
+
+        p.add_var(AWPacketVar::Byte(VarID::WorldListStatus, self.status as u8));
+
+        // TODO: Count users
+        p.add_var(AWPacketVar::Int(VarID::WorldListUsers, 1234));
+
+        p.add_var(AWPacketVar::Byte(VarID::WorldListRating, self.rating as u8));
+
+        p
+    }
 }
 
 #[derive(Debug)]
@@ -166,6 +183,12 @@ impl ClientManager {
     pub fn remove_dead_clients(&mut self) {
         for client in self.clients().iter().filter(|x| x.is_dead()) {
             log::info!("Disconnected {}", client.addr.ip());
+            if let Some(Entity::WorldServer(server_info)) = &mut client.info_mut().entity {
+                packet_handler::world_server_hide_all(server_info);
+            }
+            if let Some(Entity::WorldServer(server_info)) = &client.info().entity {
+                packet_handler::world_server_update_all(server_info, &self);
+            }
         }
         self.clients = self.clients.drain(..).filter(|x| !x.is_dead()).collect();
     }
