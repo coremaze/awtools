@@ -204,28 +204,44 @@ pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientMan
 
     // Remove the world from the client
     let mut entity = client.info_mut().entity.take();
-    let mut removed_worlds = false;
+    let mut removed_world: Option<World> = None;
     if let Some(Entity::WorldServer(server_info)) = &mut entity {
-        let initial_len = server_info.worlds.len();
-        server_info
-            .worlds
-            .retain(|x| !x.name.eq_ignore_ascii_case(&world_name));
-        if server_info.worlds.len() < initial_len {
-            removed_worlds = true;
+        let mut matched_index: Option<usize> = None;
+        for (i, e) in server_info.worlds.iter().enumerate() {
+            if e.name.eq_ignore_ascii_case(&world_name) {
+                matched_index = Some(i);
+                break;
+            }
+        }
+        if let Some(i) = matched_index {
+            removed_world = Some(server_info.worlds.remove(i));
         }
     }
     client.info_mut().entity = entity;
 
-    // TOOD: Remove world from clients' world list
-    let mut p = AWPacket::new(PacketType::WorldStop);
-
     let rc = match world_exists {
-        true => match removed_worlds {
-            true => ReasonCode::Success,
-            false => ReasonCode::NotWorldOwner,
+        true => match removed_world {
+            Some(_) => ReasonCode::Success,
+            None => ReasonCode::NotWorldOwner,
         },
         false => ReasonCode::NoSuchWorld,
     };
+
+    // Remove world from clients' world list
+    if let Some(mut removed_world) = removed_world {
+        removed_world.status = WorldStatus::Hidden;
+        for playerclient in client_manager.clients() {
+            if let Some(Entity::Player(_)) = playerclient.info().entity {
+                playerclient.connection.send(removed_world.make_list_packet());
+                let mut p = AWPacket::new(PacketType::WorldListResult);
+                p.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
+                p.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, 0));
+                playerclient.connection.send(p);
+            }
+        }
+    }
+
+    let mut p = AWPacket::new(PacketType::WorldStop);
 
     p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
 
