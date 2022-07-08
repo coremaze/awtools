@@ -111,6 +111,9 @@ impl UniverseServer {
             PacketType::CitizenLookupByNumber => {
                 packet_handler::citizen_lookup_by_number(client, packet, &self.database)
             }
+            PacketType::CitizenChange => {
+                packet_handler::citizen_change(client, packet, &self.database)
+            }
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }

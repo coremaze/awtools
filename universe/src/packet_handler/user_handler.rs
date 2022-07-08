@@ -8,8 +8,8 @@ use crate::{
     attributes::set_attribute,
     client::{Client, ClientManager, ClientType, Entity, PlayerInfo},
     database::citizen::CitizenQuery,
-    database::CitizenDB,
     database::Database,
+    database::CitizenDB,
     license::LicenseGenerator,
 };
 use aw_core::*;
@@ -79,14 +79,8 @@ pub fn login(
                     response.add_var(AWPacketVar::Uint(VarID::BetaUser, citizen.beta));
                     response.add_var(AWPacketVar::Uint(VarID::TrialUser, citizen.trial));
                     response.add_var(AWPacketVar::Uint(VarID::CitizenNumber, citizen.id));
-                    response.add_var(AWPacketVar::Uint(
-                        VarID::CitizenPrivacy,
-                        citizen.privacy,
-                    ));
-                    response.add_var(AWPacketVar::Uint(
-                        VarID::CAVEnabled,
-                        citizen.cav_enabled,
-                    ));
+                    response.add_var(AWPacketVar::Uint(VarID::CitizenPrivacy, citizen.privacy));
+                    response.add_var(AWPacketVar::Uint(VarID::CAVEnabled, citizen.cav_enabled));
 
                     // TODO: update login time and last address
                 }
@@ -450,6 +444,109 @@ pub fn citizen_lookup_by_number(client: &Client, packet: &AWPacket, database: &D
     client.connection.send(response);
 }
 
+pub fn citizen_change(client: &Client, packet: &AWPacket, database: &Database) {
+    let changed_info = citizen_from_packet(packet);
+    if changed_info.is_err() {
+        log::trace!("Could not change citizen: {:?}", changed_info);
+        return;
+    }
+    let changed_info = changed_info.unwrap();
+    let mut rc = ReasonCode::Success;
+
+    if let Some(Entity::Player(info)) = &client.info().entity {
+        // Client needs to be the user in question or an admin
+        if Some(changed_info.id) != info.citizen_id && !client.has_admin_permissions() {
+            rc = ReasonCode::Unauthorized;
+        } else {
+            match database.citizen_by_number(changed_info.id) {
+                Ok(original_info) => {
+                    if let Err(x) = modify_citizen(
+                        &original_info,
+                        &changed_info,
+                        database,
+                        client.has_admin_permissions(),
+                    ) {
+                        rc = x;
+                    }
+                }
+                Err(_) => {
+                    rc = ReasonCode::NoSuchCitizen;
+                }
+            }
+        }
+    }
+
+    let mut response = AWPacket::new(PacketType::CitizenChangeResult);
+    log::trace!("Change citizen: {:?}", rc);
+    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+
+    client.connection.send(response);
+}
+
+fn modify_citizen(
+    original: &CitizenQuery,
+    changed: &CitizenQuery,
+    database: &Database,
+    admin: bool,
+) -> Result<(), ReasonCode> {
+    // Find any citizens with the same name as the new name
+    if let Ok(matching_cit) = database.citizen_by_name(&changed.name) {
+        // If someone already has the name, it needs to be the same user
+        if matching_cit.id != original.id {
+            return Err(ReasonCode::NameAlreadyUsed);
+        }
+    }
+
+    let cit_query = CitizenQuery {
+        id: original.id,
+        changed: 0,
+        name: changed.name.clone(),
+        password: changed.password.clone(),
+        email: changed.email.clone(),
+        priv_pass: changed.priv_pass.clone(),
+        comment: if admin {
+            changed.comment.clone()
+        } else {
+            original.comment.clone()
+        },
+        url: changed.url.clone(),
+        immigration: original.immigration,
+        expiration: if admin {
+            changed.expiration
+        } else {
+            original.expiration
+        },
+        last_login: original.last_login,
+        last_address: original.last_address,
+        total_time: original.total_time,
+        bot_limit: if admin {
+            changed.bot_limit
+        } else {
+            original.bot_limit
+        },
+        beta: if admin { changed.beta } else { original.beta },
+        cav_enabled: if admin {
+            changed.cav_enabled
+        } else {
+            original.cav_enabled
+        },
+        cav_template: changed.cav_template,
+        enabled: if admin {
+            changed.enabled
+        } else {
+            original.enabled
+        },
+        privacy: changed.privacy,
+        trial: if admin { changed.trial } else { original.trial },
+    };
+
+    database
+        .citizen_change(&cit_query)
+        .map_err(|_| ReasonCode::UnableToChangeCitizen)?;
+
+    Ok(())
+}
+
 fn citizen_info_vars(
     citizen: &CitizenQuery,
     self_vars: bool,
@@ -470,10 +567,7 @@ fn citizen_info_vars(
     ));
 
     if citizen.cav_enabled != 0 {
-        vars.push(AWPacketVar::Uint(
-            VarID::CAVTemplate,
-            citizen.cav_template,
-        ));
+        vars.push(AWPacketVar::Uint(VarID::CAVTemplate, citizen.cav_template));
     } else {
         vars.push(AWPacketVar::Int(VarID::CAVTemplate, 0));
     }
@@ -495,19 +589,13 @@ fn citizen_info_vars(
             VarID::CitizenTotalTime,
             citizen.total_time,
         ));
-        vars.push(AWPacketVar::Uint(
-            VarID::CitizenBotLimit,
-            citizen.bot_limit,
-        ));
+        vars.push(AWPacketVar::Uint(VarID::CitizenBotLimit, citizen.bot_limit));
         vars.push(AWPacketVar::Byte(VarID::BetaUser, citizen.beta as u8));
         vars.push(AWPacketVar::Byte(
             VarID::CitizenEnabled,
             citizen.enabled as u8,
         ));
-        vars.push(AWPacketVar::Uint(
-            VarID::CitizenPrivacy,
-            citizen.privacy,
-        ));
+        vars.push(AWPacketVar::Uint(VarID::CitizenPrivacy, citizen.privacy));
         vars.push(AWPacketVar::String(
             VarID::CitizenPassword,
             citizen.password.clone(),
@@ -538,4 +626,75 @@ fn citizen_info_vars(
     }
 
     vars
+}
+
+fn citizen_from_packet(packet: &AWPacket) -> Result<CitizenQuery, String> {
+    let username = packet
+        .get_string(VarID::CitizenName)
+        .ok_or_else(|| "No citizen name".to_string())?;
+    let citizen_id = packet
+        .get_uint(VarID::CitizenNumber)
+        .ok_or_else(|| "No citizen number".to_string())?;
+    let email = packet
+        .get_string(VarID::CitizenEmail)
+        .ok_or_else(|| "No citizen email".to_string())?;
+    let priv_pass = packet
+        .get_string(VarID::CitizenPrivilegePassword)
+        .ok_or_else(|| "No citizen privilege password".to_string())?;
+    let expiration = packet
+        .get_uint(VarID::CitizenExpiration)
+        .ok_or_else(|| "No citizen expiration".to_string())?;
+    let bot_limit = packet
+        .get_uint(VarID::CitizenBotLimit)
+        .ok_or_else(|| "No citizen bot limit".to_string())?;
+    let beta = packet
+        .get_uint(VarID::BetaUser)
+        .ok_or_else(|| "No citizen beta user".to_string())?;
+    let enabled = packet
+        .get_uint(VarID::CitizenEnabled)
+        .ok_or_else(|| "No citizen enabled".to_string())?;
+    let comment = packet
+        .get_string(VarID::CitizenComment)
+        .ok_or_else(|| "No citizen comment".to_string())?;
+    let password = packet
+        .get_string(VarID::CitizenPassword)
+        .ok_or_else(|| "No citizen password".to_string())?;
+    let url = packet
+        .get_string(VarID::CitizenURL)
+        .ok_or_else(|| "No citizen url".to_string())?;
+    let cav_template = packet
+        .get_uint(VarID::CAVTemplate)
+        .ok_or_else(|| "No citizen cav template".to_string())?;
+    let cav_enabled = packet
+        .get_uint(VarID::CAVEnabled)
+        .ok_or_else(|| "No citizen cav enabled".to_string())?;
+    let privacy = packet
+        .get_uint(VarID::CitizenPrivacy)
+        .ok_or_else(|| "No citizen privacy".to_string())?;
+    let trial = packet
+        .get_uint(VarID::TrialUser)
+        .ok_or_else(|| "No citizen trial".to_string())?;
+
+    Ok(CitizenQuery {
+        id: citizen_id,
+        changed: 0,
+        name: username,
+        password,
+        email,
+        priv_pass,
+        comment,
+        url,
+        immigration: 0,
+        expiration,
+        last_login: 0,
+        last_address: 0,
+        total_time: 0,
+        bot_limit,
+        beta,
+        cav_enabled,
+        cav_template,
+        enabled,
+        privacy,
+        trial,
+    })
 }

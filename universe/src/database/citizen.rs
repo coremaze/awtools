@@ -37,6 +37,7 @@ pub trait CitizenDB {
     fn citizen_by_name(&self, name: &str) -> Result<CitizenQuery, ReasonCode>;
     fn citizen_by_number(&self, citizen_id: u32) -> Result<CitizenQuery, ReasonCode>;
     fn citizen_add(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode>;
+    fn citizen_change(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode>;
 }
 
 impl CitizenDB for Database {
@@ -168,6 +169,45 @@ impl CitizenDB for Database {
             VALUES(:id, :immigration, :expiration, :last_login, :last_address, :total_time, 
                 :bot_limit, :beta, :enabled, :trial, :privacy, :cav_enabled, :cav_template, 
                 :name, :password, :email, :priv_pass, :comment, :url)",
+            params! {
+                "id" => citizen.id,
+                "immigration" => citizen.immigration,
+                "expiration" => citizen.expiration,
+                "last_login" => citizen.last_login,
+                "last_address" => citizen.last_address,
+                "total_time" => citizen.total_time,
+                "bot_limit" => citizen.bot_limit,
+                "beta" => citizen.beta,
+                "enabled" => citizen.enabled,
+                "trial" => citizen.trial,
+                "privacy" => citizen.privacy,
+                "cav_enabled" => citizen.cav_enabled,
+                "cav_template" => citizen.cav_template,
+                "name" => &citizen.name,
+                "password" => &citizen.password,
+                "email" => &citizen.email,
+                "priv_pass" => &citizen.priv_pass,
+                "comment" => &citizen.comment,
+                "url" => &citizen.url
+            },
+        )
+        .map_err(|_| ReasonCode::DatabaseError)?;
+
+        Ok(())
+    }
+
+    fn citizen_change(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode> {
+        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
+
+        conn.exec_drop(
+            r"UPDATE awu_citizen SET Changed=NOT Changed,
+                Immigration=:immigration, Expiration=:expiration, LastLogin=:last_login, 
+                LastAddress=:last_address, TotalTime=:total_time, BotLimit=:bot_limit, 
+                Beta=:beta, Enabled=:enabled, Trial=:trial, Privacy=:privacy, 
+                CAVEnabled=:cav_enabled, CAVTemplate=:cav_template, Name=:name, 
+                Password=:password, Email=:email, PrivPass=:priv_pass, 
+                Comment=:comment, URL=:url
+                WHERE ID=:id;",
             params! {
                 "id" => citizen.id,
                 "immigration" => citizen.immigration,
