@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     pub fn test_float() {
-        let var = AWPacketVar::Float(VarID::AFKStatus, 3.14159265);
+        let var = AWPacketVar::Float(VarID::AFKStatus, 3.141_592_7);
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);

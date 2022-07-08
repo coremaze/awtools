@@ -170,7 +170,7 @@ impl AWPacket {
         if serialized_bytes.len() > 160 {
             // Serialize the packet and compress it
             let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
-            encoder.write_all(&serialized_bytes).unwrap();
+            encoder.write_all(serialized_bytes).unwrap();
             let compressed_bytes = encoder
                 .finish()
                 .map_err(|_| "Failed to compress".to_string())?;

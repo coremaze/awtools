@@ -44,19 +44,11 @@ pub enum Entity {
 
 impl Entity {
     pub fn is_player(&self) -> bool {
-        if let Entity::Player(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Entity::Player(_))
     }
 
     pub fn is_world(&self) -> bool {
-        if let Entity::World(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Entity::World(_))
     }
 }
 

@@ -300,7 +300,7 @@ pub fn attribute_change(
     for var in packet.get_vars().iter() {
         if let AWPacketVar::String(id, val) = var {
             log::info!("Client {} setting {:?} to {:?}", client.addr.ip(), id, val);
-            set_attribute(*id, &val, database).ok();
+            set_attribute(*id, val, database).ok();
         }
     }
 
@@ -555,77 +555,44 @@ fn citizen_info_vars(
     self_vars: bool,
     admin_vars: bool,
 ) -> Vec<AWPacketVar> {
-    let mut vars = Vec::<AWPacketVar>::new();
-
-    vars.push(AWPacketVar::Uint(VarID::CitizenNumber, citizen.id));
-    vars.push(AWPacketVar::String(
-        VarID::CitizenName,
-        citizen.name.clone(),
-    ));
-    vars.push(AWPacketVar::String(VarID::CitizenURL, citizen.url.clone()));
-    vars.push(AWPacketVar::Byte(VarID::TrialUser, citizen.trial as u8));
-    vars.push(AWPacketVar::Byte(
-        VarID::CAVEnabled,
-        citizen.cav_enabled as u8,
-    ));
-
-    if citizen.cav_enabled != 0 {
-        vars.push(AWPacketVar::Uint(VarID::CAVTemplate, citizen.cav_template));
-    } else {
-        vars.push(AWPacketVar::Int(VarID::CAVTemplate, 0));
-    }
+    let mut vars = vec![
+        AWPacketVar::Uint(VarID::CitizenNumber, citizen.id),
+        AWPacketVar::String(VarID::CitizenName, citizen.name.clone()),
+        AWPacketVar::String(VarID::CitizenURL, citizen.url.clone()),
+        AWPacketVar::Byte(VarID::TrialUser, citizen.trial as u8),
+        AWPacketVar::Byte(VarID::CAVEnabled, citizen.cav_enabled as u8),
+        AWPacketVar::Uint(
+            VarID::CAVTemplate,
+            if citizen.cav_enabled != 0 {
+                citizen.cav_template
+            } else {
+                0
+            },
+        ),
+    ];
 
     if self_vars || admin_vars {
-        vars.push(AWPacketVar::Uint(
-            VarID::CitizenImmigration,
-            citizen.immigration,
-        ));
-        vars.push(AWPacketVar::Uint(
-            VarID::CitizenExpiration,
-            citizen.expiration,
-        ));
-        vars.push(AWPacketVar::Uint(
-            VarID::CitizenLastLogin,
-            citizen.last_login,
-        ));
-        vars.push(AWPacketVar::Uint(
-            VarID::CitizenTotalTime,
-            citizen.total_time,
-        ));
-        vars.push(AWPacketVar::Uint(VarID::CitizenBotLimit, citizen.bot_limit));
-        vars.push(AWPacketVar::Byte(VarID::BetaUser, citizen.beta as u8));
-        vars.push(AWPacketVar::Byte(
-            VarID::CitizenEnabled,
-            citizen.enabled as u8,
-        ));
-        vars.push(AWPacketVar::Uint(VarID::CitizenPrivacy, citizen.privacy));
-        vars.push(AWPacketVar::String(
-            VarID::CitizenPassword,
-            citizen.password.clone(),
-        ));
-        vars.push(AWPacketVar::String(
-            VarID::CitizenEmail,
-            citizen.email.clone(),
-        ));
-        vars.push(AWPacketVar::String(
-            VarID::CitizenPrivilegePassword,
-            citizen.priv_pass.clone(),
-        ));
-        vars.push(AWPacketVar::Uint(
-            VarID::CitizenImmigration,
-            citizen.immigration,
-        ));
+        vars.extend(vec![
+            AWPacketVar::Uint(VarID::CitizenImmigration, citizen.immigration),
+            AWPacketVar::Uint(VarID::CitizenExpiration, citizen.expiration),
+            AWPacketVar::Uint(VarID::CitizenLastLogin, citizen.last_login),
+            AWPacketVar::Uint(VarID::CitizenTotalTime, citizen.total_time),
+            AWPacketVar::Uint(VarID::CitizenBotLimit, citizen.bot_limit),
+            AWPacketVar::Byte(VarID::BetaUser, citizen.beta as u8),
+            AWPacketVar::Byte(VarID::CitizenEnabled, citizen.enabled as u8),
+            AWPacketVar::Uint(VarID::CitizenPrivacy, citizen.privacy),
+            AWPacketVar::String(VarID::CitizenPassword, citizen.password.clone()),
+            AWPacketVar::String(VarID::CitizenEmail, citizen.email.clone()),
+            AWPacketVar::String(VarID::CitizenPrivilegePassword, citizen.priv_pass.clone()),
+            AWPacketVar::Uint(VarID::CitizenImmigration, citizen.immigration),
+        ]);
+    }
 
-        if admin_vars {
-            vars.push(AWPacketVar::String(
-                VarID::CitizenComment,
-                citizen.comment.clone(),
-            ));
-            vars.push(AWPacketVar::Uint(
-                VarID::IdentifyUserIP,
-                citizen.last_address,
-            ));
-        }
+    if admin_vars {
+        vars.extend(vec![
+            AWPacketVar::String(VarID::CitizenComment, citizen.comment.clone()),
+            AWPacketVar::Uint(VarID::IdentifyUserIP, citizen.last_address),
+        ]);
     }
 
     vars
@@ -705,7 +672,7 @@ fn citizen_from_packet(packet: &AWPacket) -> Result<CitizenQuery, String> {
 pub fn license_add(client: &Client, packet: &AWPacket, database: &Database) {
     let mut p = AWPacket::new(PacketType::LicenseChangeResult);
 
-    let player_info = match &client.info().entity {
+    let _player_info = match &client.info().entity {
         Some(Entity::Player(info)) => info,
         _ => return,
     };
@@ -815,45 +782,27 @@ pub fn license_by_name(client: &Client, packet: &AWPacket, database: &Database) 
 }
 
 fn license_to_vars(lic: &LicenseQuery, admin: bool) -> Vec<AWPacketVar> {
-    let mut result = Vec::<AWPacketVar>::new();
+    let mut result = vec![
+        AWPacketVar::String(VarID::WorldStartWorldName, lic.name.clone()),
+        AWPacketVar::Uint(VarID::WorldLicenseID, lic.id),
+        AWPacketVar::Uint(VarID::WorldLicenseUsers, lic.users),
+        AWPacketVar::Uint(VarID::WorldLicenseRange, lic.world_size),
+    ];
 
-    result.push(AWPacketVar::String(
-        VarID::WorldStartWorldName,
-        lic.name.clone(),
-    ));
-    result.push(AWPacketVar::Uint(VarID::WorldLicenseID, lic.id));
-    result.push(AWPacketVar::Uint(VarID::WorldLicenseUsers, lic.users));
-    result.push(AWPacketVar::Uint(VarID::WorldLicenseRange, lic.world_size));
     if admin {
-        result.push(AWPacketVar::String(
-            VarID::WorldLicensePassword,
-            lic.password.clone(),
-        ));
-        result.push(AWPacketVar::String(
-            VarID::WorldLicenseEmail,
-            lic.email.clone(),
-        ));
-        result.push(AWPacketVar::String(
-            VarID::WorldLicenseComment,
-            lic.comment.clone(),
-        ));
-        result.push(AWPacketVar::Uint(VarID::WorldLicenseCreation, lic.creation));
-        result.push(AWPacketVar::Uint(
-            VarID::WorldLicenseExpiration,
-            lic.expiration,
-        ));
-        result.push(AWPacketVar::Uint(
-            VarID::WorldLicenseLastStart,
-            lic.last_start,
-        ));
-        result.push(AWPacketVar::Uint(
-            VarID::WorldLicenseLastAddress,
-            lic.last_address,
-        ));
-        result.push(AWPacketVar::Uint(VarID::WorldLicenseTourists, lic.tourists));
-        result.push(AWPacketVar::Uint(VarID::WorldLicenseHidden, lic.hidden));
-        result.push(AWPacketVar::Uint(VarID::WorldLicenseVoip, lic.voip));
-        result.push(AWPacketVar::Uint(VarID::WorldLicensePlugins, lic.plugins));
+        result.extend(vec![
+            AWPacketVar::String(VarID::WorldLicensePassword, lic.password.clone()),
+            AWPacketVar::String(VarID::WorldLicenseEmail, lic.email.clone()),
+            AWPacketVar::String(VarID::WorldLicenseComment, lic.comment.clone()),
+            AWPacketVar::Uint(VarID::WorldLicenseCreation, lic.creation),
+            AWPacketVar::Uint(VarID::WorldLicenseExpiration, lic.expiration),
+            AWPacketVar::Uint(VarID::WorldLicenseLastStart, lic.last_start),
+            AWPacketVar::Uint(VarID::WorldLicenseLastAddress, lic.last_address),
+            AWPacketVar::Uint(VarID::WorldLicenseTourists, lic.tourists),
+            AWPacketVar::Uint(VarID::WorldLicenseHidden, lic.hidden),
+            AWPacketVar::Uint(VarID::WorldLicenseVoip, lic.voip),
+            AWPacketVar::Uint(VarID::WorldLicensePlugins, lic.plugins),
+        ]);
     }
 
     result

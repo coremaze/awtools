@@ -314,7 +314,7 @@ mod tests {
     use super::*;
     use crate::{AWPacketVar, VarID};
     use std::net::TcpListener;
-    use std::sync::mpsc::{channel, Receiver, Sender};
+    use std::sync::mpsc::channel;
     use std::thread;
 
     #[test]
