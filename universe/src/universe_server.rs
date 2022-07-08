@@ -123,6 +123,9 @@ impl UniverseServer {
             PacketType::LicenseChange => {
                 packet_handler::license_change(client, packet, &self.database)
             }
+            PacketType::WorldStart => {
+                packet_handler::world_start(client, packet, &self.database, &self.client_manager)
+            }
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }

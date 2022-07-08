@@ -30,16 +30,31 @@ pub struct PlayerInfo {
     pub username: String,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum WorldStatus {
+    Permitted = 1,
+    NotPermitted = 2,
+    Hidden = 3,
+}
+
+#[derive(Debug, Clone)]
+pub struct World {
+    pub name: String,
+    pub status: WorldStatus,
+    pub rating: u8, // Convert to enum later
+}
+
 #[derive(Debug)]
-pub struct WorldInfo {
+pub struct WorldServerInfo {
     pub build: i32,
     pub server_port: u16,
+    pub worlds: Vec<World>,
 }
 
 #[derive(Debug)]
 pub enum Entity {
     Player(PlayerInfo),
-    World(WorldInfo),
+    WorldServer(WorldServerInfo),
 }
 
 impl Entity {
@@ -48,7 +63,7 @@ impl Entity {
     }
 
     pub fn is_world(&self) -> bool {
-        matches!(self, Entity::World(_))
+        matches!(self, Entity::WorldServer(_))
     }
 }
 
@@ -262,6 +277,19 @@ impl ClientManager {
                 client.last_heartbeat = now;
             }
         }
+    }
+
+    pub fn get_world_by_name(&self, name: &str) -> Option<World> {
+        for client in self.clients() {
+            if let Some(Entity::WorldServer(server)) = &client.info().entity {
+                for world in &server.worlds {
+                    if world.name.eq_ignore_ascii_case(&name) {
+                        return Some(world.clone());
+                    }
+                }
+            }
+        }
+        None
     }
 }
 
