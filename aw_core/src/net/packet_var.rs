@@ -133,6 +133,7 @@ pub enum VarID {
     WorldListMore = 193,
     WorldListName = 194,
     WorldListRating = 195,
+    WorldList3DayUnknown = 196,
     WorldListStatus = 197,
     WorldListUsers = 198,
     WorldUsers = 201,

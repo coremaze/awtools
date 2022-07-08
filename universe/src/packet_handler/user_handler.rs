@@ -6,7 +6,7 @@ use std::{
 use crate::{
     attributes,
     attributes::set_attribute,
-    client::{Client, ClientManager, ClientType, Entity, PlayerInfo},
+    client::{Client, ClientManager, ClientType, Entity, PlayerInfo, World},
     database::citizen::CitizenQuery,
     database::license::LicenseQuery,
     database::Database,
@@ -997,4 +997,92 @@ fn license_from_packet(packet: &AWPacket) -> Result<LicenseQuery, String> {
         plugins,
         creation: 0,
     })
+}
+
+pub fn world_list(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
+    if let Some(Entity::Player(_)) = client.info().entity {
+    } else {
+        return;
+    }
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Current time is before the unix epoch.")
+        .as_secs() as i32;
+
+    // Like with UserList, I am not sure what the purpose of this is,
+    // but its function is similar
+    let time_val = packet.get_int(VarID::WorldList3DayUnknown).unwrap_or(0);
+    if now.saturating_sub(3) < time_val {
+        return;
+    }
+
+    send_full_world_list(client, client_manager);
+}
+
+fn send_full_world_list(client: &Client, client_manager: &ClientManager) {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Current time is before the unix epoch.")
+        .as_secs() as i32;
+
+    // Get a list of all the worlds
+    let mut world_list = Vec::<World>::new();
+    for client in client_manager.clients() {
+        if let Some(Entity::WorldServer(world_server)) = &client.info().entity {
+            world_list.extend(world_server.worlds.clone());
+        }
+    }
+
+    // Group packets into larger transmissions for efficiency
+    let mut group = AWPacketGroup::new();
+
+    for world in &world_list {
+        // Make a new WorldList packet for each world in this list
+        let mut p = AWPacket::new(PacketType::WorldList);
+
+        p.add_var(AWPacketVar::String(
+            VarID::WorldListName,
+            world.name.clone(),
+        ));
+
+        p.add_var(AWPacketVar::Byte(
+            VarID::WorldListStatus,
+            world.status as u8,
+        ));
+
+        // TODO: Count users
+        p.add_var(AWPacketVar::Int(VarID::WorldListUsers, 1234));
+
+        p.add_var(AWPacketVar::Byte(
+            VarID::WorldListRating,
+            world.rating as u8,
+        ));
+
+        if let Err(p) = group.push(p) {
+            // If the current group is full, send it and start a new one
+            client.connection.send_group(group);
+            group = AWPacketGroup::new();
+
+            let mut more = AWPacket::new(PacketType::WorldListResult);
+            // Yes, expect another WorldList packet from the server
+            more.add_var(AWPacketVar::Byte(VarID::WorldListMore, 1));
+            more.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, now));
+            group.push(more).ok();
+            group.push(p).ok();
+        }
+    }
+
+    // Send packet indicating that the server is done
+    let mut p = AWPacket::new(PacketType::WorldListResult);
+    p.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
+    p.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, now));
+
+    if let Err(p) = group.push(p) {
+        client.connection.send_group(group);
+        group = AWPacketGroup::new();
+        group.push(p).ok();
+    }
+
+    client.connection.send_group(group);
 }
