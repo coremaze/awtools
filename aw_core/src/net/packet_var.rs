@@ -166,7 +166,7 @@ impl AWPacketVar {
             AWPacketVar::Int(_, _) => DataType::Int,
             // Uint being DataType::Int is intentional. This does not have its
             // own ID, it is only for convenience.
-            AWPacketVar::Uint(_, _) => DataType::Int, 
+            AWPacketVar::Uint(_, _) => DataType::Int,
             AWPacketVar::Float(_, _) => DataType::Float,
             AWPacketVar::String(_, _) => DataType::String,
             AWPacketVar::Data(_, _) => DataType::Data,
