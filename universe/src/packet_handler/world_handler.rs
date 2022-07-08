@@ -124,6 +124,8 @@ pub fn world_start(
 
     log::info!("Starting world {p:?}");
 
+    // TODO: Add world to clients' world list
+
     client.connection.send(p);
 }
 
