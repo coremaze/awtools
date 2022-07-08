@@ -33,6 +33,8 @@ pub trait LicenseDB {
     fn init_license(&self);
     fn license_by_name(&self, name: &str) -> Result<LicenseQuery, ReasonCode>;
     fn license_add(&self, lic: &LicenseQuery) -> Result<(), ReasonCode>;
+    fn license_next(&self, name: &str) -> Result<LicenseQuery, ReasonCode>;
+    fn license_prev(&self, name: &str) -> Result<LicenseQuery, ReasonCode>;
 }
 
 impl LicenseDB for Database {
@@ -124,6 +126,52 @@ impl LicenseDB for Database {
         .map_err(|_| ReasonCode::DatabaseError)?;
 
         Ok(())
+    }
+
+    fn license_next(&self, name: &str) -> Result<LicenseQuery, ReasonCode> {
+        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
+
+        let rows: Vec<Row> = conn
+            .exec(
+                r"SELECT * FROM awu_license WHERE Name>:name ORDER BY Name LIMIT 1",
+                params! {
+                    "name" => name,
+                },
+            )
+            .map_err(|_| ReasonCode::DatabaseError)?;
+
+        if rows.len() > 1 {
+            return Err(ReasonCode::DatabaseError);
+        }
+
+        if let Some(lic) = rows.first() {
+            fetch_license(lic)
+        } else {
+            Err(ReasonCode::DatabaseError)
+        }
+    }
+
+    fn license_prev(&self, name: &str) -> Result<LicenseQuery, ReasonCode> {
+        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
+
+        let rows: Vec<Row> = conn
+            .exec(
+                r"SELECT * FROM awu_license WHERE Name<:name ORDER BY Name DESC LIMIT 1",
+                params! {
+                    "name" => name,
+                },
+            )
+            .map_err(|_| ReasonCode::DatabaseError)?;
+
+        if rows.len() > 1 {
+            return Err(ReasonCode::DatabaseError);
+        }
+
+        if let Some(lic) = rows.first() {
+            fetch_license(lic)
+        } else {
+            Err(ReasonCode::DatabaseError)
+        }
     }
 }
 

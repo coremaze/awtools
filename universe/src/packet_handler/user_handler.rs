@@ -738,9 +738,28 @@ pub fn license_add(client: &Client, packet: &AWPacket, database: &Database) {
     client.connection.send(p);
 }
 
+enum WorldLicenseLookupMethod {
+    Previous,
+    Exact,
+    Next,
+}
+
 pub fn license_by_name(client: &Client, packet: &AWPacket, database: &Database) {
+    send_license_lookup(client, packet, database, WorldLicenseLookupMethod::Exact);
+}
+
+pub fn license_next(client: &Client, packet: &AWPacket, database: &Database) {
+    send_license_lookup(client, packet, database, WorldLicenseLookupMethod::Next);
+}
+
+pub fn license_prev(client: &Client, packet: &AWPacket, database: &Database) {
+    send_license_lookup(client, packet, database, WorldLicenseLookupMethod::Previous);
+}
+
+fn send_license_lookup(client: &Client, packet: &AWPacket, database: &Database, method: WorldLicenseLookupMethod) {
     let mut p = AWPacket::new(PacketType::LicenseResult);
 
+    // Only admins should be able to query for world licenses
     if !client.has_admin_permissions() {
         p.add_var(AWPacketVar::Int(
             VarID::ReasonCode,
@@ -750,33 +769,37 @@ pub fn license_by_name(client: &Client, packet: &AWPacket, database: &Database) 
         return;
     }
 
+    // World name to iterate from should be included
     let world_name = match packet.get_string(VarID::WorldStartWorldName) {
         Some(x) => x,
         None => return,
     };
 
-    let lic = match database.license_by_name(&world_name) {
-        Ok(lic) => lic,
+    // Get the previous/same/next world license starting from the included world name
+    let license_result = match method {
+        WorldLicenseLookupMethod::Previous => database.license_prev(&world_name),
+        WorldLicenseLookupMethod::Exact => database.license_by_name(&world_name),
+        WorldLicenseLookupMethod::Next => database.license_next(&world_name),
+    };
+
+    let rc = match license_result {
+        Ok(lic) => {
+            // Attach world license info to packet
+            let vars = license_to_vars(&lic, client.has_admin_permissions());
+
+            for v in vars {
+                p.add_var(v);
+            }
+
+            ReasonCode::Success
+        }
         Err(_) => {
-            p.add_var(AWPacketVar::Int(
-                VarID::ReasonCode,
-                ReasonCode::NoSuchLicense as i32,
-            ));
-            client.connection.send(p);
-            return;
+            // No world license was found before/same/after the given name
+            ReasonCode::NoSuchLicense
         }
     };
 
-    let vars = license_to_vars(&lic, client.has_admin_permissions());
-
-    for v in vars {
-        p.add_var(v);
-    }
-
-    p.add_var(AWPacketVar::Int(
-        VarID::ReasonCode,
-        ReasonCode::Success as i32,
-    ));
+    p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
 
     client.connection.send(p);
 }
