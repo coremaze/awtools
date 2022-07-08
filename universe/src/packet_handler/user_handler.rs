@@ -320,6 +320,7 @@ pub fn citizen_next(client: &Client, packet: &AWPacket, database: &Database) {
         );
         rc = ReasonCode::Unauthorized;
     } else if let Some(Entity::Player(info)) = &client.info().entity {
+        // TODO: next should be able to skip IDs
         let citizen_id = packet.get_uint(VarID::CitizenNumber).unwrap_or(0);
         match database.citizen_by_number(citizen_id.saturating_add(1)) {
             Ok(citizen) => {
@@ -352,6 +353,7 @@ pub fn citizen_prev(client: &Client, packet: &AWPacket, database: &Database) {
         );
         rc = ReasonCode::Unauthorized;
     } else if let Some(Entity::Player(info)) = &client.info().entity {
+        // TODO: prev should be able to skip IDs
         let citizen_id = packet.get_uint(VarID::CitizenNumber).unwrap_or(0);
         match database.citizen_by_number(citizen_id.saturating_sub(1)) {
             Ok(citizen) => {
