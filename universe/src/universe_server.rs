@@ -114,6 +114,10 @@ impl UniverseServer {
             PacketType::CitizenChange => {
                 packet_handler::citizen_change(client, packet, &self.database)
             }
+            PacketType::LicenseAdd => packet_handler::license_add(client, packet, &self.database),
+            PacketType::LicenseByName => {
+                packet_handler::license_by_name(client, packet, &self.database)
+            }
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }

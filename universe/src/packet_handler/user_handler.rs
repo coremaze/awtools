@@ -8,8 +8,9 @@ use crate::{
     attributes::set_attribute,
     client::{Client, ClientManager, ClientType, Entity, PlayerInfo},
     database::citizen::CitizenQuery,
+    database::license::LicenseQuery,
     database::Database,
-    database::CitizenDB,
+    database::{CitizenDB, LicenseDB},
     license::LicenseGenerator,
 };
 use aw_core::*;
@@ -696,5 +697,242 @@ fn citizen_from_packet(packet: &AWPacket) -> Result<CitizenQuery, String> {
         enabled,
         privacy,
         trial,
+    })
+}
+
+pub fn license_add(client: &Client, packet: &AWPacket, database: &Database) {
+    let mut p = AWPacket::new(PacketType::LicenseChangeResult);
+
+    let player_info = match &client.info().entity {
+        Some(Entity::Player(info)) => info,
+        _ => return,
+    };
+
+    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
+        Some(x) => x,
+        None => return,
+    };
+
+    if !client.has_admin_permissions() {
+        log::trace!("Failed to add license due to lack of admin permissions");
+        p.add_var(AWPacketVar::Int(
+            VarID::ReasonCode,
+            ReasonCode::Unauthorized as i32,
+        ));
+        client.connection.send(p);
+        return;
+    }
+
+    if world_name.contains(' ') || world_name.is_empty() {
+        log::trace!("Failed to add license due to invalid name");
+        p.add_var(AWPacketVar::Int(
+            VarID::ReasonCode,
+            ReasonCode::NoSuchLicense as i32,
+        ));
+        client.connection.send(p);
+        return;
+    }
+
+    let lic = match license_from_packet(packet) {
+        Ok(x) => x,
+        Err(_) => return,
+    };
+
+    if database.license_by_name(&lic.name).is_ok() {
+        p.add_var(AWPacketVar::Int(
+            VarID::ReasonCode,
+            ReasonCode::WorldAlreadyExists as i32,
+        ));
+        client.connection.send(p);
+        return;
+    }
+
+    if let Err(e) = check_valid_world_name(&lic.name) {
+        p.add_var(AWPacketVar::Int(VarID::ReasonCode, e as i32));
+        client.connection.send(p);
+        return;
+    }
+
+    if database.license_add(&lic).is_err() {
+        p.add_var(AWPacketVar::Int(
+            VarID::ReasonCode,
+            ReasonCode::UnableToInsertName as i32,
+        ));
+        client.connection.send(p);
+        return;
+    }
+
+    p.add_var(AWPacketVar::Int(
+        VarID::ReasonCode,
+        ReasonCode::Success as i32,
+    ));
+    client.connection.send(p);
+}
+
+pub fn license_by_name(client: &Client, packet: &AWPacket, database: &Database) {
+    let mut p = AWPacket::new(PacketType::LicenseResult);
+
+    if !client.has_admin_permissions() {
+        p.add_var(AWPacketVar::Int(
+            VarID::ReasonCode,
+            ReasonCode::Unauthorized as i32,
+        ));
+        client.connection.send(p);
+        return;
+    }
+
+    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
+        Some(x) => x,
+        None => return,
+    };
+
+    let lic = match database.license_by_name(&world_name) {
+        Ok(lic) => lic,
+        Err(_) => {
+            p.add_var(AWPacketVar::Int(
+                VarID::ReasonCode,
+                ReasonCode::NoSuchLicense as i32,
+            ));
+            client.connection.send(p);
+            return;
+        }
+    };
+
+    let vars = license_to_vars(&lic, client.has_admin_permissions());
+
+    for v in vars {
+        p.add_var(v);
+    }
+
+    p.add_var(AWPacketVar::Int(
+        VarID::ReasonCode,
+        ReasonCode::Success as i32,
+    ));
+
+    client.connection.send(p);
+}
+
+fn license_to_vars(lic: &LicenseQuery, admin: bool) -> Vec<AWPacketVar> {
+    let mut result = Vec::<AWPacketVar>::new();
+
+    result.push(AWPacketVar::String(
+        VarID::WorldStartWorldName,
+        lic.name.clone(),
+    ));
+    result.push(AWPacketVar::Uint(VarID::WorldLicenseID, lic.id));
+    result.push(AWPacketVar::Uint(VarID::WorldLicenseUsers, lic.users));
+    result.push(AWPacketVar::Uint(VarID::WorldLicenseRange, lic.world_size));
+    if admin {
+        result.push(AWPacketVar::String(
+            VarID::WorldLicensePassword,
+            lic.password.clone(),
+        ));
+        result.push(AWPacketVar::String(
+            VarID::WorldLicenseEmail,
+            lic.email.clone(),
+        ));
+        result.push(AWPacketVar::String(
+            VarID::WorldLicenseComment,
+            lic.comment.clone(),
+        ));
+        result.push(AWPacketVar::Uint(VarID::WorldLicenseCreation, lic.creation));
+        result.push(AWPacketVar::Uint(
+            VarID::WorldLicenseExpiration,
+            lic.expiration,
+        ));
+        result.push(AWPacketVar::Uint(
+            VarID::WorldLicenseLastStart,
+            lic.last_start,
+        ));
+        result.push(AWPacketVar::Uint(
+            VarID::WorldLicenseLastAddress,
+            lic.last_address,
+        ));
+        result.push(AWPacketVar::Uint(VarID::WorldLicenseTourists, lic.tourists));
+        result.push(AWPacketVar::Uint(VarID::WorldLicenseHidden, lic.hidden));
+        result.push(AWPacketVar::Uint(VarID::WorldLicenseVoip, lic.voip));
+        result.push(AWPacketVar::Uint(VarID::WorldLicensePlugins, lic.plugins));
+    }
+
+    result
+}
+
+fn check_valid_world_name(name: &str) -> Result<(), ReasonCode> {
+    if name.len() < 2 {
+        return Err(ReasonCode::NameTooShort);
+    }
+
+    // Should be 16 in AW 5, but AW 4 has a limit of 8
+    if name.len() > 8 {
+        return Err(ReasonCode::NameTooLong);
+    }
+
+    if name.starts_with(' ') {
+        return Err(ReasonCode::NameContainsInvalidBlank);
+    }
+
+    if name.ends_with(' ') {
+        return Err(ReasonCode::NameEndsWithBlank);
+    }
+
+    if !name.chars().all(char::is_alphanumeric) {
+        return Err(ReasonCode::NameContainsNonalphanumericChar);
+    }
+
+    Ok(())
+}
+
+fn license_from_packet(packet: &AWPacket) -> Result<LicenseQuery, String> {
+    let name = packet
+        .get_string(VarID::WorldStartWorldName)
+        .ok_or_else(|| "No world name".to_string())?;
+    let password = packet
+        .get_string(VarID::WorldLicensePassword)
+        .ok_or_else(|| "No world password".to_string())?;
+    let email = packet
+        .get_string(VarID::WorldLicenseEmail)
+        .ok_or_else(|| "No license email".to_string())?;
+    let comment = packet
+        .get_string(VarID::WorldLicenseComment)
+        .ok_or_else(|| "No license comment".to_string())?;
+    let expiration = packet
+        .get_uint(VarID::WorldLicenseExpiration)
+        .ok_or_else(|| "No license expiration".to_string())?;
+    let hidden = packet
+        .get_uint(VarID::WorldLicenseHidden)
+        .ok_or_else(|| "No license hidden".to_string())?;
+    let tourists = packet
+        .get_uint(VarID::WorldLicenseTourists)
+        .ok_or_else(|| "No license tourists".to_string())?;
+    let users = packet
+        .get_uint(VarID::WorldLicenseUsers)
+        .ok_or_else(|| "No license users".to_string())?;
+    let world_size = packet
+        .get_uint(VarID::WorldLicenseRange)
+        .ok_or_else(|| "No license world size".to_string())?;
+    let voip = packet
+        .get_uint(VarID::WorldLicenseVoip)
+        .ok_or_else(|| "No license voip".to_string())?;
+    let plugins = packet
+        .get_uint(VarID::WorldLicensePlugins)
+        .ok_or_else(|| "No license plugins".to_string())?;
+
+    Ok(LicenseQuery {
+        id: 0,
+        name,
+        password,
+        email,
+        comment,
+        expiration,
+        last_start: 0,
+        last_address: 0,
+        users,
+        world_size,
+        hidden,
+        changed: 0,
+        tourists,
+        voip,
+        plugins,
+        creation: 0,
     })
 }
