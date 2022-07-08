@@ -126,6 +126,7 @@ impl UniverseServer {
             PacketType::WorldStart => {
                 packet_handler::world_start(client, packet, &self.database, &self.client_manager)
             }
+            PacketType::WorldStop => packet_handler::world_stop(client, packet, &self.client_manager),
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }

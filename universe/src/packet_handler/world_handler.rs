@@ -127,6 +127,44 @@ pub fn world_start(
     client.connection.send(p);
 }
 
+pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
+    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
+        Some(x) => x,
+        None => return,
+    };
+
+    let world_exists = client_manager.get_world_by_name(&world_name).is_some();
+
+    // Remove the world from the client
+    let mut entity = client.info_mut().entity.take();
+    let mut removed_worlds = false;
+    if let Some(Entity::WorldServer(server_info)) = &mut entity {
+        let initial_len = server_info.worlds.len();
+        server_info
+            .worlds
+            .retain(|x| !x.name.eq_ignore_ascii_case(&world_name));
+        if server_info.worlds.len() < initial_len {
+            removed_worlds = true;
+        }
+    }
+    client.info_mut().entity = entity;
+
+    // TOOD: Remove world from clients' world list
+    let mut p = AWPacket::new(PacketType::WorldStop);
+
+    let rc = match world_exists {
+        true => match removed_worlds {
+            true => ReasonCode::Success,
+            false => ReasonCode::NotWorldOwner,
+        },
+        false => ReasonCode::NoSuchWorld,
+    };
+
+    p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+
+    client.connection.send(p);
+}
+
 fn validate_world(
     world_build: i32,
     name: &str,
