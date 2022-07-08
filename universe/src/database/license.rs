@@ -35,6 +35,7 @@ pub trait LicenseDB {
     fn license_add(&self, lic: &LicenseQuery) -> Result<(), ReasonCode>;
     fn license_next(&self, name: &str) -> Result<LicenseQuery, ReasonCode>;
     fn license_prev(&self, name: &str) -> Result<LicenseQuery, ReasonCode>;
+    fn license_change(&self, lic: &LicenseQuery) -> Result<(), ReasonCode>;
 }
 
 impl LicenseDB for Database {
@@ -172,6 +173,38 @@ impl LicenseDB for Database {
         } else {
             Err(ReasonCode::DatabaseError)
         }
+    }
+
+    fn license_change(&self, lic: &LicenseQuery) -> Result<(), ReasonCode> {
+        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
+
+        conn.exec_drop(
+            r"UPDATE awu_license
+            SET Changed=NOT Changed, Creation=:creation, Expiration=:expiration, LastStart=:last_start, 
+            LastAddress=:last_address, Hidden=:hidden, Tourists=:tourists, Users=:users,
+            WorldSize=:world_size, Voip=:voip, Plugins=:plugins, Password=:password, 
+            Email=:email, Comment=:comment 
+            WHERE Name=:name;",
+            params! {
+                "creation" => lic.creation,
+                "expiration" => lic.expiration,
+                "last_start" => lic.last_start,
+                "last_address" => lic.last_address,
+                "hidden" => lic.hidden,
+                "tourists" => lic.tourists,
+                "users" => lic.users,
+                "world_size" => lic.world_size,
+                "voip" => lic.voip,
+                "plugins" => lic.plugins,
+                "name" => &lic.name,
+                "password" => &lic.password,
+                "email" => &lic.email,
+                "comment" => &lic.comment,
+            },
+        )
+        .map_err(|_| ReasonCode::DatabaseError)?;
+
+        Ok(())
     }
 }
 

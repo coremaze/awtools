@@ -120,6 +120,9 @@ impl UniverseServer {
             }
             PacketType::LicenseNext => packet_handler::license_next(client, packet, &self.database),
             PacketType::LicensePrev => packet_handler::license_prev(client, packet, &self.database),
+            PacketType::LicenseChange => {
+                packet_handler::license_change(client, packet, &self.database)
+            }
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }

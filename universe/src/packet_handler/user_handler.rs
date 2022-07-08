@@ -756,7 +756,12 @@ pub fn license_prev(client: &Client, packet: &AWPacket, database: &Database) {
     send_license_lookup(client, packet, database, WorldLicenseLookupMethod::Previous);
 }
 
-fn send_license_lookup(client: &Client, packet: &AWPacket, database: &Database, method: WorldLicenseLookupMethod) {
+fn send_license_lookup(
+    client: &Client,
+    packet: &AWPacket,
+    database: &Database,
+    method: WorldLicenseLookupMethod,
+) {
     let mut p = AWPacket::new(PacketType::LicenseResult);
 
     // Only admins should be able to query for world licenses
@@ -801,6 +806,89 @@ fn send_license_lookup(client: &Client, packet: &AWPacket, database: &Database, 
 
     p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
 
+    client.connection.send(p);
+}
+
+pub fn license_change(client: &Client, packet: &AWPacket, database: &Database) {
+    let mut p = AWPacket::new(PacketType::LicenseResult);
+
+    // Only admins should be able change world licenses
+    if !client.has_admin_permissions() {
+        p.add_var(AWPacketVar::Int(
+            VarID::ReasonCode,
+            ReasonCode::Unauthorized as i32,
+        ));
+        client.connection.send(p);
+        return;
+    }
+
+    // Altered license should be included
+    let changed_lic = match license_from_packet(packet) {
+        Ok(lic) => lic,
+        Err(_) => return,
+    };
+
+    // Validate world name
+    if let Err(rc) = check_valid_world_name(&changed_lic.name) {
+        p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+        client.connection.send(p);
+        return;
+    }
+
+    // Get the license to be changed
+    let original_lic = match database.license_by_name(&changed_lic.name) {
+        Ok(lic) => lic,
+        Err(_) => {
+            p.add_var(AWPacketVar::Int(
+                VarID::ReasonCode,
+                ReasonCode::NoSuchLicense as i32,
+            ));
+            client.connection.send(p);
+            return;
+        }
+    };
+
+    // Change license
+    let new_lic = LicenseQuery {
+        id: original_lic.id,
+        name: original_lic.name.clone(),
+        password: changed_lic.password.clone(),
+        email: changed_lic.email.clone(),
+        comment: changed_lic.comment.clone(),
+        creation: original_lic.creation,
+        expiration: changed_lic.expiration,
+        last_start: original_lic.last_start,
+        last_address: original_lic.last_address,
+        users: changed_lic.users,
+        world_size: changed_lic.world_size,
+        hidden: changed_lic.hidden,
+        changed: 0,
+        tourists: changed_lic.tourists,
+        voip: changed_lic.voip,
+        plugins: changed_lic.plugins,
+    };
+    if let Err(_) = database.license_change(&new_lic) {
+        p.add_var(AWPacketVar::Int(
+            VarID::ReasonCode,
+            ReasonCode::UnableToChangeLicense as i32,
+        ));
+        client.connection.send(p);
+        return;
+    }
+
+    if let Ok(lic) = database.license_by_name(&changed_lic.name) {
+        let vars = license_to_vars(&lic, client.has_admin_permissions());
+
+        for v in vars {
+            p.add_var(v);
+        }
+    }
+
+    // TODO: Kill existing world if it is now invalid/expired
+    p.add_var(AWPacketVar::Int(
+        VarID::ReasonCode,
+        ReasonCode::Success as i32,
+    ));
     client.connection.send(p);
 }
 
