@@ -383,7 +383,7 @@ pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManag
                         user_ent.effective_privilege(),
                     ));
 
-                    user_ent.world = Some(world.name.clone());
+                    user_ent.world = Some(world.name);
 
                     rc = ReasonCode::Success;
                 }
