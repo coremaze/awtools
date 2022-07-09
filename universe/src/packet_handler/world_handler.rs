@@ -70,6 +70,11 @@ pub fn world_start(
 
     let mut p = AWPacket::new(PacketType::WorldStart);
 
+    p.add_var(AWPacketVar::String(
+        VarID::WorldStartWorldName,
+        world_name.clone(),
+    ));
+
     let lic = match validate_world(world_build, &world_name, &world_password, database) {
         Ok(x) => x,
         Err(rc) => {
@@ -111,11 +116,6 @@ pub fn world_start(
         server_info.worlds.push(new_world);
     }
     client.info_mut().entity = entity;
-
-    p.add_var(AWPacketVar::String(
-        VarID::WorldStartWorldName,
-        world_name.clone(),
-    ));
 
     p.add_var(AWPacketVar::Uint(
         VarID::WorldLicenseExpiration,
