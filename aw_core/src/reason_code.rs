@@ -102,8 +102,8 @@ pub enum ReasonCode {
     PrivilegePasswordIsTooShort = 128,
     PrivilegePasswordIsTooLong = 129,
     UnableToChangeLicense = 132, // Not publicly documented
-    BotgramNotYet = 137, // Not publicly documented
-    NoPort = 139,        // Not publicly documented
+    BotgramNotYet = 137,         // Not publicly documented
+    NoPort = 139,                // Not publicly documented
     NotChangeOwner = 203,
     CantFindOldElement = 204,
     UnableToChangeAttribute = 210,

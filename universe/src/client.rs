@@ -1,6 +1,6 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
-    net::{SocketAddr, IpAddr},
+    net::{IpAddr, SocketAddr},
     time::{SystemTime, UNIX_EPOCH},
 };
 

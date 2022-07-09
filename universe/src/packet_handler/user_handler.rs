@@ -1080,7 +1080,10 @@ pub fn world_lookup(client: &Client, packet: &AWPacket, client_manager: &ClientM
 
     let mut p = AWPacket::new(PacketType::WorldLookup);
 
-    p.add_var(AWPacketVar::String(VarID::WorldStartWorldName, world_name.clone()));
+    p.add_var(AWPacketVar::String(
+        VarID::WorldStartWorldName,
+        world_name.clone(),
+    ));
 
     match client_manager.get_world_by_name(&world_name) {
         Some(world) => {
@@ -1093,16 +1096,24 @@ pub fn world_lookup(client: &Client, packet: &AWPacket, client_manager: &ClientM
                 p.add_var(AWPacketVar::Uint(VarID::WorldAddress, ip_to_num(world.ip)));
                 p.add_var(AWPacketVar::Uint(VarID::WorldPort, world.port as u32));
                 p.add_var(AWPacketVar::Uint(VarID::WorldLicenseUsers, world.max_users));
-                p.add_var(AWPacketVar::Uint(VarID::WorldLicenseRange, world.world_size));
+                p.add_var(AWPacketVar::Uint(
+                    VarID::WorldLicenseRange,
+                    world.world_size,
+                ));
                 p.add_var(AWPacketVar::Data(VarID::WorldUserNonce, nonce.to_vec()));
 
-                p.add_var(AWPacketVar::Int(VarID::ReasonCode, ReasonCode::Success as i32));
+                p.add_var(AWPacketVar::Int(
+                    VarID::ReasonCode,
+                    ReasonCode::Success as i32,
+                ));
             }
-        },
+        }
         None => {
-            p.add_var(AWPacketVar::Int(VarID::ReasonCode, ReasonCode::NoSuchWorld as i32));
-
-        },
+            p.add_var(AWPacketVar::Int(
+                VarID::ReasonCode,
+                ReasonCode::NoSuchWorld as i32,
+            ));
+        }
     }
 
     client.connection.send(p);
