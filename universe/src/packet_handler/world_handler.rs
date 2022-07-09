@@ -141,9 +141,13 @@ pub fn world_server_hide_all(server: &mut WorldServerInfo) {
     }
 }
 
-pub fn world_server_update_all(server: &WorldServerInfo, client_manager: &ClientManager) {
-    let world_packets = server
-        .worlds
+pub fn send_world_updates(worlds: &[World], client_manager: &ClientManager) {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Current time is before the unix epoch.")
+        .as_secs();
+
+    let world_packets = worlds
         .iter()
         .map(|x| x.make_list_packet())
         .collect::<Vec<AWPacket>>();
@@ -160,7 +164,7 @@ pub fn world_server_update_all(server: &WorldServerInfo, client_manager: &Client
             let mut more = AWPacket::new(PacketType::WorldListResult);
             // Yes, expect another WorldList packet from the server
             more.add_var(AWPacketVar::Byte(VarID::WorldListMore, 1));
-            more.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, -1));
+            more.add_var(AWPacketVar::Uint(VarID::WorldList3DayUnknown, now as u32));
             group.push(more).ok();
             group.push(p).ok();
         }
@@ -169,7 +173,7 @@ pub fn world_server_update_all(server: &WorldServerInfo, client_manager: &Client
     // Send packet indicating that the server is done
     let mut p = AWPacket::new(PacketType::WorldListResult);
     p.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
-    p.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, 0));
+    p.add_var(AWPacketVar::Uint(VarID::WorldList3DayUnknown, now as u32));
 
     if let Err(p) = group.push(p) {
         groups.push(group);
@@ -187,6 +191,10 @@ pub fn world_server_update_all(server: &WorldServerInfo, client_manager: &Client
             }
         }
     }
+}
+
+pub fn world_server_update_all(server: &WorldServerInfo, client_manager: &ClientManager) {
+    send_world_updates(&server.worlds, client_manager);
 }
 
 pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
@@ -236,16 +244,8 @@ pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientMan
 }
 
 fn send_single_world_update(world: &World, client_manager: &ClientManager) {
-    let world_packet = world.make_list_packet();
-    for playerclient in client_manager.clients() {
-        if let Some(Entity::Player(_)) = playerclient.info().entity {
-            playerclient.connection.send(world_packet.clone());
-            let mut p = AWPacket::new(PacketType::WorldListResult);
-            p.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
-            p.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, 0));
-            playerclient.connection.send(p);
-        }
-    }
+    let worlds = [world.clone()];
+    send_world_updates(&worlds, client_manager);
 }
 
 fn validate_world(
