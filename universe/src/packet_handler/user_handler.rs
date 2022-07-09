@@ -6,12 +6,14 @@ use std::{
 use crate::{
     attributes,
     attributes::set_attribute,
-    client::{Client, ClientManager, ClientType, Entity, PlayerInfo, World},
+    client::{Client, ClientManager, ClientType, Entity},
     database::citizen::CitizenQuery,
     database::license::LicenseQuery,
     database::Database,
     database::{CitizenDB, LicenseDB},
     license::LicenseGenerator,
+    player::PlayerInfo,
+    world::World,
 };
 use aw_core::*;
 use num_traits::FromPrimitive;
@@ -253,7 +255,7 @@ pub fn user_list(client: &Client, packet: &AWPacket, client_manager: &ClientMana
                 ));
             }
             p.add_var(AWPacketVar::Byte(VarID::UserListState, 1)); // TODO: this means online
-            
+
             if let Some(world_name) = &info.world {
                 p.add_var(AWPacketVar::String(
                     VarID::UserListWorldName,

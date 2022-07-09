@@ -1,13 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
-    client::{
-        Client, ClientManager, ClientType, Entity, World, WorldRating, WorldServerInfo,
-        WorldStatus,
-    },
+    client::{Client, ClientManager, ClientType, Entity},
     database::{attrib::Attribute, license::LicenseQuery, AttribDB, Database, LicenseDB},
+    world::{World, WorldRating, WorldServerInfo, WorldStatus},
 };
-use aw_core::{AWPacket, AWPacketGroup, AWPacketVar, PacketType, ReasonCode, VarID};
+use aw_core::{AWPacket, AWPacketVar, PacketType, ReasonCode, VarID};
 use num_traits::FromPrimitive;
 
 pub fn world_server_start(client: &Client, packet: &AWPacket) {
@@ -132,69 +130,13 @@ pub fn world_start(
     client.connection.send(p);
 
     // Send update about new world to all players
-    send_single_world_update(&new_world, client_manager);
+    World::send_update_to_all(&new_world, client_manager);
 }
 
 pub fn world_server_hide_all(server: &mut WorldServerInfo) {
     for world in &mut server.worlds {
         world.status = WorldStatus::Hidden;
     }
-}
-
-pub fn send_world_updates(worlds: &[World], client_manager: &ClientManager) {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Current time is before the unix epoch.")
-        .as_secs();
-
-    let world_packets = worlds
-        .iter()
-        .map(|x| x.make_list_packet())
-        .collect::<Vec<AWPacket>>();
-
-    // Group packets into larger transmissions for efficiency
-    let mut groups: Vec<AWPacketGroup> = Vec::new();
-    let mut group = AWPacketGroup::new();
-
-    for world_packet in world_packets {
-        if let Err(p) = group.push(world_packet) {
-            groups.push(group);
-            group = AWPacketGroup::new();
-
-            let mut more = AWPacket::new(PacketType::WorldListResult);
-            // Yes, expect another WorldList packet from the server
-            more.add_var(AWPacketVar::Byte(VarID::WorldListMore, 1));
-            more.add_var(AWPacketVar::Uint(VarID::WorldList3DayUnknown, now as u32));
-            group.push(more).ok();
-            group.push(p).ok();
-        }
-    }
-
-    // Send packet indicating that the server is done
-    let mut p = AWPacket::new(PacketType::WorldListResult);
-    p.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
-    p.add_var(AWPacketVar::Uint(VarID::WorldList3DayUnknown, now as u32));
-
-    if let Err(p) = group.push(p) {
-        groups.push(group);
-        group = AWPacketGroup::new();
-        group.push(p).ok();
-    }
-
-    groups.push(group);
-
-    // Send update to all players
-    for client in client_manager.clients() {
-        if let Some(Entity::Player(_)) = client.info().entity {
-            for group in &groups {
-                client.connection.send_group(group.clone());
-            }
-        }
-    }
-}
-
-pub fn world_server_update_all(server: &WorldServerInfo, client_manager: &ClientManager) {
-    send_world_updates(&server.worlds, client_manager);
 }
 
 pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
@@ -233,7 +175,7 @@ pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientMan
     // Remove world from clients' world list
     if let Some(mut removed_world) = removed_world {
         removed_world.status = WorldStatus::Hidden;
-        send_single_world_update(&removed_world, client_manager);
+        World::send_update_to_all(&removed_world, client_manager);
     }
 
     let mut p = AWPacket::new(PacketType::WorldStop);
@@ -241,11 +183,6 @@ pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientMan
     p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
 
     client.connection.send(p);
-}
-
-fn send_single_world_update(world: &World, client_manager: &ClientManager) {
-    let worlds = [world.clone()];
-    send_world_updates(&worlds, client_manager);
 }
 
 fn validate_world(
@@ -348,10 +285,12 @@ pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManag
         Some(Entity::WorldServer(w)) => match w.get_world(&world_name) {
             Some(w) => w.clone(),
             None => {
-                log::info!("Failed to identify player because the world server does not own the world");
+                log::info!(
+                    "Failed to identify player because the world server does not own the world"
+                );
                 return;
-            },
-        }
+            }
+        },
         _ => return,
     };
 
@@ -362,10 +301,7 @@ pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManag
             if let Some(user_nonce) = user_ent.nonce {
                 if user_nonce.to_vec() == nonce {
                     // Not currently checking IP address or port
-                    p.add_var(AWPacketVar::String(
-                        VarID::WorldStartWorldName,
-                        world_name,
-                    ));
+                    p.add_var(AWPacketVar::String(VarID::WorldStartWorldName, world_name));
                     p.add_var(AWPacketVar::Int(VarID::SessionID, session_id));
                     p.add_var(AWPacketVar::Uint(VarID::IdentifyUserIP, player_ip));
                     p.add_var(AWPacketVar::Int(VarID::PlayerPort, player_port));
@@ -433,5 +369,5 @@ pub fn world_stats_update(client: &Client, packet: &AWPacket, client_manager: &C
         return;
     };
 
-    send_single_world_update(&world, client_manager);
+    World::send_update_to_all(&world, client_manager);
 }

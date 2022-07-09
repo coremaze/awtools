@@ -1,6 +1,6 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
-    net::{IpAddr, SocketAddr},
+    net::SocketAddr,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -9,9 +9,12 @@ use crate::{
         citizen::{CitizenDB, CitizenQuery},
         Database,
     },
-    packet_handler, AWConnection, AWCryptRSA,
+    packet_handler,
+    player::PlayerInfo,
+    world::{World, WorldServerInfo},
+    AWConnection, AWCryptRSA,
 };
-use aw_core::{AWPacket, AWPacketVar, PacketType, ReasonCode, VarID};
+use aw_core::{AWPacket, PacketType, ReasonCode};
 use num_derive::FromPrimitive;
 
 /// Game-related client state
@@ -19,113 +22,6 @@ use num_derive::FromPrimitive;
 pub struct UserInfo {
     pub client_type: Option<ClientType>,
     pub entity: Option<Entity>,
-}
-
-#[derive(Debug)]
-pub struct PlayerInfo {
-    pub build: i32,
-    pub session_id: u16,
-    pub citizen_id: Option<u32>,
-    pub privilege_id: Option<u32>,
-    pub username: String,
-    pub nonce: Option<[u8; 255]>, // AW4 worlds allow 256 bytes, AW5 worlds allow 255 bytes
-    pub world: Option<String>,
-}
-
-impl PlayerInfo {
-    pub fn effective_privilege(&self) -> u32 {
-        match self.privilege_id {
-            Some(id) => match id {
-                0 => self.citizen_id.unwrap_or(0),
-                _ => id,
-            },
-            None => self.citizen_id.unwrap_or(0),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum WorldStatus {
-    Permitted = 1,
-    NotPermitted = 2,
-    Hidden = 3,
-}
-
-impl WorldStatus {
-    pub fn from_free_entry(free_entry: u8) -> Self {
-        if free_entry != 0 {
-            WorldStatus::Permitted
-        } else {
-            WorldStatus::NotPermitted
-        }
-    }
-}
-
-#[derive(FromPrimitive, Debug, Copy, Clone)]
-pub enum WorldRating {
-    G = 0,
-    PG = 1,
-    PG13 = 2,
-    R = 3,
-    X = 4,
-}
-
-impl Default for WorldRating {
-    fn default() -> Self {
-        WorldRating::G
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct World {
-    pub name: String,
-    pub status: WorldStatus,
-    pub rating: WorldRating,
-    pub ip: IpAddr,
-    pub port: u16,
-    pub max_users: u32,
-    pub world_size: u32,
-    pub user_count: u32,
-}
-
-impl World {
-    pub fn make_list_packet(&self) -> AWPacket {
-        let mut p = AWPacket::new(PacketType::WorldList);
-
-        p.add_var(AWPacketVar::String(VarID::WorldListName, self.name.clone()));
-        p.add_var(AWPacketVar::Byte(VarID::WorldListStatus, self.status as u8));
-        p.add_var(AWPacketVar::Uint(VarID::WorldListUsers, self.user_count));
-        p.add_var(AWPacketVar::Byte(VarID::WorldListRating, self.rating as u8));
-
-        p
-    }
-}
-
-#[derive(Debug)]
-pub struct WorldServerInfo {
-    pub build: i32,
-    pub server_port: u16,
-    pub worlds: Vec<World>,
-}
-
-impl WorldServerInfo {
-    pub fn get_world(&self, name: &str) -> Option<&World> {
-        for w in &self.worlds {
-            if w.name.eq_ignore_ascii_case(name) {
-                return Some(w);
-            }
-        }
-        None
-    }
-
-    pub fn get_world_mut(&mut self, name: &str) -> Option<&mut World> {
-        for w in &mut self.worlds {
-            if w.name.eq_ignore_ascii_case(name) {
-                return Some(w);
-            }
-        }
-        None
-    }
 }
 
 #[derive(Debug)]
@@ -247,7 +143,7 @@ impl ClientManager {
                 packet_handler::world_server_hide_all(server_info);
             }
             if let Some(Entity::WorldServer(server_info)) = &client.info().entity {
-                packet_handler::world_server_update_all(server_info, self);
+                World::send_updates_to_all(&server_info.worlds, self);
             }
         }
         self.clients = self.clients.drain(..).filter(|x| !x.is_dead()).collect();

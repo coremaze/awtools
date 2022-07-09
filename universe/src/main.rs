@@ -10,6 +10,8 @@ pub use attributes::send_attributes;
 pub mod config;
 mod database;
 pub mod packet_handler;
+pub mod player;
+pub mod world;
 
 use env_logger::Builder;
 pub use log::{debug, error, info, trace, warn};
