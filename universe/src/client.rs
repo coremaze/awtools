@@ -31,6 +31,18 @@ pub struct PlayerInfo {
     pub nonce: Option<[u8; 256]>,
 }
 
+impl PlayerInfo {
+    pub fn effective_privilege(&self) -> u32 {
+        match self.privilege_id {
+            Some(id) => match id {
+                0 => self.citizen_id.unwrap_or(0),
+                _ => id,
+            },
+            None => self.citizen_id.unwrap_or(0),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum WorldStatus {
     Permitted = 1,

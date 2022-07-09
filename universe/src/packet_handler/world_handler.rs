@@ -304,3 +304,85 @@ fn validate_world(
 
     Ok(world_lic)
 }
+
+pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
+    let mut p = AWPacket::new(PacketType::Identify);
+
+    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
+        Some(x) => x,
+        None => {
+            log::info!("Failed to identify player because no world name was provided");
+            return;
+        },
+    };
+
+    let nonce = match packet.get_data(VarID::WorldUserNonce) {
+        Some(x) => x,
+        None => {
+            log::info!("Failed to identify player because no user nonce was provided");
+            return;
+        },
+    };
+
+    let session_id = match packet.get_int(VarID::SessionID) {
+        Some(x) => x,
+        None => {
+            log::info!("Failed to identify player because no session id was provided");
+            return;
+        },
+    };
+
+    let player_ip = match packet.get_uint(VarID::IdentifyUserIP) {
+        Some(x) => x,
+        None => {
+            log::info!("Failed to identify player because no user ip was provided");
+            return;
+        },
+    };
+
+    let player_port = match packet.get_int(VarID::PlayerPort) {
+        Some(x) => x,
+        None => {
+            log::info!("Failed to identify player because no port was provided");
+            return;
+        },
+    };
+
+    let owns_the_world = match &client.info().entity {
+        Some(Entity::WorldServer(x)) => {
+            x.worlds.iter()
+                .fold(false, |v, w| w.name.eq_ignore_ascii_case(&world_name) || v)
+        },
+        _ => false,
+    };
+
+    if !owns_the_world {
+        log::info!("Failed to identify player because the world server does not own the world");
+        return;
+    }
+
+    let mut rc = ReasonCode::NoSuchSession;
+
+    if let Some(user_client) = client_manager.get_client_by_session_id(session_id as u16) {
+        if let Some(Entity::Player(user_ent)) = &user_client.info().entity {
+            if let Some(user_nonce) = user_ent.nonce {
+                if user_nonce.to_vec() == nonce {
+                    // Not currently checking IP address or port
+                    p.add_var(AWPacketVar::String(VarID::WorldStartWorldName, world_name.clone()));
+                    p.add_var(AWPacketVar::Int(VarID::SessionID, session_id));
+                    p.add_var(AWPacketVar::Uint(VarID::IdentifyUserIP, player_ip));
+                    p.add_var(AWPacketVar::Int(VarID::PlayerPort, player_port));
+                    p.add_var(AWPacketVar::Uint(VarID::LoginID, user_ent.citizen_id.unwrap_or(0)));
+                    p.add_var(AWPacketVar::Int(VarID::BrowserBuild, user_ent.build));
+                    p.add_var(AWPacketVar::String(VarID::LoginUsername, user_ent.username.clone()));
+                    p.add_var(AWPacketVar::Uint(VarID::PrivilegeUserID, user_ent.effective_privilege()));
+                    rc = ReasonCode::Success;
+                }
+            }
+        }
+    }
+
+    p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    
+    client.connection.send(p);
+}
