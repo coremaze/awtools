@@ -2,7 +2,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     client::{
-        self, Client, ClientManager, ClientType, Entity, World, WorldServerInfo, WorldStatus, WorldRating,
+        self, Client, ClientManager, ClientType, Entity, World, WorldRating, WorldServerInfo,
+        WorldStatus,
     },
     database::{attrib::Attribute, license::LicenseQuery, AttribDB, Database, LicenseDB},
 };
@@ -105,7 +106,7 @@ pub fn world_start(
         port: world_port,
         max_users: lic.users,
         world_size: lic.world_size,
-        user_count: 0
+        user_count: 0,
     };
 
     let mut entity = client.info_mut().entity.take();
@@ -235,12 +236,10 @@ pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientMan
 }
 
 fn send_single_world_update(world: &World, client_manager: &ClientManager) {
-    let world_packet = world.make_list_packet(); 
+    let world_packet = world.make_list_packet();
     for playerclient in client_manager.clients() {
         if let Some(Entity::Player(_)) = playerclient.info().entity {
-            playerclient
-                .connection
-                .send(world_packet.clone());
+            playerclient.connection.send(world_packet.clone());
             let mut p = AWPacket::new(PacketType::WorldListResult);
             p.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
             p.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, 0));
@@ -399,22 +398,22 @@ pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManag
 pub fn world_stats_update(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
     let world_rating = match packet.get_byte(VarID::WorldRating) {
         Some(x) => x,
-        None => return
+        None => return,
     };
 
     let world_free_entry = match packet.get_byte(VarID::WorldFreeEntry) {
         Some(x) => x,
-        None => return
+        None => return,
     };
 
     let user_count = match packet.get_uint(VarID::WorldUsers) {
         Some(x) => x,
-        None => return
+        None => return,
     };
 
     let world_name = match packet.get_string(VarID::WorldStartWorldName) {
         Some(x) => x,
-        None => return
+        None => return,
     };
 
     let world = if let Some(Entity::WorldServer(w)) = &mut client.info_mut().entity {
@@ -425,7 +424,7 @@ pub fn world_stats_update(client: &Client, packet: &AWPacket, client_manager: &C
                 world.user_count = user_count;
 
                 world.clone()
-            },
+            }
             // Return if the client doesn't own the given world
             None => return,
         }

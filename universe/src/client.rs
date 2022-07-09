@@ -116,7 +116,7 @@ impl WorldServerInfo {
         }
         None
     }
-    
+
     pub fn get_world_mut(&mut self, name: &str) -> Option<&mut World> {
         for w in &mut self.worlds {
             if w.name.eq_ignore_ascii_case(name) {

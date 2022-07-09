@@ -136,7 +136,9 @@ impl UniverseServer {
                 packet_handler::world_lookup(client, packet, &self.client_manager)
             }
             PacketType::Identify => packet_handler::identify(client, packet, &self.client_manager),
-            PacketType::WorldStatsUpdate => packet_handler::world_stats_update(client, packet, &self.client_manager),
+            PacketType::WorldStatsUpdate => {
+                packet_handler::world_stats_update(client, packet, &self.client_manager)
+            }
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }
