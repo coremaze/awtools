@@ -74,6 +74,7 @@ pub fn login(
                         privilege_id: credentials.privilege_id,
                         username: citizen.name,
                         nonce: None,
+                        world: None,
                     });
 
                     client.info_mut().entity = Some(client_entity);
@@ -98,6 +99,7 @@ pub fn login(
                         privilege_id: None,
                         username: credentials.username.unwrap_or_default(),
                         nonce: None,
+                        world: None,
                     });
 
                     client.info_mut().entity = Some(client_entity);
@@ -251,10 +253,13 @@ pub fn user_list(client: &Client, packet: &AWPacket, client_manager: &ClientMana
                 ));
             }
             p.add_var(AWPacketVar::Byte(VarID::UserListState, 1)); // TODO: this means online
-            p.add_var(AWPacketVar::String(
-                VarID::UserListWorldName,
-                "NO WORLD".to_string(),
-            )); // TODO: No worlds yet
+            
+            if let Some(world_name) = &info.world {
+                p.add_var(AWPacketVar::String(
+                    VarID::UserListWorldName,
+                    world_name.clone(),
+                ));
+            }
 
             if let Err(p) = group.push(p) {
                 // If the current group is full, send it and start a new one
@@ -1089,8 +1094,12 @@ pub fn world_lookup(client: &Client, packet: &AWPacket, client_manager: &ClientM
         Some(world) => {
             let mut client_info = client.info_mut();
             if let Some(Entity::Player(info)) = &mut client_info.entity {
-                let mut nonce = [0u8; 256];
-                rand::thread_rng().fill(&mut nonce);
+                // Build nonce
+                let mut rand_bytes = [0u8; 256];
+                rand::thread_rng().fill(&mut rand_bytes);
+
+                let mut nonce = [0u8; 255];
+                nonce.copy_from_slice(&rand_bytes[0..255]);
                 info.nonce = Some(nonce);
 
                 p.add_var(AWPacketVar::Uint(VarID::WorldAddress, ip_to_num(world.ip)));

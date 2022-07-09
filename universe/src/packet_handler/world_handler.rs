@@ -344,23 +344,21 @@ pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManag
         }
     };
 
-    let owns_the_world = match &client.info().entity {
-        Some(Entity::WorldServer(x)) => x
-            .worlds
-            .iter()
-            .fold(false, |v, w| w.name.eq_ignore_ascii_case(&world_name) || v),
-        _ => false,
+    let world = match &client.info().entity {
+        Some(Entity::WorldServer(w)) => match w.get_world(&world_name) {
+            Some(w) => w.clone(),
+            None => {
+                log::info!("Failed to identify player because the world server does not own the world");
+                return;
+            },
+        }
+        _ => return,
     };
-
-    if !owns_the_world {
-        log::info!("Failed to identify player because the world server does not own the world");
-        return;
-    }
 
     let mut rc = ReasonCode::NoSuchSession;
 
     if let Some(user_client) = client_manager.get_client_by_session_id(session_id as u16) {
-        if let Some(Entity::Player(user_ent)) = &user_client.info().entity {
+        if let Some(Entity::Player(user_ent)) = &mut user_client.info_mut().entity {
             if let Some(user_nonce) = user_ent.nonce {
                 if user_nonce.to_vec() == nonce {
                     // Not currently checking IP address or port
@@ -384,6 +382,9 @@ pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManag
                         VarID::PrivilegeUserID,
                         user_ent.effective_privilege(),
                     ));
+
+                    user_ent.world = Some(world.name.clone());
+
                     rc = ReasonCode::Success;
                 }
             }
