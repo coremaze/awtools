@@ -50,15 +50,41 @@ pub enum WorldStatus {
     Hidden = 3,
 }
 
+impl WorldStatus {
+    pub fn from_free_entry(free_entry: u8) -> Self {
+        if free_entry != 0 {
+            WorldStatus::Permitted
+        } else {
+            WorldStatus::NotPermitted
+        }
+    }
+}
+
+#[derive(FromPrimitive, Debug, Copy, Clone)]
+pub enum WorldRating {
+    G = 0,
+    PG = 1,
+    PG13 = 2,
+    R = 3,
+    X = 4,
+}
+
+impl Default for WorldRating {
+    fn default() -> Self {
+        WorldRating::G
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct World {
     pub name: String,
     pub status: WorldStatus,
-    pub rating: u8, // Convert to enum later
+    pub rating: WorldRating,
     pub ip: IpAddr,
     pub port: u16,
     pub max_users: u32,
     pub world_size: u32,
+    pub user_count: u32,
 }
 
 impl World {
@@ -66,12 +92,8 @@ impl World {
         let mut p = AWPacket::new(PacketType::WorldList);
 
         p.add_var(AWPacketVar::String(VarID::WorldListName, self.name.clone()));
-
         p.add_var(AWPacketVar::Byte(VarID::WorldListStatus, self.status as u8));
-
-        // TODO: Count users
-        p.add_var(AWPacketVar::Int(VarID::WorldListUsers, 1234));
-
+        p.add_var(AWPacketVar::Uint(VarID::WorldListUsers, self.user_count));
         p.add_var(AWPacketVar::Byte(VarID::WorldListRating, self.rating as u8));
 
         p
@@ -83,6 +105,26 @@ pub struct WorldServerInfo {
     pub build: i32,
     pub server_port: u16,
     pub worlds: Vec<World>,
+}
+
+impl WorldServerInfo {
+    pub fn get_world(&self, name: &str) -> Option<&World> {
+        for w in &self.worlds {
+            if w.name.eq_ignore_ascii_case(name) {
+                return Some(w);
+            }
+        }
+        None
+    }
+    
+    pub fn get_world_mut(&mut self, name: &str) -> Option<&mut World> {
+        for w in &mut self.worlds {
+            if w.name.eq_ignore_ascii_case(name) {
+                return Some(w);
+            }
+        }
+        None
+    }
 }
 
 #[derive(Debug)]

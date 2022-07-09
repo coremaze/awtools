@@ -2,11 +2,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     client::{
-        self, Client, ClientManager, ClientType, Entity, World, WorldServerInfo, WorldStatus,
+        self, Client, ClientManager, ClientType, Entity, World, WorldServerInfo, WorldStatus, WorldRating,
     },
     database::{attrib::Attribute, license::LicenseQuery, AttribDB, Database, LicenseDB},
 };
 use aw_core::{AWPacket, AWPacketGroup, AWPacketVar, PacketType, ReasonCode, VarID};
+use num_traits::FromPrimitive;
 
 pub fn world_server_start(client: &Client, packet: &AWPacket) {
     if let Some(client_type) = client.info().client_type {
@@ -98,22 +99,18 @@ pub fn world_start(
     // Add a new world to the client's list of worlds
     let new_world = World {
         name: lic.name.clone(),
-        status: if world_free_entry != 0 {
-            WorldStatus::Permitted
-        } else {
-            WorldStatus::NotPermitted
-        },
-        rating: world_rating,
+        status: WorldStatus::from_free_entry(world_free_entry),
+        rating: WorldRating::from_u8(world_rating).unwrap_or_default(),
         ip: client.addr.ip().clone(),
         port: world_port,
         max_users: lic.users,
         world_size: lic.world_size,
+        user_count: 0
     };
-    let new_world_list_packet = new_world.make_list_packet();
 
     let mut entity = client.info_mut().entity.take();
     if let Some(Entity::WorldServer(server_info)) = &mut entity {
-        server_info.worlds.push(new_world);
+        server_info.worlds.push(new_world.clone());
     }
     client.info_mut().entity = entity;
 
@@ -134,14 +131,7 @@ pub fn world_start(
     client.connection.send(p);
 
     // Send update about new world to all players
-    for player_client in client_manager.clients() {
-        if let Some(Entity::Player(_)) = &player_client.info().entity {
-            player_client.connection.send(new_world_list_packet.clone());
-            let mut player_packet = AWPacket::new(PacketType::WorldListResult);
-            player_packet.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
-            player_client.connection.send(player_packet);
-        }
-    }
+    send_single_world_update(&new_world, client_manager);
 }
 
 pub fn world_server_hide_all(server: &mut WorldServerInfo) {
@@ -234,17 +224,7 @@ pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientMan
     // Remove world from clients' world list
     if let Some(mut removed_world) = removed_world {
         removed_world.status = WorldStatus::Hidden;
-        for playerclient in client_manager.clients() {
-            if let Some(Entity::Player(_)) = playerclient.info().entity {
-                playerclient
-                    .connection
-                    .send(removed_world.make_list_packet());
-                let mut p = AWPacket::new(PacketType::WorldListResult);
-                p.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
-                p.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, 0));
-                playerclient.connection.send(p);
-            }
-        }
+        send_single_world_update(&removed_world, client_manager);
     }
 
     let mut p = AWPacket::new(PacketType::WorldStop);
@@ -252,6 +232,21 @@ pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientMan
     p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
 
     client.connection.send(p);
+}
+
+fn send_single_world_update(world: &World, client_manager: &ClientManager) {
+    let world_packet = world.make_list_packet(); 
+    for playerclient in client_manager.clients() {
+        if let Some(Entity::Player(_)) = playerclient.info().entity {
+            playerclient
+                .connection
+                .send(world_packet.clone());
+            let mut p = AWPacket::new(PacketType::WorldListResult);
+            p.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
+            p.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, 0));
+            playerclient.connection.send(p);
+        }
+    }
 }
 
 fn validate_world(
@@ -399,4 +394,44 @@ pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManag
     p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
 
     client.connection.send(p);
+}
+
+pub fn world_stats_update(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
+    let world_rating = match packet.get_byte(VarID::WorldRating) {
+        Some(x) => x,
+        None => return
+    };
+
+    let world_free_entry = match packet.get_byte(VarID::WorldFreeEntry) {
+        Some(x) => x,
+        None => return
+    };
+
+    let user_count = match packet.get_uint(VarID::WorldUsers) {
+        Some(x) => x,
+        None => return
+    };
+
+    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
+        Some(x) => x,
+        None => return
+    };
+
+    let world = if let Some(Entity::WorldServer(w)) = &mut client.info_mut().entity {
+        match w.get_world_mut(&world_name) {
+            Some(world) => {
+                world.rating = WorldRating::from_u8(world_rating).unwrap_or_default();
+                world.status = WorldStatus::from_free_entry(world_free_entry);
+                world.user_count = user_count;
+
+                world.clone()
+            },
+            // Return if the client doesn't own the given world
+            None => return,
+        }
+    } else {
+        return;
+    };
+
+    send_single_world_update(&world, client_manager);
 }
