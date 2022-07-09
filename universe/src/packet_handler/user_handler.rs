@@ -870,7 +870,7 @@ pub fn license_change(client: &Client, packet: &AWPacket, database: &Database) {
         voip: changed_lic.voip,
         plugins: changed_lic.plugins,
     };
-    if let Err(_) = database.license_change(&new_lic) {
+    if database.license_change(&new_lic).is_err() {
         p.add_var(AWPacketVar::Int(
             VarID::ReasonCode,
             ReasonCode::UnableToChangeLicense as i32,
@@ -1091,7 +1091,7 @@ pub fn world_lookup(client: &Client, packet: &AWPacket, client_manager: &ClientM
             if let Some(Entity::Player(info)) = &mut client_info.entity {
                 let mut nonce = [0u8; 256];
                 rand::thread_rng().fill(&mut nonce);
-                info.nonce = Some(nonce.clone());
+                info.nonce = Some(nonce);
 
                 p.add_var(AWPacketVar::Uint(VarID::WorldAddress, ip_to_num(world.ip)));
                 p.add_var(AWPacketVar::Uint(VarID::WorldPort, world.port as u32));

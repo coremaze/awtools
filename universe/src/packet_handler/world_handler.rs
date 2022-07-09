@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     client::{
-        self, Client, ClientManager, ClientType, Entity, World, WorldRating, WorldServerInfo,
+        Client, ClientManager, ClientType, Entity, World, WorldRating, WorldServerInfo,
         WorldStatus,
     },
     database::{attrib::Attribute, license::LicenseQuery, AttribDB, Database, LicenseDB},
@@ -102,7 +102,7 @@ pub fn world_start(
         name: lic.name.clone(),
         status: WorldStatus::from_free_entry(world_free_entry),
         rating: WorldRating::from_u8(world_rating).unwrap_or_default(),
-        ip: client.addr.ip().clone(),
+        ip: client.addr.ip(),
         port: world_port,
         max_users: lic.users,
         world_size: lic.world_size,
@@ -366,7 +366,7 @@ pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManag
                     // Not currently checking IP address or port
                     p.add_var(AWPacketVar::String(
                         VarID::WorldStartWorldName,
-                        world_name.clone(),
+                        world_name,
                     ));
                     p.add_var(AWPacketVar::Int(VarID::SessionID, session_id));
                     p.add_var(AWPacketVar::Uint(VarID::IdentifyUserIP, player_ip));

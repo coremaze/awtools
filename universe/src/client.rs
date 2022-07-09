@@ -246,7 +246,7 @@ impl ClientManager {
                 packet_handler::world_server_hide_all(server_info);
             }
             if let Some(Entity::WorldServer(server_info)) = &client.info().entity {
-                packet_handler::world_server_update_all(server_info, &self);
+                packet_handler::world_server_update_all(server_info, self);
             }
         }
         self.clients = self.clients.drain(..).filter(|x| !x.is_dead()).collect();
@@ -365,7 +365,7 @@ impl ClientManager {
         for client in self.clients() {
             if let Some(Entity::WorldServer(server)) = &client.info().entity {
                 for world in &server.worlds {
-                    if world.name.eq_ignore_ascii_case(&name) {
+                    if world.name.eq_ignore_ascii_case(name) {
                         return Some(world.clone());
                     }
                 }
