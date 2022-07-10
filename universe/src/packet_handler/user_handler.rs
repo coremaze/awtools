@@ -12,7 +12,7 @@ use crate::{
         contact::{ContactOptions, ContactQuery},
         Database,
     },
-    database::{license::LicenseQuery, ContactDB},
+    database::{license::LicenseQuery, ContactDB, TelegramDB},
     database::{CitizenDB, LicenseDB},
     license::LicenseGenerator,
     player::{PlayerInfo, PlayerState},
@@ -1199,4 +1199,66 @@ fn try_add_contact(
         .map_err(|_| ReasonCode::UnableToSetContact)?;
 
     Ok((citizen_id, contact_citizen.id))
+}
+
+pub fn telegram_send(client: &Client, packet: &AWPacket, database: &Database) {
+    let rc = match try_send_telegram(client, packet, database) {
+        // TODO: alert recipeint of new telegram
+        Ok(_) => ReasonCode::Success,
+        Err(x) => x,
+    };
+
+    let mut response = AWPacket::new(PacketType::TelegramSend);
+    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+
+    client.connection.send(response);
+}
+
+fn try_send_telegram(
+    client: &Client,
+    packet: &AWPacket,
+    database: &Database,
+) -> Result<(), ReasonCode> {
+    // Must be a player
+    let player_info = match &client.info().entity {
+        Some(Entity::Player(x)) => x.clone(),
+        _ => return Err(ReasonCode::NotLoggedIn),
+    };
+
+    // Must be logged in as a citizen
+    let citizen_id = match player_info.citizen_id {
+        Some(x) => x,
+        None => return Err(ReasonCode::NotLoggedIn),
+    };
+
+    // TODO: aw_citizen_privacy
+
+    let username_to = packet
+        .get_string(VarID::TelegramTo)
+        .ok_or(ReasonCode::NoSuchCitizen)?;
+
+    let message = packet
+        .get_string(VarID::TelegramMessage)
+        .ok_or(ReasonCode::UnableToSendTelegram)?;
+
+    let target_citizen = database
+        .citizen_by_name(&username_to)
+        .map_err(|_| ReasonCode::NoSuchCitizen)?;
+
+    let contact_info = database.contact_or_default(citizen_id, target_citizen.id);
+
+    if !contact_info.is_telegram_allowed() {
+        return Err(ReasonCode::TelegramBlocked);
+    }
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Current time is before the unix epoch.")
+        .as_secs() as u32;
+
+    database
+        .telegram_add(target_citizen.id, citizen_id, now, &message)
+        .map_err(|_| ReasonCode::UnableToSendTelegram)?;
+
+    Ok(())
 }

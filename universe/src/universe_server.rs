@@ -141,6 +141,9 @@ impl UniverseServer {
             }
             PacketType::CitizenAdd => packet_handler::citizen_add(client, packet, &self.database),
             PacketType::ContactAdd => packet_handler::contact_add(client, packet, &self.database),
+            PacketType::TelegramSend => {
+                packet_handler::telegram_send(client, packet, &self.database)
+            }
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }
