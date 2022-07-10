@@ -270,6 +270,28 @@ impl ClientManager {
         }
         None
     }
+
+    pub fn get_world_infos(&self) -> Vec<World> {
+        // Get a list of all the worlds
+        let mut world_list = Vec::<World>::new();
+        for client in self.clients() {
+            if let Some(Entity::WorldServer(world_server)) = &client.info().entity {
+                world_list.extend(world_server.worlds.clone());
+            }
+        }
+        world_list
+    }
+
+    pub fn get_player_infos(&self) -> Vec<PlayerInfo> {
+        // Get a list of all the player infos
+        let mut player_list = Vec::<PlayerInfo>::new();
+        for client in self.clients() {
+            if let Some(Entity::Player(player_info)) = &client.info().entity {
+                player_list.push(player_info.clone());
+            }
+        }
+        player_list
+    }
 }
 
 fn check_valid_name(name: &str, is_tourist: bool) -> Result<(), ReasonCode> {

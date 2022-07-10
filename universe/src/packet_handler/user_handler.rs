@@ -12,7 +12,7 @@ use crate::{
     database::Database,
     database::{CitizenDB, LicenseDB},
     license::LicenseGenerator,
-    player::PlayerInfo,
+    player::{PlayerInfo, PlayerState},
     world::World,
 };
 use aw_core::*;
@@ -77,6 +77,8 @@ pub fn login(
                         username: citizen.name,
                         nonce: None,
                         world: None,
+                        ip: client.addr.ip(),
+                        state: PlayerState::Online,
                     });
 
                     client.info_mut().entity = Some(client_entity);
@@ -102,6 +104,8 @@ pub fn login(
                         username: credentials.username.unwrap_or_default(),
                         nonce: None,
                         world: None,
+                        ip: client.addr.ip(),
+                        state: PlayerState::Online,
                     });
 
                     client.info_mut().entity = Some(client_entity);
@@ -220,76 +224,7 @@ pub fn user_list(client: &Client, packet: &AWPacket, client_manager: &ClientMana
         return;
     }
 
-    // Group packets into larger transmissions for efficiency
-    let mut group = AWPacketGroup::new();
-
-    for client in client_manager.clients() {
-        if let Some(Entity::Player(info)) = &client.info().entity {
-            // Make a new UserList packet for each user in this list
-            let mut p = AWPacket::new(PacketType::UserList);
-
-            // Client also expects var 178 as a string, but don't know what it is for.
-            // p.add_var(AWPacketVar::String(VarID::UserList178, format!("178")));
-            p.add_var(AWPacketVar::String(
-                VarID::UserListName,
-                info.username.clone(),
-            ));
-
-            // ID is supposed to be an ID relating to the user list so it can
-            // be updated when a user changes state, but using the session id
-            // for this is convenient for now.
-            p.add_var(AWPacketVar::Int(VarID::UserListID, info.session_id.into()));
-
-            p.add_var(AWPacketVar::Uint(
-                VarID::UserListCitizenID,
-                info.citizen_id.unwrap_or(0),
-            ));
-            p.add_var(AWPacketVar::Uint(
-                VarID::UserListPrivilegeID,
-                info.privilege_id.unwrap_or(0),
-            ));
-            if client.has_admin_permissions() {
-                p.add_var(AWPacketVar::Uint(
-                    VarID::UserListAddress,
-                    ip_to_num(client.addr.ip()),
-                ));
-            }
-            p.add_var(AWPacketVar::Byte(VarID::UserListState, 1)); // TODO: this means online
-
-            if let Some(world_name) = &info.world {
-                p.add_var(AWPacketVar::String(
-                    VarID::UserListWorldName,
-                    world_name.clone(),
-                ));
-            }
-
-            if let Err(p) = group.push(p) {
-                // If the current group is full, send it and start a new one
-                client.connection.send_group(group);
-                group = AWPacketGroup::new();
-
-                let mut more = AWPacket::new(PacketType::UserListResult);
-                // Yes, expect another UserList packet from the server
-                more.add_var(AWPacketVar::Byte(VarID::UserListMore, 1));
-                more.add_var(AWPacketVar::Int(VarID::UserList3DayUnknown, now));
-                group.push(more).ok();
-                group.push(p).ok();
-            }
-        }
-    }
-
-    // Send packet indicating that the server is done
-    let mut p = AWPacket::new(PacketType::UserListResult);
-    p.add_var(AWPacketVar::Byte(VarID::UserListMore, 0));
-    p.add_var(AWPacketVar::Int(VarID::UserList3DayUnknown, now));
-
-    if let Err(p) = group.push(p) {
-        client.connection.send_group(group);
-        group = AWPacketGroup::new();
-        group.push(p).ok();
-    }
-
-    client.connection.send_group(group);
+    PlayerInfo::send_updates_to_one(&client_manager.get_player_infos(), client);
 }
 
 pub fn attribute_change(
@@ -1027,56 +962,7 @@ pub fn world_list(client: &Client, packet: &AWPacket, client_manager: &ClientMan
         return;
     }
 
-    send_full_world_list(client, client_manager);
-}
-
-fn send_full_world_list(client: &Client, client_manager: &ClientManager) {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Current time is before the unix epoch.")
-        .as_secs() as i32;
-
-    // Get a list of all the worlds
-    let mut world_list = Vec::<World>::new();
-    for client in client_manager.clients() {
-        if let Some(Entity::WorldServer(world_server)) = &client.info().entity {
-            world_list.extend(world_server.worlds.clone());
-        }
-    }
-
-    // Group packets into larger transmissions for efficiency
-    let mut group = AWPacketGroup::new();
-
-    for world in &world_list {
-        // Make a new WorldList packet for each world in this list
-        let p = world.make_list_packet();
-
-        if let Err(p) = group.push(p) {
-            // If the current group is full, send it and start a new one
-            client.connection.send_group(group);
-            group = AWPacketGroup::new();
-
-            let mut more = AWPacket::new(PacketType::WorldListResult);
-            // Yes, expect another WorldList packet from the server
-            more.add_var(AWPacketVar::Byte(VarID::WorldListMore, 1));
-            more.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, now));
-            group.push(more).ok();
-            group.push(p).ok();
-        }
-    }
-
-    // Send packet indicating that the server is done
-    let mut p = AWPacket::new(PacketType::WorldListResult);
-    p.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
-    p.add_var(AWPacketVar::Int(VarID::WorldList3DayUnknown, now));
-
-    if let Err(p) = group.push(p) {
-        client.connection.send_group(group);
-        group = AWPacketGroup::new();
-        group.push(p).ok();
-    }
-
-    client.connection.send_group(group);
+    World::send_updates_to_one(&client_manager.get_world_infos(), client);
 }
 
 pub fn world_lookup(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
