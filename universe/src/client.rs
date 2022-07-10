@@ -10,7 +10,7 @@ use crate::{
         Database,
     },
     packet_handler,
-    player::PlayerInfo,
+    player::{PlayerInfo, PlayerState},
     world::{World, WorldServerInfo},
     AWConnection, AWCryptRSA,
 };
@@ -108,7 +108,7 @@ pub struct ClientManager {
 impl ClientManager {
     pub fn create_session_id(&self) -> u16 {
         let mut new_session_id: u16 = 0;
-        while new_session_id == 0 {
+        loop {
             new_session_id += 1;
             if self.get_client_by_session_id(new_session_id).is_none() {
                 break;
@@ -144,6 +144,13 @@ impl ClientManager {
             }
             if let Some(Entity::WorldServer(server_info)) = &client.info().entity {
                 World::send_updates_to_all(&server_info.worlds, self);
+            }
+
+            if let Some(Entity::Player(player)) = &mut client.info_mut().entity {
+                player.state = PlayerState::Offline;
+            }
+            if let Some(Entity::Player(player)) = &client.info().entity {
+                PlayerInfo::send_update_to_all(player, self);
             }
         }
         self.clients = self.clients.drain(..).filter(|x| !x.is_dead()).collect();

@@ -140,6 +140,7 @@ pub fn login(
 
     response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
     client.connection.send(response);
+    PlayerInfo::send_updates_to_all(&client_manager.get_player_infos(), client_manager);
 }
 
 /// Validates a client's login credentials.
