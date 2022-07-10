@@ -8,8 +8,11 @@ use crate::{
     attributes::set_attribute,
     client::{Client, ClientManager, ClientType, Entity},
     database::citizen::CitizenQuery,
-    database::license::LicenseQuery,
-    database::Database,
+    database::{
+        contact::{ContactOptions, ContactQuery},
+        Database,
+    },
+    database::{license::LicenseQuery, ContactDB},
     database::{CitizenDB, LicenseDB},
     license::LicenseGenerator,
     player::{PlayerInfo, PlayerState},
@@ -1133,4 +1136,67 @@ fn try_add_citizen(
         .map_err(|_| ReasonCode::UnableToInsertCitizen)?;
 
     Ok(result)
+}
+
+pub fn contact_add(client: &Client, packet: &AWPacket, database: &Database) {
+    let mut response = AWPacket::new(PacketType::ContactAdd);
+
+    let rc = match try_add_contact(client, packet, database) {
+        Ok((cit_id, cont_id)) => {
+            response.add_var(AWPacketVar::Uint(VarID::ContactListCitizenID, cont_id));
+            response.add_var(AWPacketVar::Uint(
+                VarID::ContactListOptions,
+                database.contact_get_default(cit_id).bits(),
+            ));
+
+            ReasonCode::Success
+        }
+        Err(x) => x,
+    };
+
+    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+
+    client.connection.send(response);
+}
+
+fn try_add_contact(
+    client: &Client,
+    packet: &AWPacket,
+    database: &Database,
+) -> Result<(u32, u32), ReasonCode> {
+    // Must be a player
+    let player_info = match &client.info().entity {
+        Some(Entity::Player(x)) => x.clone(),
+        _ => return Err(ReasonCode::NotLoggedIn),
+    };
+
+    // Must be logged in as a citizen
+    let citizen_id = match player_info.citizen_id {
+        Some(x) => x,
+        None => return Err(ReasonCode::NotLoggedIn),
+    };
+
+    let contact_name = packet
+        .get_string(VarID::ContactListName)
+        .ok_or(ReasonCode::NoSuchCitizen)?;
+
+    let contact_options = packet
+        .get_uint(VarID::ContactListOptions)
+        .ok_or(ReasonCode::NoSuchCitizen)?;
+
+    let contact_citizen = database
+        .citizen_by_name(&contact_name)
+        .map_err(|_| ReasonCode::NoSuchCitizen)?;
+
+    let contact_perms = database.contact_or_default(citizen_id, contact_citizen.id);
+
+    if !contact_perms.can_add_friend() {
+        return Err(ReasonCode::ContactAddBlocked);
+    }
+
+    database
+        .contact_set(citizen_id, contact_citizen.id, contact_options)
+        .map_err(|_| ReasonCode::UnableToSetContact)?;
+
+    Ok((citizen_id, contact_citizen.id))
 }

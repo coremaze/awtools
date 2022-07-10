@@ -140,6 +140,7 @@ impl UniverseServer {
                 packet_handler::world_stats_update(client, packet, &self.client_manager)
             }
             PacketType::CitizenAdd => packet_handler::citizen_add(client, packet, &self.database),
+            PacketType::ContactAdd => packet_handler::contact_add(client, packet, &self.database),
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }
