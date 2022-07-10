@@ -1016,3 +1016,121 @@ pub fn world_lookup(client: &Client, packet: &AWPacket, client_manager: &ClientM
 
     client.connection.send(p);
 }
+
+pub fn citizen_add(client: &Client, packet: &AWPacket, database: &Database) {
+    let mut response = AWPacket::new(PacketType::CitizenChangeResult);
+    let rc = match try_add_citizen(client, packet, database) {
+        Ok(new_cit) => {
+            response.add_var(AWPacketVar::Uint(VarID::CitizenNumber, new_cit.id));
+            response.add_var(AWPacketVar::String(VarID::CitizenName, new_cit.name));
+
+            ReasonCode::Success
+        }
+        Err(x) => x,
+    };
+
+    log::trace!("Add citizen: {:?}", rc);
+    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+
+    client.connection.send(response);
+}
+
+fn try_add_citizen(
+    client: &Client,
+    packet: &AWPacket,
+    database: &Database,
+) -> Result<CitizenQuery, ReasonCode> {
+    let id = packet
+        .get_uint(VarID::CitizenNumber)
+        .ok_or(ReasonCode::Unauthorized)?;
+    let name = packet
+        .get_string(VarID::CitizenName)
+        .ok_or(ReasonCode::Unauthorized)?;
+    let password = packet
+        .get_string(VarID::CitizenPassword)
+        .ok_or(ReasonCode::Unauthorized)?;
+    let email = packet
+        .get_string(VarID::CitizenEmail)
+        .ok_or(ReasonCode::Unauthorized)?;
+    let expiration = packet
+        .get_uint(VarID::CitizenExpiration)
+        .ok_or(ReasonCode::Unauthorized)?;
+    let beta = packet
+        .get_uint(VarID::BetaUser)
+        .ok_or(ReasonCode::Unauthorized)?;
+    let enabled = packet
+        .get_uint(VarID::CitizenEnabled)
+        .ok_or(ReasonCode::Unauthorized)?;
+    let trial = packet
+        .get_uint(VarID::TrialUser)
+        .ok_or(ReasonCode::Unauthorized)?;
+    let cav_enabled = packet
+        .get_uint(VarID::CAVEnabled)
+        .ok_or(ReasonCode::Unauthorized)?;
+
+    let mut new_info = CitizenQuery {
+        id,
+        changed: 0,
+        name,
+        password,
+        email,
+        priv_pass: String::default(),
+        comment: String::default(),
+        url: String::default(),
+        immigration: 0,
+        expiration,
+        last_login: 0,
+        last_address: 0,
+        total_time: 0,
+        bot_limit: 0,
+        beta,
+        cav_enabled,
+        cav_template: 0,
+        enabled,
+        privacy: 0,
+        trial,
+    };
+
+    // Client needs to be an admin
+    if !client.has_admin_permissions() {
+        return Err(ReasonCode::Unauthorized);
+    }
+
+    // Can't add citizen if another citizen already has the name
+    if database.citizen_by_name(&new_info.name).is_ok() {
+        return Err(ReasonCode::NameAlreadyUsed);
+    }
+
+    // Cannot have ID 0 - TODO: get default next ID
+    if new_info.id == 0 {
+        return Err(ReasonCode::NumberAlreadyUsed);
+    }
+
+    // Can't add citizen if someone already has the citzen number
+    if database.citizen_by_number(new_info.id).is_ok() {
+        return Err(ReasonCode::NumberAlreadyUsed);
+    }
+
+    // Can't add citizen if the id is too large
+    if new_info.id > (i32::MAX as u32) {
+        return Err(ReasonCode::UnableToInsertCitizen);
+    }
+
+    // Unimplemented: email filter
+
+    if client.info().client_type == Some(ClientType::Bot) {
+        new_info.immigration = packet.get_uint(VarID::CitizenImmigration).unwrap_or(0);
+        new_info.last_login = packet.get_uint(VarID::CitizenLastLogin).unwrap_or(0);
+        new_info.total_time = packet.get_uint(VarID::CitizenTotalTime).unwrap_or(0);
+    }
+
+    database
+        .citizen_add(&new_info)
+        .map_err(|_| ReasonCode::UnableToInsertCitizen)?;
+
+    let result = database
+        .citizen_by_name(&new_info.name)
+        .map_err(|_| ReasonCode::UnableToInsertCitizen)?;
+
+    Ok(result)
+}
