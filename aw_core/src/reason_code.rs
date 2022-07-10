@@ -194,3 +194,13 @@ pub enum ReasonCode {
     ZMemError = 4996,
     ZDataError = 4997,
 }
+
+impl ReasonCode {
+    pub fn is_err(&self) -> bool {
+        *self != Self::Success
+    }
+
+    pub fn is_ok(&self) -> bool {
+        !self.is_err()
+    }
+}
