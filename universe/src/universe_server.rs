@@ -144,6 +144,9 @@ impl UniverseServer {
             PacketType::TelegramSend => {
                 packet_handler::telegram_send(client, packet, &self.database, &self.client_manager)
             }
+            PacketType::TelegramGet => {
+                packet_handler::telegram_get(client, packet, &self.database);
+            }
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }

@@ -12,7 +12,7 @@ use crate::{
         contact::{ContactOptions, ContactQuery},
         Database,
     },
-    database::{license::LicenseQuery, ContactDB, TelegramDB},
+    database::{license::LicenseQuery, telegram::TelegramQuery, ContactDB, TelegramDB},
     database::{CitizenDB, LicenseDB},
     license::LicenseGenerator,
     player::{PlayerInfo, PlayerState},
@@ -144,6 +144,9 @@ pub fn login(
     response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
     client.connection.send(response);
     PlayerInfo::send_updates_to_all(&client_manager.get_player_infos(), client_manager);
+
+    // Inform the client of new telegrams if they are available
+    send_telegram_update_available(client, database);
 }
 
 /// Validates a client's login credentials.
@@ -1256,9 +1259,10 @@ fn try_send_telegram(
         .citizen_by_name(&username_to)
         .map_err(|_| ReasonCode::NoSuchCitizen)?;
 
-    let contact_info = database.contact_or_default(citizen_id, target_citizen.id);
+    let contact_to_target = database.contact_or_default(citizen_id, target_citizen.id);
+    let contact_to_self = database.contact_or_default(target_citizen.id, citizen_id);
 
-    if !contact_info.is_telegram_allowed() {
+    if !contact_to_target.is_telegram_allowed() || !contact_to_self.is_telegram_allowed() {
         return Err(ReasonCode::TelegramBlocked);
     }
 
@@ -1283,5 +1287,70 @@ fn send_telegram_update_available(client: &Client, database: &Database) {
                 client.connection.send(packet);
             }
         }
+    }
+}
+
+pub fn telegram_get(client: &Client, packet: &AWPacket, database: &Database) {
+    let mut response = AWPacket::new(PacketType::TelegramDeliver);
+
+    let rc = match try_telegram_get(client, packet, database) {
+        Ok((telegram, more_remain)) => {
+            let from_name = match database.citizen_by_number(telegram.from) {
+                Ok(cit) => cit.name,
+                Err(_) => "<unknown>".to_string(),
+            };
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Current time is before the unix epoch.")
+                .as_secs() as u32;
+            response.add_var(AWPacketVar::String(VarID::TelegramCitizenName, from_name));
+            response.add_var(AWPacketVar::Uint(
+                VarID::TelegramAge,
+                now.saturating_sub(telegram.timestamp),
+            ));
+            response.add_var(AWPacketVar::String(
+                VarID::TelegramMessage,
+                telegram.message,
+            ));
+            response.add_var(AWPacketVar::Byte(
+                VarID::TelegramsMoreRemain,
+                more_remain as u8,
+            ));
+
+            ReasonCode::Success
+        }
+        Err(x) => x,
+    };
+
+    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+
+    client.connection.send(response);
+}
+
+pub fn try_telegram_get(
+    client: &Client,
+    packet: &AWPacket,
+    database: &Database,
+) -> Result<(TelegramQuery, bool), ReasonCode> {
+    let playerinfo = match &client.info().entity {
+        Some(Entity::Player(x)) => x.clone(),
+        _ => return Err(ReasonCode::UnableToGetTelegram),
+    };
+
+    let citizen_id = match playerinfo.citizen_id {
+        Some(x) => x,
+        None => return Err(ReasonCode::UnableToGetTelegram),
+    };
+
+    let telegrams = database.telegram_get_undelivered(citizen_id);
+
+    let more_remain = telegrams.len() >= 2;
+
+    if !telegrams.is_empty() {
+        let telegram = telegrams[0].clone();
+        database.telegram_mark_delivered(telegram.id).ok();
+        Ok((telegrams[0].clone(), more_remain))
+    } else {
+        Err(ReasonCode::UnableToGetTelegram)
     }
 }

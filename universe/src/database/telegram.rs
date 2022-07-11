@@ -6,14 +6,14 @@ use mysql::*;
 
 type Result<T, E> = std::result::Result<T, E>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TelegramQuery {
-    id: u32,
-    citizen: u32,
-    from: u32,
-    timestamp: u32,
-    message: String,
-    delivered: u32,
+    pub id: u32,
+    pub citizen: u32,
+    pub from: u32,
+    pub timestamp: u32,
+    pub message: String,
+    pub delivered: u32,
 }
 
 pub trait TelegramDB {
@@ -27,6 +27,7 @@ pub trait TelegramDB {
     ) -> Result<(), ReasonCode>;
     fn telegram_get_undelivered(&self, citizen_id: u32) -> Vec<TelegramQuery>;
     fn telegram_get_all(&self, citizen_id: u32) -> Vec<TelegramQuery>;
+    fn telegram_mark_delivered(&self, telegram_id: u32) -> Result<(), ReasonCode>;
 }
 
 impl TelegramDB for Database {
@@ -126,6 +127,21 @@ impl TelegramDB for Database {
         }
 
         telegrams
+    }
+
+    fn telegram_mark_delivered(&self, telegram_id: u32) -> Result<(), ReasonCode> {
+        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
+
+        conn.exec_drop(
+            r"UPDATE awu_telegram SET Delivered=1 
+            WHERE ID=:telegram_id;",
+            params! {
+                "telegram_id" => telegram_id,
+            },
+        )
+        .map_err(|x| ReasonCode::DatabaseError)?;
+
+        Ok(())
     }
 }
 
