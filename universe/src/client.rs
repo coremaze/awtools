@@ -128,6 +128,17 @@ impl ClientManager {
         None
     }
 
+    pub fn get_client_by_citizen_id(&self, citizen_id: u32) -> Option<&Client> {
+        for client in self.clients() {
+            if let Some(Entity::Player(info)) = &client.info().entity {
+                if info.citizen_id == Some(citizen_id) {
+                    return Some(client);
+                }
+            }
+        }
+        None
+    }
+
     pub fn add_client(&mut self, client: Client) {
         self.clients.push(client);
     }

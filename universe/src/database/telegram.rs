@@ -1,10 +1,12 @@
 use super::Database;
+use crate::database;
 use aw_core::ReasonCode;
 use mysql::prelude::*;
 use mysql::*;
 
 type Result<T, E> = std::result::Result<T, E>;
 
+#[derive(Debug)]
 pub struct TelegramQuery {
     id: u32,
     citizen: u32,
@@ -23,6 +25,8 @@ pub trait TelegramDB {
         timestamp: u32,
         message: &str,
     ) -> Result<(), ReasonCode>;
+    fn telegram_get_undelivered(&self, citizen_id: u32) -> Vec<TelegramQuery>;
+    fn telegram_get_all(&self, citizen_id: u32) -> Vec<TelegramQuery>;
 }
 
 impl TelegramDB for Database {
@@ -71,4 +75,95 @@ impl TelegramDB for Database {
 
         Ok(())
     }
+
+    fn telegram_get_undelivered(&self, citizen_id: u32) -> Vec<TelegramQuery> {
+        let mut telegrams = Vec::<TelegramQuery>::new();
+        let mut conn = match self.conn() {
+            Ok(x) => x,
+            Err(_) => return telegrams,
+        };
+
+        let rows: Vec<Row> = conn
+            .exec(
+                r"SELECT * FROM awu_telegram WHERE Citizen=:id AND Delivered=0 
+                ORDER BY Timestamp",
+                params! {
+                    "id" => citizen_id,
+                },
+            )
+            .unwrap_or(Vec::<Row>::new());
+
+        for row in &rows {
+            if let Ok(telegram) = fetch_telegram(row) {
+                telegrams.push(telegram);
+            }
+        }
+
+        telegrams
+    }
+
+    fn telegram_get_all(&self, citizen_id: u32) -> Vec<TelegramQuery> {
+        let mut telegrams = Vec::<TelegramQuery>::new();
+        let mut conn = match self.conn() {
+            Ok(x) => x,
+            Err(_) => return telegrams,
+        };
+
+        let rows: Vec<Row> = conn
+            .exec(
+                r"SELECT * FROM awu_telegram WHERE Citizen=:id  
+                ORDER BY Timestamp",
+                params! {
+                    "id" => citizen_id,
+                },
+            )
+            .unwrap_or(Vec::<Row>::new());
+
+        for row in &rows {
+            if let Ok(telegram) = fetch_telegram(row) {
+                telegrams.push(telegram);
+            }
+        }
+
+        telegrams
+    }
+}
+
+fn fetch_telegram(row: &Row) -> Result<TelegramQuery, ReasonCode> {
+    let id: u32 = database::fetch_int(row, "ID")
+        .ok_or(ReasonCode::DatabaseError)?
+        .try_into()
+        .map_err(|_| ReasonCode::DatabaseError)?;
+
+    let citizen: u32 = database::fetch_int(row, "Citizen")
+        .ok_or(ReasonCode::DatabaseError)?
+        .try_into()
+        .map_err(|_| ReasonCode::DatabaseError)?;
+
+    let from: u32 = database::fetch_int(row, "From")
+        .ok_or(ReasonCode::DatabaseError)?
+        .try_into()
+        .map_err(|_| ReasonCode::DatabaseError)?;
+
+    let timestamp: u32 = database::fetch_int(row, "Timestamp")
+        .ok_or(ReasonCode::DatabaseError)?
+        .try_into()
+        .map_err(|_| ReasonCode::DatabaseError)?;
+
+    let message: String =
+        database::fetch_string(row, "Message").ok_or(ReasonCode::DatabaseError)?;
+
+    let delivered: u32 = database::fetch_int(row, "Delivered")
+        .ok_or(ReasonCode::DatabaseError)?
+        .try_into()
+        .map_err(|_| ReasonCode::DatabaseError)?;
+
+    Ok(TelegramQuery {
+        id,
+        citizen,
+        from,
+        timestamp,
+        message,
+        delivered,
+    })
 }

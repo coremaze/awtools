@@ -1201,10 +1201,21 @@ fn try_add_contact(
     Ok((citizen_id, contact_citizen.id))
 }
 
-pub fn telegram_send(client: &Client, packet: &AWPacket, database: &Database) {
+pub fn telegram_send(
+    client: &Client,
+    packet: &AWPacket,
+    database: &Database,
+    client_manager: &ClientManager,
+) {
     let rc = match try_send_telegram(client, packet, database) {
-        // TODO: alert recipeint of new telegram
-        Ok(_) => ReasonCode::Success,
+        Ok(citizen_id) => {
+            // Alert recipeint of new telegram
+            if let Some(target_client) = client_manager.get_client_by_citizen_id(citizen_id) {
+                send_telegram_update_available(target_client, database);
+            }
+
+            ReasonCode::Success
+        }
         Err(x) => x,
     };
 
@@ -1218,7 +1229,7 @@ fn try_send_telegram(
     client: &Client,
     packet: &AWPacket,
     database: &Database,
-) -> Result<(), ReasonCode> {
+) -> Result<u32, ReasonCode> {
     // Must be a player
     let player_info = match &client.info().entity {
         Some(Entity::Player(x)) => x.clone(),
@@ -1260,5 +1271,17 @@ fn try_send_telegram(
         .telegram_add(target_citizen.id, citizen_id, now, &message)
         .map_err(|_| ReasonCode::UnableToSendTelegram)?;
 
-    Ok(())
+    Ok(target_citizen.id)
+}
+
+fn send_telegram_update_available(client: &Client, database: &Database) {
+    if let Some(Entity::Player(player)) = &client.info().entity {
+        if let Some(citizen_id) = player.citizen_id {
+            let telegrams = database.telegram_get_undelivered(citizen_id);
+            if !telegrams.is_empty() {
+                let packet = AWPacket::new(PacketType::TelegramNotify);
+                client.connection.send(packet);
+            }
+        }
+    }
 }
