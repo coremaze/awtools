@@ -1,39 +1,12 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
-    client::{Client, ClientManager, ClientType, Entity},
+    client::{Client, ClientManager, Entity},
     database::{attrib::Attribute, license::LicenseQuery, AttribDB, Database, LicenseDB},
-    world::{World, WorldRating, WorldServerInfo, WorldStatus},
+    world::{World, WorldRating, WorldStatus},
 };
 use aw_core::{AWPacket, AWPacketVar, PacketType, ReasonCode, VarID};
 use num_traits::FromPrimitive;
-
-pub fn world_server_start(client: &Client, packet: &AWPacket) {
-    if let Some(client_type) = client.info().client_type {
-        log::warn!(
-            "A client who already has type {:?} tried to start a world server.",
-            client_type
-        );
-        return;
-    }
-
-    let _browser_version = packet.get_int(VarID::BrowserVersion);
-    let world_build = packet.get_int(VarID::WorldBuild);
-    let world_port = packet.get_int(VarID::WorldPort);
-
-    if let (Some(world_build), Some(world_port)) = (world_build, world_port) {
-        let client_entity = Entity::WorldServer(WorldServerInfo {
-            build: world_build,
-            server_port: world_port as u16,
-            worlds: Vec::new(),
-        });
-
-        client.info_mut().client_type = Some(ClientType::World);
-        client.info_mut().entity = Some(client_entity);
-
-        log::info!("World server {} connected.", client.addr.ip());
-    }
-}
 
 pub fn world_start(
     client: &Client,
@@ -133,12 +106,6 @@ pub fn world_start(
     World::send_update_to_all(&new_world, client_manager);
 }
 
-pub fn world_server_hide_all(server: &mut WorldServerInfo) {
-    for world in &mut server.worlds {
-        world.status = WorldStatus::Hidden;
-    }
-}
-
 pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
     let world_name = match packet.get_string(VarID::WorldStartWorldName) {
         Some(x) => x,
@@ -236,100 +203,6 @@ fn validate_world(
     }
 
     Ok(world_lic)
-}
-
-pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
-    let mut p = AWPacket::new(PacketType::Identify);
-
-    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
-        Some(x) => x,
-        None => {
-            log::info!("Failed to identify player because no world name was provided");
-            return;
-        }
-    };
-
-    let nonce = match packet.get_data(VarID::WorldUserNonce) {
-        Some(x) => x,
-        None => {
-            log::info!("Failed to identify player because no user nonce was provided");
-            return;
-        }
-    };
-
-    let session_id = match packet.get_int(VarID::SessionID) {
-        Some(x) => x,
-        None => {
-            log::info!("Failed to identify player because no session id was provided");
-            return;
-        }
-    };
-
-    let player_ip = match packet.get_uint(VarID::IdentifyUserIP) {
-        Some(x) => x,
-        None => {
-            log::info!("Failed to identify player because no user ip was provided");
-            return;
-        }
-    };
-
-    let player_port = match packet.get_int(VarID::PlayerPort) {
-        Some(x) => x,
-        None => {
-            log::info!("Failed to identify player because no port was provided");
-            return;
-        }
-    };
-
-    let world = match &client.info().entity {
-        Some(Entity::WorldServer(w)) => match w.get_world(&world_name) {
-            Some(w) => w.clone(),
-            None => {
-                log::info!(
-                    "Failed to identify player because the world server does not own the world"
-                );
-                return;
-            }
-        },
-        _ => return,
-    };
-
-    let mut rc = ReasonCode::NoSuchSession;
-
-    if let Some(user_client) = client_manager.get_client_by_session_id(session_id as u16) {
-        if let Some(Entity::Player(user_ent)) = &mut user_client.info_mut().entity {
-            if let Some(user_nonce) = user_ent.nonce {
-                if user_nonce.to_vec() == nonce {
-                    // Not currently checking IP address or port
-                    p.add_var(AWPacketVar::String(VarID::WorldStartWorldName, world_name));
-                    p.add_var(AWPacketVar::Int(VarID::SessionID, session_id));
-                    p.add_var(AWPacketVar::Uint(VarID::IdentifyUserIP, player_ip));
-                    p.add_var(AWPacketVar::Int(VarID::PlayerPort, player_port));
-                    p.add_var(AWPacketVar::Uint(
-                        VarID::LoginID,
-                        user_ent.citizen_id.unwrap_or(0),
-                    ));
-                    p.add_var(AWPacketVar::Int(VarID::BrowserBuild, user_ent.build));
-                    p.add_var(AWPacketVar::String(
-                        VarID::LoginUsername,
-                        user_ent.username.clone(),
-                    ));
-                    p.add_var(AWPacketVar::Uint(
-                        VarID::PrivilegeUserID,
-                        user_ent.effective_privilege(),
-                    ));
-
-                    user_ent.world = Some(world.name);
-
-                    rc = ReasonCode::Success;
-                }
-            }
-        }
-    }
-
-    p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
-
-    client.connection.send(p);
 }
 
 pub fn world_stats_update(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {

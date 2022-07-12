@@ -5,7 +5,7 @@ pub use client::{Client, ClientType};
 mod universe_server;
 pub use universe_server::UniverseServer;
 pub mod attributes;
-pub mod license;
+pub mod universe_license;
 pub use attributes::send_attributes;
 pub mod config;
 mod database;

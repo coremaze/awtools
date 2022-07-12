@@ -1,7 +1,7 @@
-mod common_handler;
-mod user_handler;
-mod world_handler;
+mod common;
+mod player;
+mod world;
 
-pub use common_handler::*;
-pub use user_handler::*;
-pub use world_handler::*;
+pub use common::*;
+pub use player::*;
+pub use world::*;

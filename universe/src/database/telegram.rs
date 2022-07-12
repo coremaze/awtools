@@ -92,7 +92,7 @@ impl TelegramDB for Database {
                     "id" => citizen_id,
                 },
             )
-            .unwrap_or(Vec::<Row>::new());
+            .unwrap_or_default();
 
         for row in &rows {
             if let Ok(telegram) = fetch_telegram(row) {
@@ -118,7 +118,7 @@ impl TelegramDB for Database {
                     "id" => citizen_id,
                 },
             )
-            .unwrap_or(Vec::<Row>::new());
+            .unwrap_or_default();
 
         for row in &rows {
             if let Ok(telegram) = fetch_telegram(row) {
@@ -139,7 +139,7 @@ impl TelegramDB for Database {
                 "telegram_id" => telegram_id,
             },
         )
-        .map_err(|x| ReasonCode::DatabaseError)?;
+        .map_err(|_x| ReasonCode::DatabaseError)?;
 
         Ok(())
     }

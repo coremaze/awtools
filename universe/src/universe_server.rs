@@ -4,7 +4,7 @@ use crate::{
     client::{Client, ClientManager},
     config,
     database::Database,
-    license::LicenseGenerator,
+    universe_license::LicenseGenerator,
     packet_handler,
 };
 use std::net::{SocketAddrV4, TcpListener};
