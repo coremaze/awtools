@@ -28,8 +28,8 @@ bitflags! {
         const CHAT_ALLOWED = 0b0000_0100_0000_0000;
         const CHAT_BLOCKED = 0b0000_1000_0000_0000;
 
-        const FRIEND_ALLOWED = 0b0001_0000_0000_0000;
-        const FRIEND_BLOCKED = 0b0010_0000_0000_0000;
+        const FRIEND_REQUEST_ALLOWED = 0b0001_0000_0000_0000;
+        const FRIEND_REQUEST_BLOCKED = 0b0010_0000_0000_0000;
 
         const ALL_ALLOWED = 0b0100_0000_0000_0000;
         const ALL_BLOCKED = 0b1000_0000_0000_0000;
@@ -41,12 +41,12 @@ impl ContactOptions {
         self.contains(ContactOptions::ALL_BLOCKED)
     }
 
-    pub fn can_add_friend(&self) -> bool {
+    pub fn is_friend_request_allowed(&self) -> bool {
         if self.contains(ContactOptions::ALL_BLOCKED) {
             return false;
         }
 
-        if self.contains(ContactOptions::FRIEND_BLOCKED) {
+        if self.contains(ContactOptions::FRIEND_REQUEST_ALLOWED) {
             return false;
         }
 
@@ -55,10 +55,6 @@ impl ContactOptions {
 
     pub fn is_file_transfer_allowed(&self) -> bool {
         if self.contains(ContactOptions::ALL_BLOCKED) {
-            return false;
-        }
-
-        if self.contains(ContactOptions::FRIEND_BLOCKED) {
             return false;
         }
 
@@ -74,10 +70,6 @@ impl ContactOptions {
             return false;
         }
 
-        if self.contains(ContactOptions::FRIEND_BLOCKED) {
-            return false;
-        }
-
         if self.contains(ContactOptions::JOIN_BLOCKED) {
             return false;
         }
@@ -87,10 +79,6 @@ impl ContactOptions {
 
     pub fn is_join_allowed(&self) -> bool {
         if self.contains(ContactOptions::ALL_BLOCKED) {
-            return false;
-        }
-
-        if self.contains(ContactOptions::FRIEND_BLOCKED) {
             return false;
         }
 
@@ -106,10 +94,6 @@ impl ContactOptions {
             return false;
         }
 
-        if self.contains(ContactOptions::FRIEND_BLOCKED) {
-            return false;
-        }
-
         if self.contains(ContactOptions::LOCATION_BLOCKED) {
             return false;
         }
@@ -122,10 +106,6 @@ impl ContactOptions {
             return false;
         }
 
-        if self.contains(ContactOptions::FRIEND_BLOCKED) {
-            return false;
-        }
-
         if self.contains(ContactOptions::STATUS_BLOCKED) {
             return false;
         }
@@ -135,10 +115,6 @@ impl ContactOptions {
 
     pub fn is_telegram_allowed(&self) -> bool {
         if self.contains(ContactOptions::ALL_BLOCKED) {
-            return false;
-        }
-
-        if self.contains(ContactOptions::FRIEND_BLOCKED) {
             return false;
         }
 
@@ -160,9 +136,13 @@ pub trait ContactDB {
     fn init_contact(&self);
     fn contact_set(&self, citizen_id: u32, contact_id: u32, options: u32)
         -> Result<(), ReasonCode>;
-    fn contact_get_options(&self, citizen_id: u32, contact_id: u32) -> Option<ContactOptions>;
-    fn contact_get_default(&self, citizen_id: u32) -> ContactOptions;
-    fn contact_or_default(&self, citizen_id: u32, contact_id: u32) -> ContactOptions;
+    fn contact_get(&self, citizen_id: u32, contact_id: u32) -> Result<ContactQuery, ReasonCode>;
+    fn contact_blocked(&self, citizen_id: u32, contact_id: u32) -> bool;
+    fn contact_confirm_add(&self, citizen_id: u32, contact_id: u32) -> bool;
+    fn contact_default(&self, citizen_id: u32) -> ContactQuery;
+    fn contact_file_transfers_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
+    fn contact_telegrams_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
+    fn contact_friend_requests_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
 }
 
 impl ContactDB for Database {
@@ -233,8 +213,8 @@ impl ContactDB for Database {
         Ok(())
     }
 
-    fn contact_get_options(&self, citizen_id: u32, contact_id: u32) -> Option<ContactOptions> {
-        let mut conn = self.conn().ok()?;
+    fn contact_get(&self, citizen_id: u32, contact_id: u32) -> Result<ContactQuery, ReasonCode> {
+        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
 
         let rows: Vec<Row> = conn
             .exec(
@@ -244,21 +224,108 @@ impl ContactDB for Database {
                     "contact_id" => contact_id,
                 },
             )
-            .ok()?;
+            .map_err(|_| ReasonCode::DatabaseError)?;
 
-        let contact = rows.first()?;
-        let contact_query = fetch_contact(contact).ok()?;
-
-        Some(contact_query.options)
+        if let Some(contact) = rows.first() {
+            fetch_contact(contact)
+        } else {
+            Err(ReasonCode::DatabaseError)
+        }
     }
 
-    fn contact_get_default(&self, citizen_id: u32) -> ContactOptions {
-        self.contact_get_options(citizen_id, 0).unwrap_or_default()
+    fn contact_blocked(&self, citizen_id: u32, contact_id: u32) -> bool {
+        let contact = match self.contact_get(citizen_id, contact_id) {
+            Ok(x) => x,
+            Err(_) => return false,
+        };
+
+        contact.options.contains(ContactOptions::ALL_BLOCKED)
     }
 
-    fn contact_or_default(&self, citizen_id: u32, contact_id: u32) -> ContactOptions {
-        self.contact_get_options(citizen_id, contact_id)
-            .unwrap_or_else(|| self.contact_get_default(citizen_id))
+    fn contact_confirm_add(&self, citizen_id: u32, contact_id: u32) -> bool {
+        let contact = match self.contact_get(citizen_id, contact_id) {
+            Ok(x) => x,
+            Err(_) => return false,
+        };
+
+        if contact.options.contains(ContactOptions::ALL_BLOCKED) {
+            return true;
+        }
+
+        if contact
+            .options
+            .contains(ContactOptions::FRIEND_REQUEST_BLOCKED)
+        {
+            return true;
+        }
+
+        false
+    }
+
+    fn contact_default(&self, citizen_id: u32) -> ContactQuery {
+        match self.contact_get(citizen_id, 0) {
+            Ok(contact) => contact,
+            Err(_) => ContactQuery {
+                citizen: citizen_id,
+                contact: 0,
+                options: ContactOptions::default(),
+            },
+        }
+    }
+
+    fn contact_file_transfers_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+        let contact = self
+            .contact_get(citizen_id, contact_id)
+            .unwrap_or_else(|_| self.contact_default(citizen_id));
+
+        if contact.options.contains(ContactOptions::ALL_BLOCKED) {
+            return false;
+        }
+
+        if contact
+            .options
+            .contains(ContactOptions::FILE_TRANSFER_BLOCKED)
+        {
+            return false;
+        }
+
+        true
+    }
+
+    fn contact_telegrams_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+        let contact = self
+            .contact_get(citizen_id, contact_id)
+            .unwrap_or_else(|_| self.contact_default(citizen_id));
+
+        if contact.options.contains(ContactOptions::ALL_BLOCKED) {
+            return false;
+        }
+
+        if contact.options.contains(ContactOptions::TELEGRAMS_BLOCKED) {
+            return false;
+        }
+
+        true
+    }
+
+    fn contact_friend_requests_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+        let contact = match self.contact_get(citizen_id, contact_id) {
+            Ok(x) => x,
+            _ => return true,
+        };
+
+        if contact.options.contains(ContactOptions::ALL_BLOCKED) {
+            return false;
+        }
+
+        if contact
+            .options
+            .contains(ContactOptions::FRIEND_REQUEST_BLOCKED)
+        {
+            return false;
+        }
+
+        true
     }
 }
 

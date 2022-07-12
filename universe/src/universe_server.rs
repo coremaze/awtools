@@ -140,13 +140,22 @@ impl UniverseServer {
                 packet_handler::world_stats_update(client, packet, &self.client_manager)
             }
             PacketType::CitizenAdd => packet_handler::citizen_add(client, packet, &self.database),
-            PacketType::ContactAdd => packet_handler::contact_add(client, packet, &self.database),
+            PacketType::ContactAdd => {
+                packet_handler::contact_add(client, packet, &self.database, &self.client_manager)
+            }
             PacketType::TelegramSend => {
                 packet_handler::telegram_send(client, packet, &self.database, &self.client_manager)
             }
             PacketType::TelegramGet => {
                 packet_handler::telegram_get(client, packet, &self.database);
             }
+            PacketType::SetAFK => packet_handler::set_afk(client, packet),
+            PacketType::ContactConfirm => packet_handler::contact_confirm(
+                client,
+                packet,
+                &self.database,
+                &self.client_manager,
+            ),
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }

@@ -82,6 +82,7 @@ pub fn login(
                         world: None,
                         ip: client.addr.ip(),
                         state: PlayerState::Online,
+                        afk: false,
                     });
 
                     client.info_mut().entity = Some(client_entity);
@@ -109,6 +110,7 @@ pub fn login(
                         world: None,
                         ip: client.addr.ip(),
                         state: PlayerState::Online,
+                        afk: false,
                     });
 
                     client.info_mut().entity = Some(client_entity);
@@ -1141,25 +1143,62 @@ fn try_add_citizen(
     Ok(result)
 }
 
-pub fn contact_add(client: &Client, packet: &AWPacket, database: &Database) {
+pub fn contact_add(
+    client: &Client,
+    packet: &AWPacket,
+    database: &Database,
+    client_manager: &ClientManager,
+) {
     let mut response = AWPacket::new(PacketType::ContactAdd);
 
     let rc = match try_add_contact(client, packet, database) {
         Ok((cit_id, cont_id)) => {
+            if !database.contact_blocked(cit_id, cont_id)
+                && database.contact_friend_requests_allowed(cont_id, cit_id)
+            {
+                alert_friend_request(cit_id, cont_id, database, client_manager);
+            }
             response.add_var(AWPacketVar::Uint(VarID::ContactListCitizenID, cont_id));
-            response.add_var(AWPacketVar::Uint(
-                VarID::ContactListOptions,
-                database.contact_get_default(cit_id).bits(),
-            ));
+            // response.add_var(AWPacketVar::Uint(
+            //     VarID::ContactListOptions,
+            //     database.contact_get_default(cit_id).bits(),
+            // ));
 
             ReasonCode::Success
         }
         Err(x) => x,
     };
 
+    log::info!("Contact add: {rc:?}");
     response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
 
     client.connection.send(response);
+}
+
+fn alert_friend_request(from: u32, to: u32, database: &Database, client_manager: &ClientManager) {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Current time is before the unix epoch.")
+        .as_secs() as u32;
+
+    let citizen = match database.citizen_by_number(from) {
+        Ok(x) => x,
+        _ => return,
+    };
+
+    // Create a telegram to alert user of friend request
+    let source_username = citizen.name;
+    if database
+        .telegram_add(to, from, now, &format!("\n\x01({from}){source_username}\n"))
+        .is_err()
+    {
+        return;
+    }
+
+    // Alert recipient of new telegram
+    if let Some(target_client) = client_manager.get_client_by_citizen_id(to) {
+        send_telegram_update_available(target_client, database);
+    }
 }
 
 fn try_add_contact(
@@ -1191,14 +1230,18 @@ fn try_add_contact(
         .citizen_by_name(&contact_name)
         .map_err(|_| ReasonCode::NoSuchCitizen)?;
 
-    let contact_perms = database.contact_or_default(citizen_id, contact_citizen.id);
-
-    if !contact_perms.can_add_friend() {
+    let mut options = ContactOptions::from_bits_truncate(contact_options);
+    if database.contact_blocked(citizen_id, contact_citizen.id)
+        && !options.contains(ContactOptions::ALL_BLOCKED)
+    {
         return Err(ReasonCode::ContactAddBlocked);
     }
 
+    options.remove(ContactOptions::FRIEND_REQUEST_ALLOWED);
+    options.insert(ContactOptions::FRIEND_REQUEST_BLOCKED);
+
     database
-        .contact_set(citizen_id, contact_citizen.id, contact_options)
+        .contact_set(citizen_id, contact_citizen.id, options.bits())
         .map_err(|_| ReasonCode::UnableToSetContact)?;
 
     Ok((citizen_id, contact_citizen.id))
@@ -1210,9 +1253,9 @@ pub fn telegram_send(
     database: &Database,
     client_manager: &ClientManager,
 ) {
-    let rc = match try_send_telegram(client, packet, database) {
+    let rc = match try_send_telegram_from_packet(client, packet, database) {
         Ok(citizen_id) => {
-            // Alert recipeint of new telegram
+            // Alert recipient of new telegram
             if let Some(target_client) = client_manager.get_client_by_citizen_id(citizen_id) {
                 send_telegram_update_available(target_client, database);
             }
@@ -1228,7 +1271,7 @@ pub fn telegram_send(
     client.connection.send(response);
 }
 
-fn try_send_telegram(
+fn try_send_telegram_from_packet(
     client: &Client,
     packet: &AWPacket,
     database: &Database,
@@ -1259,10 +1302,9 @@ fn try_send_telegram(
         .citizen_by_name(&username_to)
         .map_err(|_| ReasonCode::NoSuchCitizen)?;
 
-    let contact_to_target = database.contact_or_default(citizen_id, target_citizen.id);
-    let contact_to_self = database.contact_or_default(target_citizen.id, citizen_id);
-
-    if !contact_to_target.is_telegram_allowed() || !contact_to_self.is_telegram_allowed() {
+    if !database.contact_telegrams_allowed(citizen_id, target_citizen.id)
+        || !database.contact_telegrams_allowed(target_citizen.id, citizen_id)
+    {
         return Err(ReasonCode::TelegramBlocked);
     }
 
@@ -1353,4 +1395,94 @@ pub fn try_telegram_get(
     } else {
         Err(ReasonCode::UnableToGetTelegram)
     }
+}
+
+pub fn set_afk(client: &Client, packet: &AWPacket) {
+    if let Some(Entity::Player(player)) = &mut client.info_mut().entity {
+        if player.citizen_id.is_none() {
+            return;
+        }
+
+        let afk_status = match packet.get_uint(VarID::AFKStatus) {
+            Some(x) => x,
+            None => return,
+        };
+
+        let is_afk = afk_status != 0;
+        player.afk = is_afk;
+        log::info!("{:?} AFK: {:?}", player.username, player.afk);
+    }
+}
+
+pub fn contact_confirm(
+    client: &Client,
+    packet: &AWPacket,
+    database: &Database,
+    client_manager: &ClientManager,
+) {
+    let rc = match try_contact_confirm(client, packet, database) {
+        Ok(_) => ReasonCode::Success,
+        Err(x) => x,
+    };
+
+    let mut response = AWPacket::new(PacketType::ContactConfirm);
+    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    client.connection.send(response);
+}
+
+fn try_contact_confirm(
+    client: &Client,
+    packet: &AWPacket,
+    database: &Database,
+) -> Result<(), ReasonCode> {
+    // Must be a player
+    let player_info = match &client.info().entity {
+        Some(Entity::Player(x)) => x.clone(),
+        _ => return Err(ReasonCode::NotLoggedIn),
+    };
+
+    // Must be logged in as a citizen
+    let citizen_id = match player_info.citizen_id {
+        Some(x) => x,
+        None => return Err(ReasonCode::NotLoggedIn),
+    };
+
+    let contact_id = packet
+        .get_uint(VarID::ContactListCitizenID)
+        .ok_or(ReasonCode::NoSuchCitizen)?;
+
+    if packet.get_int(VarID::ContactListOptions).unwrap_or(-1) == -1 {
+        // Contact request denied
+        return Ok(());
+    }
+
+    let contact_options = packet
+        .get_uint(VarID::ContactListOptions)
+        .ok_or(ReasonCode::NoSuchCitizen)?;
+
+    let target_options = match database.contact_get(contact_id, citizen_id) {
+        Ok(x) => x.options,
+        // Fail if the target has no contact for this citizen (i.e. this contact was not requested)
+        _ => return Err(ReasonCode::UnableToSetContact),
+    };
+
+    // Fail if already friended
+    if !target_options.is_friend_request_allowed() {
+        return Err(ReasonCode::UnableToSetContact);
+    }
+
+    // Fail if could not set this user's contact
+    if database
+        .contact_set(citizen_id, contact_id, contact_options)
+        .is_err()
+    {
+        return Err(ReasonCode::UnableToSetContact);
+    }
+
+    log::info!(
+        "Accepted contact {:?}",
+        ContactOptions::from_bits_truncate(contact_options)
+    );
+
+    Ok(())
 }

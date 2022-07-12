@@ -27,6 +27,7 @@ pub struct PlayerInfo {
     pub world: Option<String>,
     pub ip: IpAddr,
     pub state: PlayerState,
+    pub afk: bool,
 }
 
 impl PlayerInfo {
