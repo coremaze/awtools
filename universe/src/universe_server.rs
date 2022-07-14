@@ -4,8 +4,8 @@ use crate::{
     client::{Client, ClientManager},
     config,
     database::Database,
-    universe_license::LicenseGenerator,
     packet_handler,
+    universe_license::LicenseGenerator,
 };
 use std::net::{SocketAddrV4, TcpListener};
 
@@ -42,7 +42,7 @@ impl UniverseServer {
         loop {
             self.accept_new_clients();
             self.service_clients();
-            self.client_manager.remove_dead_clients();
+            self.client_manager.remove_dead_clients(&self.database);
             self.client_manager.send_heartbeats();
         }
     }
@@ -135,7 +135,9 @@ impl UniverseServer {
             PacketType::WorldLookup => {
                 packet_handler::world_lookup(client, packet, &self.client_manager)
             }
-            PacketType::Identify => packet_handler::identify(client, packet, &self.client_manager),
+            PacketType::Identify => {
+                packet_handler::identify(client, packet, &self.client_manager, &self.database)
+            }
             PacketType::WorldStatsUpdate => {
                 packet_handler::world_stats_update(client, packet, &self.client_manager)
             }
@@ -156,6 +158,9 @@ impl UniverseServer {
                 &self.database,
                 &self.client_manager,
             ),
+            PacketType::ContactList => {
+                packet_handler::contact_list(client, packet, &self.database, &self.client_manager)
+            }
             _ => {
                 log::info!("Unhandled packet {packet:?}");
             }

@@ -1,14 +1,14 @@
 use crate::{
     client::{ClientManager, Entity},
     database::{citizen::CitizenQuery, Database},
-    universe_license::LicenseGenerator,
     player::{PlayerInfo, PlayerState},
+    universe_license::LicenseGenerator,
     Client, ClientType,
 };
 use aw_core::{AWPacket, AWPacketVar, PacketType, ReasonCode, VarID};
 use num_traits::FromPrimitive;
 
-use super::send_telegram_update_available;
+use super::{send_telegram_update_available, update_contacts_of_user};
 
 /// Represents the credentials obtained during handling of the Login packet.
 struct LoginCredentials {
@@ -74,6 +74,9 @@ pub fn login(
                     });
 
                     client.info_mut().entity = Some(client_entity);
+
+                    // Update the user's friends to tell them this user is online
+                    update_contacts_of_user(citizen.id, database, client_manager);
 
                     // Add packet variables with citizen info
                     response.add_var(AWPacketVar::Uint(VarID::BetaUser, citizen.beta));

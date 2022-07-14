@@ -1,7 +1,16 @@
-use crate::client::{Client, ClientManager, Entity};
+use crate::{
+    client::{Client, ClientManager, Entity},
+    database::Database,
+    packet_handler::update_contacts_of_user,
+};
 use aw_core::{AWPacket, AWPacketVar, PacketType, ReasonCode, VarID};
 
-pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
+pub fn identify(
+    client: &Client,
+    packet: &AWPacket,
+    client_manager: &ClientManager,
+    database: &Database,
+) {
     let mut p = AWPacket::new(PacketType::Identify);
 
     let world_name = match packet.get_string(VarID::WorldStartWorldName) {
@@ -58,6 +67,7 @@ pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManag
     };
 
     let mut rc = ReasonCode::NoSuchSession;
+    let mut changed_cit_id: Option<u32> = None;
 
     if let Some(user_client) = client_manager.get_client_by_session_id(session_id as u16) {
         if let Some(Entity::Player(user_ent)) = &mut user_client.info_mut().entity {
@@ -84,6 +94,8 @@ pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManag
 
                     user_ent.world = Some(world.name);
 
+                    changed_cit_id = user_ent.citizen_id;
+
                     rc = ReasonCode::Success;
                 }
             }
@@ -93,4 +105,9 @@ pub fn identify(client: &Client, packet: &AWPacket, client_manager: &ClientManag
     p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
 
     client.connection.send(p);
+
+    if let Some(citizen_id) = changed_cit_id {
+        // Update the user's friends to tell them this user is in a new world
+        update_contacts_of_user(citizen_id, database, client_manager);
+    }
 }

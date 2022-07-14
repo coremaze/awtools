@@ -137,12 +137,14 @@ pub trait ContactDB {
     fn contact_set(&self, citizen_id: u32, contact_id: u32, options: u32)
         -> Result<(), ReasonCode>;
     fn contact_get(&self, citizen_id: u32, contact_id: u32) -> Result<ContactQuery, ReasonCode>;
+    fn contact_get_all(&self, citizen_id: u32) -> Vec<ContactQuery>;
     fn contact_blocked(&self, citizen_id: u32, contact_id: u32) -> bool;
     fn contact_confirm_add(&self, citizen_id: u32, contact_id: u32) -> bool;
     fn contact_default(&self, citizen_id: u32) -> ContactQuery;
     fn contact_file_transfers_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
     fn contact_telegrams_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
     fn contact_friend_requests_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
+    fn contact_status_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
 }
 
 impl ContactDB for Database {
@@ -231,6 +233,32 @@ impl ContactDB for Database {
         } else {
             Err(ReasonCode::DatabaseError)
         }
+    }
+
+    fn contact_get_all(&self, citizen_id: u32) -> Vec<ContactQuery> {
+        let mut result = Vec::<ContactQuery>::new();
+        let mut conn = match self.conn() {
+            Ok(x) => x,
+            Err(_) => return result,
+        };
+
+        let rows: Vec<Row> = match conn.exec(
+            r"SELECT * FROM awu_contact WHERE Citizen=:citizen_id;",
+            params! {
+                "citizen_id" => citizen_id,
+            },
+        ) {
+            Ok(x) => x,
+            Err(_) => return result,
+        };
+
+        for row in rows {
+            if let Ok(contact) = fetch_contact(&row) {
+                result.push(contact);
+            }
+        }
+
+        result
     }
 
     fn contact_blocked(&self, citizen_id: u32, contact_id: u32) -> bool {
@@ -322,6 +350,23 @@ impl ContactDB for Database {
             .options
             .contains(ContactOptions::FRIEND_REQUEST_BLOCKED)
         {
+            return false;
+        }
+
+        true
+    }
+
+    fn contact_status_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+        let contact = match self.contact_get(citizen_id, contact_id) {
+            Ok(x) => x,
+            _ => return true,
+        };
+
+        if contact.options.contains(ContactOptions::ALL_BLOCKED) {
+            return false;
+        }
+
+        if contact.options.contains(ContactOptions::STATUS_BLOCKED) {
             return false;
         }
 

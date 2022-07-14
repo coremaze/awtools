@@ -2,14 +2,26 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     client::{Client, ClientManager, Entity},
+    database::contact::ContactQuery,
     database::CitizenDB,
     database::{contact::ContactOptions, Database},
     database::{ContactDB, TelegramDB},
-    player::PlayerInfo,
+    player::{PlayerInfo, PlayerState},
 };
 use aw_core::*;
 
 use super::telegram;
+
+#[derive(Debug)]
+enum ContactState {
+    Offline = 0,
+    Online = 1,
+    Nonexistent = 2,
+    Afk = 3,
+    Unknown = 4,
+    Removed = 5,
+    Default = 6,
+}
 
 pub fn contact_add(
     client: &Client,
@@ -105,12 +117,21 @@ fn try_add_contact(
         return Err(ReasonCode::ContactAddBlocked);
     }
 
-    options.remove(ContactOptions::FRIEND_REQUEST_ALLOWED);
-    options.insert(ContactOptions::FRIEND_REQUEST_BLOCKED);
+    // Stop people from adding each other when they are already friends
+    if database
+        .contact_get(citizen_id, contact_citizen.id)
+        .is_err()
+        || database
+            .contact_get(contact_citizen.id, citizen_id)
+            .is_err()
+    {
+        options.remove(ContactOptions::FRIEND_REQUEST_ALLOWED);
+        options.insert(ContactOptions::FRIEND_REQUEST_BLOCKED);
 
-    database
-        .contact_set(citizen_id, contact_citizen.id, options.bits())
-        .map_err(|_| ReasonCode::UnableToSetContact)?;
+        database
+            .contact_set(citizen_id, contact_citizen.id, options.bits())
+            .map_err(|_| ReasonCode::UnableToSetContact)?;
+    }
 
     Ok((citizen_id, contact_citizen.id))
 }
@@ -184,15 +205,13 @@ fn try_contact_confirm(
         _ => return Err(ReasonCode::UnableToSetContact),
     };
 
-    // Fail if already friended
     if !target_options.is_friend_request_allowed() {
         return Err(ReasonCode::UnableToSetContact);
     }
 
-    // Fail if could not set this user's contact
-    if database
-        .contact_set(citizen_id, contact_id, contact_options)
-        .is_err()
+    // Fail if could not set the contacts
+    if database.contact_set(citizen_id, contact_id, 0).is_err()
+        || database.contact_set(contact_id, citizen_id, 0).is_err()
     {
         return Err(ReasonCode::UnableToSetContact);
     }
@@ -221,4 +240,160 @@ pub fn user_list(client: &Client, packet: &AWPacket, client_manager: &ClientMana
     }
 
     PlayerInfo::send_updates_to_one(&client_manager.get_player_infos(), client);
+}
+
+pub fn contact_list(
+    client: &Client,
+    packet: &AWPacket,
+    database: &Database,
+    client_manager: &ClientManager,
+) {
+    let groups = match try_contact_list(client, packet, database, client_manager) {
+        Ok(groups) => groups,
+        Err(rc) => {
+            let mut response = AWPacket::new(PacketType::ContactList);
+            response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+            client.connection.send(response);
+            return;
+        }
+    };
+
+    log::info!("Sending contact list: {groups:?}");
+    for group in groups {
+        client.connection.send_group(group);
+    }
+}
+
+fn try_contact_list(
+    client: &Client,
+    packet: &AWPacket,
+    database: &Database,
+    client_manager: &ClientManager,
+) -> Result<Vec<AWPacketGroup>, ReasonCode> {
+    // Must be a player
+    let player_info = match &client.info().entity {
+        Some(Entity::Player(x)) => x.clone(),
+        _ => return Err(ReasonCode::NotLoggedIn),
+    };
+
+    // Must be logged in as a citizen
+    let citizen_id = match player_info.citizen_id {
+        Some(x) => x,
+        None => return Err(ReasonCode::NotLoggedIn),
+    };
+
+    let contacts = database.contact_get_all(citizen_id);
+
+    let groups = get_contact_list_groups(&contacts, database, client_manager);
+
+    Ok(groups)
+}
+
+fn get_contact_list_groups(
+    contacts: &[ContactQuery],
+    database: &Database,
+    client_manager: &ClientManager,
+) -> Vec<AWPacketGroup> {
+    let mut groups = Vec::<AWPacketGroup>::new();
+    let mut group = AWPacketGroup::new();
+
+    for contact in contacts {
+        let (username, world, state) = contact_name_world_state(contact, database, client_manager);
+
+        let mut response = AWPacket::new(PacketType::ContactList);
+        response.add_var(AWPacketVar::String(VarID::ContactListName, username));
+        response.add_var(AWPacketVar::String(VarID::ContactListWorld, world));
+        response.add_var(AWPacketVar::Int(VarID::ContactListStatus, state as i32));
+        response.add_var(AWPacketVar::Uint(
+            VarID::ContactListCitizenID,
+            contact.contact,
+        ));
+        response.add_var(AWPacketVar::Byte(VarID::ContactListMore, 1));
+        response.add_var(AWPacketVar::Uint(
+            VarID::ContactListOptions,
+            contact.options.bits(),
+        ));
+
+        if let Err(p) = group.push(response) {
+            groups.push(group);
+            group = AWPacketGroup::new();
+            group.push(p).ok();
+        }
+    }
+
+    let mut response = AWPacket::new(PacketType::ContactList);
+    response.add_var(AWPacketVar::Uint(VarID::ContactListCitizenID, 0));
+    response.add_var(AWPacketVar::Byte(VarID::ContactListMore, 0));
+
+    if let Err(p) = group.push(response) {
+        groups.push(group);
+        group = AWPacketGroup::new();
+        group.push(p).ok();
+    }
+
+    groups.push(group);
+
+    groups
+}
+
+pub fn update_contacts_of_user(
+    citizen_id: u32,
+    database: &Database,
+    client_manager: &ClientManager,
+) {
+    for client in client_manager.clients() {
+        if let Some(Entity::Player(player)) = &client.info().entity {
+            if let Some(client_citizen_id) = player.citizen_id {
+                let contact = match database.contact_get(client_citizen_id, citizen_id) {
+                    Ok(contact) => contact,
+                    Err(_) => continue,
+                };
+                let groups = get_contact_list_groups(&[contact], database, client_manager);
+                for group in groups {
+                    client.connection.send_group(group);
+                }
+            }
+        }
+    }
+}
+
+fn contact_name_world_state(
+    contact: &ContactQuery,
+    database: &Database,
+    client_manager: &ClientManager,
+) -> (String, String, ContactState) {
+    let mut username = "".to_string();
+    let mut world = "".to_string();
+
+    let contact_citizen = match database.citizen_by_number(contact.contact) {
+        Ok(x) => x,
+        Err(_) => return (username, world, ContactState::Nonexistent),
+    };
+
+    username = contact_citizen.name;
+
+    let mut status = match client_manager.get_client_by_citizen_id(contact.contact) {
+        Some(client) => match &client.info().entity {
+            Some(Entity::Player(player)) => match player.state {
+                PlayerState::Offline => ContactState::Offline,
+                PlayerState::Online => {
+                    if let Some(player_world) = &player.world {
+                        world = player_world.clone();
+                    }
+                    match player.afk {
+                        true => ContactState::Afk,
+                        false => ContactState::Online,
+                    }
+                }
+            },
+            _ => ContactState::Unknown,
+        },
+        None => ContactState::Offline,
+    };
+
+    if !database.contact_status_allowed(contact.contact, contact.citizen) {
+        status = ContactState::Unknown;
+    }
+
+    (username, world, status)
 }

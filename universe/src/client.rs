@@ -9,7 +9,7 @@ use crate::{
         citizen::{CitizenDB, CitizenQuery},
         Database,
     },
-    packet_handler,
+    packet_handler::{self, update_contacts_of_user},
     player::{PlayerInfo, PlayerState},
     world::{World, WorldServerInfo},
     AWConnection, AWCryptRSA,
@@ -147,7 +147,7 @@ impl ClientManager {
         &self.clients
     }
 
-    pub fn remove_dead_clients(&mut self) {
+    pub fn remove_dead_clients(&mut self, database: &Database) {
         for client in self.clients().iter().filter(|x| x.is_dead()) {
             log::info!("Disconnected {}", client.addr.ip());
             if let Some(Entity::WorldServer(server_info)) = &mut client.info_mut().entity {
@@ -162,6 +162,11 @@ impl ClientManager {
             }
             if let Some(Entity::Player(player)) = &client.info().entity {
                 PlayerInfo::send_update_to_all(player, self);
+
+                if let Some(citizen_id) = player.citizen_id {
+                    // Update the user's friends to tell them this user is now offline
+                    update_contacts_of_user(citizen_id, database, self);
+                }
             }
         }
         self.clients = self.clients.drain(..).filter(|x| !x.is_dead()).collect();
