@@ -3,7 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use aw_core::{AWPacket, AWPacketGroup, AWPacketVar, PacketType, VarID};
+use aw_core::{AWPacket, AWPacketGroup, PacketType, VarID};
 
 use crate::{
     client::{ClientManager, Entity},
@@ -45,38 +45,23 @@ impl PlayerInfo {
         let mut p = AWPacket::new(PacketType::UserList);
 
         // Client also expects var 178 as a string, but don't know what it is for.
-        // p.add_var(AWPacketVar::String(VarID::UserList178, format!("178")));
-        p.add_var(AWPacketVar::String(
-            VarID::UserListName,
-            self.username.clone(),
-        ));
+        // p.add_string(VarID::UserList178, format!("178"));
+        p.add_string(VarID::UserListName, self.username.clone());
 
         // ID is supposed to be an ID relating to the user list so it can
         // be updated when a user changes state, but using the session id
         // for this is convenient for now.
-        p.add_var(AWPacketVar::Int(VarID::UserListID, self.session_id.into()));
+        p.add_int(VarID::UserListID, self.session_id.into());
 
-        p.add_var(AWPacketVar::Uint(
-            VarID::UserListCitizenID,
-            self.citizen_id.unwrap_or(0),
-        ));
-        p.add_var(AWPacketVar::Uint(
-            VarID::UserListPrivilegeID,
-            self.privilege_id.unwrap_or(0),
-        ));
+        p.add_uint(VarID::UserListCitizenID, self.citizen_id.unwrap_or(0));
+        p.add_uint(VarID::UserListPrivilegeID, self.privilege_id.unwrap_or(0));
         if to_admin {
-            p.add_var(AWPacketVar::Uint(
-                VarID::UserListAddress,
-                ip_to_num(self.ip),
-            ));
+            p.add_uint(VarID::UserListAddress, ip_to_num(self.ip));
         }
-        p.add_var(AWPacketVar::Byte(VarID::UserListState, self.state as u8));
+        p.add_byte(VarID::UserListState, self.state as u8);
 
         if let Some(world_name) = &self.world {
-            p.add_var(AWPacketVar::String(
-                VarID::UserListWorldName,
-                world_name.clone(),
-            ));
+            p.add_string(VarID::UserListWorldName, world_name.clone());
         }
 
         p
@@ -104,8 +89,8 @@ impl PlayerInfo {
 
                 let mut more = AWPacket::new(PacketType::UserListResult);
                 // Yes, expect another UserList packet from the server
-                more.add_var(AWPacketVar::Byte(VarID::UserListMore, 1));
-                more.add_var(AWPacketVar::Uint(VarID::UserList3DayUnknown, now as u32));
+                more.add_byte(VarID::UserListMore, 1);
+                more.add_uint(VarID::UserList3DayUnknown, now as u32);
                 group.push(more).ok();
                 group.push(p).ok();
             }
@@ -113,8 +98,8 @@ impl PlayerInfo {
 
         // Send packet indicating that the server is done
         let mut p = AWPacket::new(PacketType::UserListResult);
-        p.add_var(AWPacketVar::Byte(VarID::UserListMore, 0));
-        p.add_var(AWPacketVar::Uint(VarID::UserList3DayUnknown, now as u32));
+        p.add_byte(VarID::UserListMore, 0);
+        p.add_uint(VarID::UserList3DayUnknown, now as u32);
 
         if let Err(p) = group.push(p) {
             groups.push(group);

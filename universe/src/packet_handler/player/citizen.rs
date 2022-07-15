@@ -34,7 +34,7 @@ pub fn citizen_next(client: &Client, packet: &AWPacket, database: &Database) {
         }
     }
 
-    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    response.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(response);
 }
@@ -67,7 +67,7 @@ pub fn citizen_prev(client: &Client, packet: &AWPacket, database: &Database) {
         }
     }
 
-    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    response.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(response);
 }
@@ -103,7 +103,7 @@ pub fn citizen_lookup_by_name(client: &Client, packet: &AWPacket, database: &Dat
         }
     }
 
-    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    response.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(response);
 }
@@ -139,7 +139,7 @@ pub fn citizen_lookup_by_number(client: &Client, packet: &AWPacket, database: &D
         }
     }
 
-    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    response.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(response);
 }
@@ -178,7 +178,7 @@ pub fn citizen_change(client: &Client, packet: &AWPacket, database: &Database) {
 
     let mut response = AWPacket::new(PacketType::CitizenChangeResult);
     log::trace!("Change citizen: {:?}", rc);
-    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    response.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(response);
 }
@@ -370,8 +370,8 @@ pub fn citizen_add(client: &Client, packet: &AWPacket, database: &Database) {
     let mut response = AWPacket::new(PacketType::CitizenChangeResult);
     let rc = match try_add_citizen(client, packet, database) {
         Ok(new_cit) => {
-            response.add_var(AWPacketVar::Uint(VarID::CitizenNumber, new_cit.id));
-            response.add_var(AWPacketVar::String(VarID::CitizenName, new_cit.name));
+            response.add_uint(VarID::CitizenNumber, new_cit.id);
+            response.add_string(VarID::CitizenName, new_cit.name);
 
             ReasonCode::Success
         }
@@ -379,7 +379,7 @@ pub fn citizen_add(client: &Client, packet: &AWPacket, database: &Database) {
     };
 
     log::trace!("Add citizen: {:?}", rc);
-    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    response.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(response);
 }

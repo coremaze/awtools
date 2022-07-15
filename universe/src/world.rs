@@ -59,10 +59,10 @@ impl World {
     pub fn make_list_packet(&self) -> AWPacket {
         let mut p = AWPacket::new(PacketType::WorldList);
 
-        p.add_var(AWPacketVar::String(VarID::WorldListName, self.name.clone()));
-        p.add_var(AWPacketVar::Byte(VarID::WorldListStatus, self.status as u8));
-        p.add_var(AWPacketVar::Uint(VarID::WorldListUsers, self.user_count));
-        p.add_var(AWPacketVar::Byte(VarID::WorldListRating, self.rating as u8));
+        p.add_string(VarID::WorldListName, self.name.clone());
+        p.add_byte(VarID::WorldListStatus, self.status as u8);
+        p.add_uint(VarID::WorldListUsers, self.user_count);
+        p.add_byte(VarID::WorldListRating, self.rating as u8);
 
         p
     }
@@ -89,8 +89,8 @@ impl World {
 
                 let mut more = AWPacket::new(PacketType::WorldListResult);
                 // Yes, expect another WorldList packet from the server
-                more.add_var(AWPacketVar::Byte(VarID::WorldListMore, 1));
-                more.add_var(AWPacketVar::Uint(VarID::WorldList3DayUnknown, now as u32));
+                more.add_byte(VarID::WorldListMore, 1);
+                more.add_uint(VarID::WorldList3DayUnknown, now as u32);
                 group.push(more).ok();
                 group.push(p).ok();
             }
@@ -98,8 +98,8 @@ impl World {
 
         // Send packet indicating that the server is done
         let mut p = AWPacket::new(PacketType::WorldListResult);
-        p.add_var(AWPacketVar::Byte(VarID::WorldListMore, 0));
-        p.add_var(AWPacketVar::Uint(VarID::WorldList3DayUnknown, now as u32));
+        p.add_byte(VarID::WorldListMore, 0);
+        p.add_uint(VarID::WorldList3DayUnknown, now as u32);
 
         if let Err(p) = group.push(p) {
             groups.push(group);

@@ -79,11 +79,11 @@ pub fn login(
                     update_contacts_of_user(citizen.id, database, client_manager);
 
                     // Add packet variables with citizen info
-                    response.add_var(AWPacketVar::Uint(VarID::BetaUser, citizen.beta));
-                    response.add_var(AWPacketVar::Uint(VarID::TrialUser, citizen.trial));
-                    response.add_var(AWPacketVar::Uint(VarID::CitizenNumber, citizen.id));
-                    response.add_var(AWPacketVar::Uint(VarID::CitizenPrivacy, citizen.privacy));
-                    response.add_var(AWPacketVar::Uint(VarID::CAVEnabled, citizen.cav_enabled));
+                    response.add_uint(VarID::BetaUser, citizen.beta);
+                    response.add_uint(VarID::TrialUser, citizen.trial);
+                    response.add_uint(VarID::CitizenNumber, citizen.id);
+                    response.add_uint(VarID::CitizenPrivacy, citizen.privacy);
+                    response.add_uint(VarID::CAVEnabled, citizen.cav_enabled);
 
                     // TODO: update login time and last address
                 }
@@ -121,20 +121,17 @@ pub fn login(
 
     // Inform the client of their displayed username and their new session ID
     if let Some(Entity::Player(info)) = &client.info_mut().entity {
-        response.add_var(AWPacketVar::String(
-            VarID::CitizenName,
-            info.username.clone(),
-        ));
-        response.add_var(AWPacketVar::Int(VarID::SessionID, info.session_id as i32));
+        response.add_string(VarID::CitizenName, info.username.clone());
+        response.add_int(VarID::SessionID, info.session_id as i32);
     }
 
     // Add license data (Specific to the IP/port binding that the client sees!)
-    response.add_var(AWPacketVar::Data(
+    response.add_data(
         VarID::UniverseLicense,
         license_generator.create_license_data(browser_build.unwrap_or(0)),
-    ));
+    );
 
-    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    response.add_int(VarID::ReasonCode, rc as i32);
     client.connection.send(response);
     PlayerInfo::send_updates_to_all(&client_manager.get_player_infos(), client_manager);
 

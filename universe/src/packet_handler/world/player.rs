@@ -3,7 +3,7 @@ use crate::{
     database::Database,
     packet_handler::update_contacts_of_user,
 };
-use aw_core::{AWPacket, AWPacketVar, PacketType, ReasonCode, VarID};
+use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
 
 pub fn identify(
     client: &Client,
@@ -74,23 +74,14 @@ pub fn identify(
             if let Some(user_nonce) = user_ent.nonce {
                 if user_nonce.to_vec() == nonce {
                     // Not currently checking IP address or port
-                    p.add_var(AWPacketVar::String(VarID::WorldStartWorldName, world_name));
-                    p.add_var(AWPacketVar::Int(VarID::SessionID, session_id));
-                    p.add_var(AWPacketVar::Uint(VarID::IdentifyUserIP, player_ip));
-                    p.add_var(AWPacketVar::Int(VarID::PlayerPort, player_port));
-                    p.add_var(AWPacketVar::Uint(
-                        VarID::LoginID,
-                        user_ent.citizen_id.unwrap_or(0),
-                    ));
-                    p.add_var(AWPacketVar::Int(VarID::BrowserBuild, user_ent.build));
-                    p.add_var(AWPacketVar::String(
-                        VarID::LoginUsername,
-                        user_ent.username.clone(),
-                    ));
-                    p.add_var(AWPacketVar::Uint(
-                        VarID::PrivilegeUserID,
-                        user_ent.effective_privilege(),
-                    ));
+                    p.add_string(VarID::WorldStartWorldName, world_name);
+                    p.add_int(VarID::SessionID, session_id);
+                    p.add_uint(VarID::IdentifyUserIP, player_ip);
+                    p.add_int(VarID::PlayerPort, player_port);
+                    p.add_uint(VarID::LoginID, user_ent.citizen_id.unwrap_or(0));
+                    p.add_int(VarID::BrowserBuild, user_ent.build);
+                    p.add_string(VarID::LoginUsername, user_ent.username.clone());
+                    p.add_uint(VarID::PrivilegeUserID, user_ent.effective_privilege());
 
                     user_ent.world = Some(world.name);
 
@@ -102,7 +93,7 @@ pub fn identify(
         }
     }
 
-    p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    p.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(p);
 

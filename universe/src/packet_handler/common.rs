@@ -12,7 +12,7 @@ pub fn public_key_request(client: &Client) {
         .expect("Public key was missing.");
 
     let mut packet = AWPacket::new(PacketType::PublicKeyResponse);
-    packet.add_var(AWPacketVar::Data(VarID::EncryptionKey, key));
+    packet.add_data(VarID::EncryptionKey, key);
     client.connection.send(packet);
 }
 
@@ -43,7 +43,7 @@ pub fn public_key_response(client: &Client, packet: &AWPacket) {
         match public_rsa.encrypt_public(&client.connection.get_send_key()) {
             Ok(encrypted_a4) => {
                 let mut response = AWPacket::new(PacketType::StreamKeyResponse);
-                response.add_var(AWPacketVar::Data(VarID::EncryptionKey, encrypted_a4));
+                response.add_data(VarID::EncryptionKey, encrypted_a4);
                 client.connection.send(response);
                 client.connection.encrypt_data(true);
             }

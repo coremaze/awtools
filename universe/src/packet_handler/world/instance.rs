@@ -43,16 +43,13 @@ pub fn world_start(
 
     let mut p = AWPacket::new(PacketType::WorldStart);
 
-    p.add_var(AWPacketVar::String(
-        VarID::WorldStartWorldName,
-        world_name.clone(),
-    ));
+    p.add_string(VarID::WorldStartWorldName, world_name.clone());
 
     let lic = match validate_world(world_build, &world_name, &world_password, database) {
         Ok(x) => x,
         Err(rc) => {
             log::info!("Unable to start world: {rc:?}");
-            p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+            p.add_int(VarID::ReasonCode, rc as i32);
             client.connection.send(p);
             return;
         }
@@ -60,10 +57,7 @@ pub fn world_start(
 
     // Don't let clients start a world twice
     if client_manager.get_world_by_name(&lic.name).is_some() {
-        p.add_var(AWPacketVar::Int(
-            VarID::ReasonCode,
-            ReasonCode::WorldAlreadyStarted as i32,
-        ));
+        p.add_int(VarID::ReasonCode, ReasonCode::WorldAlreadyStarted as i32);
         client.connection.send(p);
         return;
     }
@@ -86,19 +80,13 @@ pub fn world_start(
     }
     client.info_mut().entity = entity;
 
-    p.add_var(AWPacketVar::Uint(
-        VarID::WorldLicenseExpiration,
-        lic.expiration,
-    ));
-    p.add_var(AWPacketVar::Uint(VarID::WorldLicenseUsers, lic.users));
-    p.add_var(AWPacketVar::Uint(VarID::WorldLicenseRange, lic.world_size));
-    p.add_var(AWPacketVar::Uint(VarID::WorldLicenseVoip, lic.voip));
-    p.add_var(AWPacketVar::Uint(VarID::WorldLicensePlugins, lic.plugins));
+    p.add_uint(VarID::WorldLicenseExpiration, lic.expiration);
+    p.add_uint(VarID::WorldLicenseUsers, lic.users);
+    p.add_uint(VarID::WorldLicenseRange, lic.world_size);
+    p.add_uint(VarID::WorldLicenseVoip, lic.voip);
+    p.add_uint(VarID::WorldLicensePlugins, lic.plugins);
 
-    p.add_var(AWPacketVar::Int(
-        VarID::ReasonCode,
-        ReasonCode::Success as i32,
-    ));
+    p.add_int(VarID::ReasonCode, ReasonCode::Success as i32);
 
     client.connection.send(p);
 
@@ -147,7 +135,7 @@ pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientMan
 
     let mut p = AWPacket::new(PacketType::WorldStop);
 
-    p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    p.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(p);
 }

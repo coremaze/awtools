@@ -21,20 +21,14 @@ pub fn license_add(client: &Client, packet: &AWPacket, database: &Database) {
 
     if !client.has_admin_permissions() {
         log::trace!("Failed to add license due to lack of admin permissions");
-        p.add_var(AWPacketVar::Int(
-            VarID::ReasonCode,
-            ReasonCode::Unauthorized as i32,
-        ));
+        p.add_int(VarID::ReasonCode, ReasonCode::Unauthorized as i32);
         client.connection.send(p);
         return;
     }
 
     if world_name.contains(' ') || world_name.is_empty() {
         log::trace!("Failed to add license due to invalid name");
-        p.add_var(AWPacketVar::Int(
-            VarID::ReasonCode,
-            ReasonCode::NoSuchLicense as i32,
-        ));
+        p.add_int(VarID::ReasonCode, ReasonCode::NoSuchLicense as i32);
         client.connection.send(p);
         return;
     }
@@ -45,33 +39,24 @@ pub fn license_add(client: &Client, packet: &AWPacket, database: &Database) {
     };
 
     if database.license_by_name(&lic.name).is_ok() {
-        p.add_var(AWPacketVar::Int(
-            VarID::ReasonCode,
-            ReasonCode::WorldAlreadyExists as i32,
-        ));
+        p.add_int(VarID::ReasonCode, ReasonCode::WorldAlreadyExists as i32);
         client.connection.send(p);
         return;
     }
 
     if let Err(e) = check_valid_world_name(&lic.name) {
-        p.add_var(AWPacketVar::Int(VarID::ReasonCode, e as i32));
+        p.add_int(VarID::ReasonCode, e as i32);
         client.connection.send(p);
         return;
     }
 
     if database.license_add(&lic).is_err() {
-        p.add_var(AWPacketVar::Int(
-            VarID::ReasonCode,
-            ReasonCode::UnableToInsertName as i32,
-        ));
+        p.add_int(VarID::ReasonCode, ReasonCode::UnableToInsertName as i32);
         client.connection.send(p);
         return;
     }
 
-    p.add_var(AWPacketVar::Int(
-        VarID::ReasonCode,
-        ReasonCode::Success as i32,
-    ));
+    p.add_int(VarID::ReasonCode, ReasonCode::Success as i32);
     client.connection.send(p);
 }
 
@@ -103,10 +88,7 @@ fn send_license_lookup(
 
     // Only admins should be able to query for world licenses
     if !client.has_admin_permissions() {
-        p.add_var(AWPacketVar::Int(
-            VarID::ReasonCode,
-            ReasonCode::Unauthorized as i32,
-        ));
+        p.add_int(VarID::ReasonCode, ReasonCode::Unauthorized as i32);
         client.connection.send(p);
         return;
     }
@@ -141,7 +123,7 @@ fn send_license_lookup(
         }
     };
 
-    p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    p.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(p);
 }
@@ -151,10 +133,7 @@ pub fn license_change(client: &Client, packet: &AWPacket, database: &Database) {
 
     // Only admins should be able change world licenses
     if !client.has_admin_permissions() {
-        p.add_var(AWPacketVar::Int(
-            VarID::ReasonCode,
-            ReasonCode::Unauthorized as i32,
-        ));
+        p.add_int(VarID::ReasonCode, ReasonCode::Unauthorized as i32);
         client.connection.send(p);
         return;
     }
@@ -167,7 +146,7 @@ pub fn license_change(client: &Client, packet: &AWPacket, database: &Database) {
 
     // Validate world name
     if let Err(rc) = check_valid_world_name(&changed_lic.name) {
-        p.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+        p.add_int(VarID::ReasonCode, rc as i32);
         client.connection.send(p);
         return;
     }
@@ -176,10 +155,7 @@ pub fn license_change(client: &Client, packet: &AWPacket, database: &Database) {
     let original_lic = match database.license_by_name(&changed_lic.name) {
         Ok(lic) => lic,
         Err(_) => {
-            p.add_var(AWPacketVar::Int(
-                VarID::ReasonCode,
-                ReasonCode::NoSuchLicense as i32,
-            ));
+            p.add_int(VarID::ReasonCode, ReasonCode::NoSuchLicense as i32);
             client.connection.send(p);
             return;
         }
@@ -205,10 +181,7 @@ pub fn license_change(client: &Client, packet: &AWPacket, database: &Database) {
         plugins: changed_lic.plugins,
     };
     if database.license_change(&new_lic).is_err() {
-        p.add_var(AWPacketVar::Int(
-            VarID::ReasonCode,
-            ReasonCode::UnableToChangeLicense as i32,
-        ));
+        p.add_int(VarID::ReasonCode, ReasonCode::UnableToChangeLicense as i32);
         client.connection.send(p);
         return;
     }
@@ -222,10 +195,7 @@ pub fn license_change(client: &Client, packet: &AWPacket, database: &Database) {
     }
 
     // TODO: Kill existing world if it is now invalid/expired
-    p.add_var(AWPacketVar::Int(
-        VarID::ReasonCode,
-        ReasonCode::Success as i32,
-    ));
+    p.add_int(VarID::ReasonCode, ReasonCode::Success as i32);
     client.connection.send(p);
 }
 

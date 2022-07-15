@@ -60,6 +60,10 @@ impl AWPacket {
         &self.vars
     }
 
+    pub fn add_byte(&mut self, id: VarID, value: u8) {
+        self.add_var(AWPacketVar::Byte(id, value));
+    }
+
     pub fn get_byte(&self, var_id: VarID) -> Option<u8> {
         for var in &self.vars {
             match var {
@@ -71,6 +75,10 @@ impl AWPacket {
         None
     }
 
+    pub fn add_int(&mut self, id: VarID, value: i32) {
+        self.add_var(AWPacketVar::Int(id, value));
+    }
+
     pub fn get_int(&self, var_id: VarID) -> Option<i32> {
         for var in &self.vars {
             match var {
@@ -80,6 +88,10 @@ impl AWPacket {
         }
 
         None
+    }
+
+    pub fn add_uint(&mut self, id: VarID, value: u32) {
+        self.add_var(AWPacketVar::Uint(id, value));
     }
 
     // Convenience conversion to u32
@@ -94,6 +106,10 @@ impl AWPacket {
         None
     }
 
+    pub fn add_float(&mut self, id: VarID, value: f32) {
+        self.add_var(AWPacketVar::Float(id, value));
+    }
+
     pub fn get_float(&self, var_id: VarID) -> Option<f32> {
         for var in &self.vars {
             match var {
@@ -105,6 +121,10 @@ impl AWPacket {
         None
     }
 
+    pub fn add_string(&mut self, id: VarID, value: String) {
+        self.add_var(AWPacketVar::String(id, value));
+    }
+
     pub fn get_string(&self, var_id: VarID) -> Option<String> {
         for var in &self.vars {
             match var {
@@ -114,6 +134,10 @@ impl AWPacket {
         }
 
         None
+    }
+
+    pub fn add_data(&mut self, id: VarID, value: Vec<u8>) {
+        self.add_var(AWPacketVar::Data(id, value));
     }
 
     pub fn get_data(&self, var_id: VarID) -> Option<Vec<u8>> {

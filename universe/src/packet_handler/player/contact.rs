@@ -38,11 +38,11 @@ pub fn contact_add(
             {
                 alert_friend_request(cit_id, cont_id, database, client_manager);
             }
-            response.add_var(AWPacketVar::Uint(VarID::ContactListCitizenID, cont_id));
-            // response.add_var(AWPacketVar::Uint(
+            response.add_uint(VarID::ContactListCitizenID, cont_id);
+            // response.add_uint(
             //     VarID::ContactListOptions,
             //     database.contact_get_default(cit_id).bits(),
-            // ));
+            // );
 
             ReasonCode::Success
         }
@@ -50,7 +50,7 @@ pub fn contact_add(
     };
 
     log::info!("Contact add: {rc:?}");
-    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    response.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(response);
 }
@@ -165,7 +165,7 @@ pub fn contact_confirm(
     };
 
     let mut response = AWPacket::new(PacketType::ContactConfirm);
-    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    response.add_int(VarID::ReasonCode, rc as i32);
     client.connection.send(response);
 }
 
@@ -252,7 +252,7 @@ pub fn contact_list(
         Ok(groups) => groups,
         Err(rc) => {
             let mut response = AWPacket::new(PacketType::ContactList);
-            response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+            response.add_int(VarID::ReasonCode, rc as i32);
             client.connection.send(response);
             return;
         }
@@ -301,18 +301,12 @@ fn get_contact_list_groups(
         let (username, world, state) = contact_name_world_state(contact, database, client_manager);
 
         let mut response = AWPacket::new(PacketType::ContactList);
-        response.add_var(AWPacketVar::String(VarID::ContactListName, username));
-        response.add_var(AWPacketVar::String(VarID::ContactListWorld, world));
-        response.add_var(AWPacketVar::Int(VarID::ContactListStatus, state as i32));
-        response.add_var(AWPacketVar::Uint(
-            VarID::ContactListCitizenID,
-            contact.contact,
-        ));
-        response.add_var(AWPacketVar::Byte(VarID::ContactListMore, 1));
-        response.add_var(AWPacketVar::Uint(
-            VarID::ContactListOptions,
-            contact.options.bits(),
-        ));
+        response.add_string(VarID::ContactListName, username);
+        response.add_string(VarID::ContactListWorld, world);
+        response.add_int(VarID::ContactListStatus, state as i32);
+        response.add_uint(VarID::ContactListCitizenID, contact.contact);
+        response.add_byte(VarID::ContactListMore, 1);
+        response.add_uint(VarID::ContactListOptions, contact.options.bits());
 
         if let Err(p) = group.push(response) {
             groups.push(group);
@@ -322,8 +316,8 @@ fn get_contact_list_groups(
     }
 
     let mut response = AWPacket::new(PacketType::ContactList);
-    response.add_var(AWPacketVar::Uint(VarID::ContactListCitizenID, 0));
-    response.add_var(AWPacketVar::Byte(VarID::ContactListMore, 0));
+    response.add_uint(VarID::ContactListCitizenID, 0);
+    response.add_byte(VarID::ContactListMore, 0);
 
     if let Err(p) = group.push(response) {
         groups.push(group);

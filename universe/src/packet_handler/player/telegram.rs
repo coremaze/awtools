@@ -27,7 +27,7 @@ pub fn telegram_send(
     };
 
     let mut response = AWPacket::new(PacketType::TelegramSend);
-    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    response.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(response);
 }
@@ -106,26 +106,17 @@ pub fn telegram_get(client: &Client, packet: &AWPacket, database: &Database) {
                 .duration_since(UNIX_EPOCH)
                 .expect("Current time is before the unix epoch.")
                 .as_secs() as u32;
-            response.add_var(AWPacketVar::String(VarID::TelegramCitizenName, from_name));
-            response.add_var(AWPacketVar::Uint(
-                VarID::TelegramAge,
-                now.saturating_sub(telegram.timestamp),
-            ));
-            response.add_var(AWPacketVar::String(
-                VarID::TelegramMessage,
-                telegram.message,
-            ));
-            response.add_var(AWPacketVar::Byte(
-                VarID::TelegramsMoreRemain,
-                more_remain as u8,
-            ));
+            response.add_string(VarID::TelegramCitizenName, from_name);
+            response.add_uint(VarID::TelegramAge, now.saturating_sub(telegram.timestamp));
+            response.add_string(VarID::TelegramMessage, telegram.message);
+            response.add_byte(VarID::TelegramsMoreRemain, more_remain as u8);
 
             ReasonCode::Success
         }
         Err(x) => x,
     };
 
-    response.add_var(AWPacketVar::Int(VarID::ReasonCode, rc as i32));
+    response.add_int(VarID::ReasonCode, rc as i32);
 
     client.connection.send(response);
 }

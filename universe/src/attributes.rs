@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::database::attrib::{AttribDB, Attribute};
 use crate::database::Database;
-use crate::{AWPacket, AWPacketVar, Client, PacketType, VarID};
+use crate::{AWPacket, Client, PacketType, VarID};
 
 pub fn send_attributes(client: &Client, database: &Database) {
     let mut packet = AWPacket::new(PacketType::Attributes);
@@ -12,129 +12,126 @@ pub fn send_attributes(client: &Client, database: &Database) {
 
     let attribs = get_attributes(database);
 
-    packet.add_var(AWPacketVar::String(
+    packet.add_string(
         VarID::AttributeAllowTourists,
         attribs
             .get(&Attribute::AllowTourists)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeBetaBrowser,
         attribs
             .get(&Attribute::BetaBrowser)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeUniverseBuild,
         attribs
             .get(&Attribute::UniverseBuild)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeCitizenChanges,
         attribs
             .get(&Attribute::CitizenChanges)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeSearchTabURL,
         attribs
             .get(&Attribute::SearchTabURL)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeTimestamp,
         attribs
             .get(&Attribute::Timestamp)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeWelcomeMessage,
         attribs
             .get(&Attribute::WelcomeMessage)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeBetaWorld,
         attribs
             .get(&Attribute::BetaWorld)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeMinimumWorld,
         attribs
             .get(&Attribute::MinimumWorld)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeLatestWorld,
         attribs
             .get(&Attribute::LatestWorld)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeDefaultStartWorld,
         attribs
             .get(&Attribute::DefaultStartWorld)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeUserlist,
         attribs
             .get(&Attribute::Userlist)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeNotepadTabURL,
         attribs
             .get(&Attribute::NotepadTabURL)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeMinimumBrowser,
         attribs
             .get(&Attribute::MinimumBrowser)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeLatestBrowser,
         attribs
             .get(&Attribute::LatestBrowser)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(
         VarID::AttributeUnknownBilling7,
         attribs
             .get(&Attribute::UnknownBilling7)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
-        VarID::AttributeBillingMethod,
-        "".to_string(),
-    ));
-    packet.add_var(AWPacketVar::String(
+    );
+    packet.add_string(VarID::AttributeBillingMethod, "".to_string());
+    packet.add_string(
         VarID::AttributeBillingUnknown9,
         attribs
             .get(&Attribute::BillingUnknown9)
             .unwrap_or(&String::new())
             .to_string(),
-    ));
+    );
 
     client.connection.send(packet);
 }
