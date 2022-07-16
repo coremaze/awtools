@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Universe server is the central server to which all players, bots, and World servers connect to and are managed by.
+The Universe server is the central server to which all players, bots, and World servers connect and are managed by.
 
 ## Building
 
