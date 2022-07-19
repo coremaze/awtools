@@ -1,6 +1,6 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -31,6 +31,43 @@ pub enum Entity {
 }
 
 impl Entity {
+    pub fn new_citizen(
+        citizen_id: u32,
+        privilege_id: Option<u32>,
+        session_id: u16,
+        build: i32,
+        username: &str,
+        ip: IpAddr,
+    ) -> Self {
+        Self::Player(PlayerInfo {
+            build,
+            session_id,
+            citizen_id: Some(citizen_id),
+            privilege_id: privilege_id,
+            username: username.to_string(),
+            nonce: None,
+            world: None,
+            ip,
+            state: PlayerState::Online,
+            afk: false,
+        })
+    }
+
+    pub fn new_tourist(session_id: u16, build: i32, username: &str, ip: IpAddr) -> Self {
+        Self::Player(PlayerInfo {
+            build,
+            session_id,
+            citizen_id: None,
+            privilege_id: None,
+            username: username.to_string(),
+            nonce: None,
+            world: None,
+            ip,
+            state: PlayerState::Online,
+            afk: false,
+        })
+    }
+
     pub fn is_player(&self) -> bool {
         matches!(self, Entity::Player(_))
     }

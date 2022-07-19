@@ -60,20 +60,14 @@ pub fn login(
                 (Some(citizen), Some(ClientType::UnspecifiedHuman)) => {
                     client.info_mut().client_type = Some(ClientType::Citizen);
 
-                    let client_entity = Entity::Player(PlayerInfo {
-                        build: browser_build.unwrap_or(0),
-                        session_id: client_manager.create_session_id(),
-                        citizen_id: Some(citizen.id),
-                        privilege_id: credentials.privilege_id,
-                        username: citizen.name,
-                        nonce: None,
-                        world: None,
-                        ip: client.addr.ip(),
-                        state: PlayerState::Online,
-                        afk: false,
-                    });
-
-                    client.info_mut().entity = Some(client_entity);
+                    client.info_mut().entity = Some(Entity::new_citizen(
+                        citizen.id,
+                        credentials.privilege_id,
+                        client_manager.create_session_id(),
+                        browser_build.unwrap_or(0),
+                        &citizen.name,
+                        client.addr.ip(),
+                    ));
 
                     // Update the user's friends to tell them this user is online
                     update_contacts_of_user(citizen.id, database, client_manager);
@@ -91,20 +85,12 @@ pub fn login(
                 (None, Some(ClientType::UnspecifiedHuman)) => {
                     client.info_mut().client_type = Some(ClientType::Tourist);
 
-                    let client_entity = Entity::Player(PlayerInfo {
-                        build: browser_build.unwrap_or(0),
-                        session_id: client_manager.create_session_id(),
-                        citizen_id: None,
-                        privilege_id: None,
-                        username: credentials.username.unwrap_or_default(),
-                        nonce: None,
-                        world: None,
-                        ip: client.addr.ip(),
-                        state: PlayerState::Online,
-                        afk: false,
-                    });
-
-                    client.info_mut().entity = Some(client_entity);
+                    client.info_mut().entity = Some(Entity::new_tourist(
+                        client_manager.create_session_id(),
+                        browser_build.unwrap_or(0),
+                        &credentials.username.unwrap_or_default(),
+                        client.addr.ip(),
+                    ));
                 }
                 (_, Some(ClientType::Bot)) => {
                     todo!();
