@@ -227,7 +227,15 @@ impl AWProtocol {
             self.handle_messages();
         }
 
+        self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
+        log::trace!("Ended stream {:?}", self.stream);
         drop(self);
+    }
+
+    pub fn send_or_kill(&mut self, packets: &mut [AWPacket], compression: bool) {
+        if self.send(packets, compression).is_err() {
+            self.kill();
+        }
     }
 
     fn handle_messages(&mut self) {
@@ -238,16 +246,10 @@ impl AWProtocol {
 
         match message {
             ProtocolMessage::Packet(packet) => {
-                if self.send(&mut [packet], true).is_err() {
-                    self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
-                    self.dead = true;
-                }
+                self.send_or_kill(&mut [packet], true);
             }
             ProtocolMessage::PacketGroup(mut packets) => {
-                if self.send(&mut packets, true).is_err() {
-                    self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
-                    self.dead = true;
-                }
+                self.send_or_kill(&mut packets, true);
             }
             ProtocolMessage::StreamKey(key) => {
                 self.recv_cipher = Some(AWCryptA4::from_key(&key));
@@ -258,9 +260,13 @@ impl AWProtocol {
                 self.encrypt_data(should);
             }
             ProtocolMessage::Disconnect => {
-                self.dead = true;
+                self.kill();
             }
         }
+    }
+
+    fn kill(&mut self) {
+        self.dead = true;
     }
 
     fn handle_inbound_packets(&mut self) {
@@ -274,7 +280,7 @@ impl AWProtocol {
             Some(packet) => packet,
             None => {
                 // Kill connection if could not get packet
-                self.dead = true;
+                self.kill();
                 return;
             }
         };
@@ -284,7 +290,7 @@ impl AWProtocol {
         let send_result = self.inbound_packets.send(ProtocolMessage::Packet(packet));
 
         if send_result.is_err() {
-            self.dead = true;
+            self.kill();
         }
     }
 
