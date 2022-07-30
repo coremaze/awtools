@@ -257,7 +257,7 @@ impl AWPacket {
         }
 
         let opcode = PacketType::from_i16(header.opcode).unwrap_or_else(|| {
-            eprintln!("Deserialized unknown packet ID {}", header.opcode);
+            log::debug!("Deserialized unknown packet ID {}", header.opcode);
             PacketType::Unknown
         });
 

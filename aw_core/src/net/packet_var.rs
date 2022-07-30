@@ -248,7 +248,7 @@ impl AWPacketVar {
         let data_type_num = (data_type_and_size & 0xF000) >> 12;
 
         let var_id: VarID = VarID::from_u16(var_id_num).unwrap_or_else(|| {
-            eprintln!("Received unknown variable id {var_id_num}");
+            log::debug!("Received unknown variable id {var_id_num}");
             VarID::Unknown
         });
 
