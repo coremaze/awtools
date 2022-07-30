@@ -231,31 +231,34 @@ impl AWProtocol {
     }
 
     fn handle_messages(&mut self) {
-        if let Ok(message) = self.outbound_packets.try_recv() {
-            match message {
-                ProtocolMessage::Packet(packet) => {
-                    if self.send(&mut [packet], true).is_err() {
-                        self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
-                        self.dead = true;
-                    }
-                }
-                ProtocolMessage::PacketGroup(mut packets) => {
-                    if self.send(&mut packets, true).is_err() {
-                        self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
-                        self.dead = true;
-                    }
-                }
-                ProtocolMessage::StreamKey(key) => {
-                    self.recv_cipher = Some(AWCryptA4::from_key(&key));
-                    // There may be data that has already been sent, so we need to decrypt it now.
-                    // self.recv_cipher.as_mut().unwrap().decrypt_in_place(&mut self.data);
-                }
-                ProtocolMessage::Encrypt(should) => {
-                    self.encrypt_data(should);
-                }
-                ProtocolMessage::Disconnect => {
+        let message = match self.outbound_packets.try_recv() {
+            Ok(message) => message,
+            Err(_) => return,
+        };
+
+        match message {
+            ProtocolMessage::Packet(packet) => {
+                if self.send(&mut [packet], true).is_err() {
+                    self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
                     self.dead = true;
                 }
+            }
+            ProtocolMessage::PacketGroup(mut packets) => {
+                if self.send(&mut packets, true).is_err() {
+                    self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
+                    self.dead = true;
+                }
+            }
+            ProtocolMessage::StreamKey(key) => {
+                self.recv_cipher = Some(AWCryptA4::from_key(&key));
+                // There may be data that has already been sent, so we need to decrypt it now.
+                // self.recv_cipher.as_mut().unwrap().decrypt_in_place(&mut self.data);
+            }
+            ProtocolMessage::Encrypt(should) => {
+                self.encrypt_data(should);
+            }
+            ProtocolMessage::Disconnect => {
+                self.dead = true;
             }
         }
     }
