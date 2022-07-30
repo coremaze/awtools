@@ -264,23 +264,27 @@ impl AWProtocol {
     }
 
     fn handle_inbound_packets(&mut self) {
-        if self.needs_action() {
-            match self.recv_next_packet() {
-                Some(packet) => {
-                    self.last_packet_type = Some(packet.get_opcode());
-                    if self
-                        .inbound_packets
-                        .send(ProtocolMessage::Packet(packet))
-                        .is_err()
-                    {
-                        self.dead = true;
-                    }
-                }
-                None => {
-                    self.inbound_packets.send(ProtocolMessage::Disconnect).ok();
-                    self.dead = true;
-                }
+        if !self.needs_action() {
+            // No work to do
+            return;
+        }
+
+        // Get the next inbound packet
+        let packet = match self.recv_next_packet() {
+            Some(packet) => packet,
+            None => {
+                // Kill connection if could not get packet
+                self.dead = true;
+                return;
             }
+        };
+
+        self.last_packet_type = Some(packet.get_opcode());
+
+        let send_result = self.inbound_packets.send(ProtocolMessage::Packet(packet));
+
+        if send_result.is_err() {
+            self.dead = true;
         }
     }
 
