@@ -14,7 +14,7 @@ Build a release version of the Universe server with `cargo build -r`, or run it 
 
 Upon running the Universe for the first time, a `universe.toml` file will be created in the present working directory. A few components must be set up before using the Universe server.
 
-1) The IP address of the Universe server in `universe.toml` must be the same as the IP address that incoming clients will connect to.
+1) The `license_ip` address of the Universe server in `universe.toml` must be the same as the IP address that incoming clients will connect to.
 2) The IP, port, and credentials for an active MySQL server need to be provided in `universe.toml`. Install, start, and configure a MySQL server if necessary.
    * The database (by default `aworld_universe`) needs to be created; the Universe server will not do it automatically.
 

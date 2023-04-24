@@ -20,13 +20,21 @@ pub struct UniverseServer {
 impl UniverseServer {
     pub fn new(config: config::Config) -> Result<Self, String> {
         let database = Database::new(config.mysql, &config.universe)?;
-        let ip = SocketAddrV4::new(config.universe.ip, config.universe.port);
-        let listener = TcpListener::bind(&ip).unwrap();
+
+        // The Universe server provides a license to incoming clients, which must contain information
+        // about the IP address that the client is connecting to. This could be different from the
+        // IP address that the server is actually bound to (e.g. bound to 0.0.0.0 while clients connect
+        // to some other IP).
+        let bind_socket = SocketAddrV4::new(config.universe.bind_ip, config.universe.port);
+        let license_socket_addr =
+            SocketAddrV4::new(config.universe.license_ip, config.universe.port);
+
+        let listener = TcpListener::bind(&bind_socket).unwrap();
         listener.set_nonblocking(true).unwrap();
 
         Ok(Self {
             config: config.universe,
-            license_generator: LicenseGenerator::new(&ip),
+            license_generator: LicenseGenerator::new(&license_socket_addr),
             client_manager: Default::default(),
             database,
             listener,
@@ -35,9 +43,10 @@ impl UniverseServer {
 
     pub fn run(&mut self) {
         log::info!(
-            "Starting universe on {}:{}",
-            self.config.ip,
-            self.config.port
+            "Starting universe on {}:{}. Providing licenses for {}.",
+            self.config.bind_ip,
+            self.config.port,
+            self.config.license_ip,
         );
         loop {
             self.accept_new_clients();

@@ -13,7 +13,8 @@ pub struct Config {
 /// Configuration section for the universe
 #[derive(Deserialize, Serialize, Debug)]
 pub struct UniverseConfig {
-    pub ip: Ipv4Addr,
+    pub license_ip: Ipv4Addr,
+    pub bind_ip: Ipv4Addr,
     pub port: u16,
     pub user_list: bool,
     pub allow_citizen_changes: bool,
@@ -52,7 +53,8 @@ impl Config {
 impl Default for UniverseConfig {
     fn default() -> Self {
         Self {
-            ip: Ipv4Addr::new(127, 0, 0, 1),
+            license_ip: Ipv4Addr::new(127, 0, 0, 1),
+            bind_ip: Ipv4Addr::new(0, 0, 0, 0),
             port: 6670,
             user_list: true,
             allow_citizen_changes: true,
