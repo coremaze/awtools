@@ -14,7 +14,10 @@ use super::{send_telegram_update_available, update_contacts_of_user};
 struct LoginCredentials {
     pub user_type: Option<ClientType>,
     pub username: Option<String>,
+
     pub password: Option<String>,
+    pub password_hash: Option<Vec<u8>>,
+
     pub email: Option<String>,
     pub privilege_id: Option<u32>,
     pub privilege_password: Option<String>,
@@ -29,7 +32,17 @@ impl LoginCredentials {
                 .map(ClientType::from_i32)
                 .unwrap(),
             username: packet.get_string(VarID::LoginUsername),
+
+            #[cfg(feature = "protocol_v4")]
             password: packet.get_string(VarID::Password),
+            #[cfg(feature = "protocol_v4")]
+            password_hash: None,
+
+            #[cfg(feature = "protocol_v6")]
+            password_hash: packet.get_data(VarID::AttributeUserlist),
+            #[cfg(feature = "protocol_v6")]
+            password: None,
+
             email: packet.get_string(VarID::Email),
             privilege_id: packet.get_uint(VarID::PrivilegeUserID),
             privilege_password: packet.get_string(VarID::PrivilegePassword),
@@ -169,7 +182,8 @@ fn validate_human_login(
             database,
             client,
             &credentials.username,
-            &credentials.password,
+            credentials.password.as_ref(),
+            credentials.password_hash.as_ref(),
             credentials.privilege_id,
             &credentials.privilege_password,
         )?;

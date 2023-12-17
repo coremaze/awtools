@@ -2,6 +2,7 @@
 name = "aw_core"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,3 +17,10 @@ num-traits = "0.2.15"
 num-derive = "0.3.3"
 flate2 = { version = "1.0.17", features = ["zlib"], default-features = false }
 log = "0.4.17"
+ofb = "0.6.1"
+aes = "0.8.3"
+
+[features]
+stream_cipher_aes = []
+stream_cipher_rc4 = []
+default = ["stream_cipher_rc4"]

@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    net::IpAddr,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::{
     client::{Client, ClientManager, Entity},
@@ -53,7 +56,9 @@ pub fn world_lookup(client: &Client, packet: &AWPacket, client_manager: &ClientM
                 nonce.copy_from_slice(&rand_bytes[0..255]);
                 info.nonce = Some(nonce);
 
-                p.add_uint(VarID::WorldAddress, ip_to_num(world.ip));
+                let ip = IpAddr::from([127, 0, 0, 1]);
+                p.add_uint(VarID::WorldAddress, ip_to_num(ip));
+                // p.add_uint(VarID::WorldAddress, ip_to_num(world.ip));
                 p.add_uint(VarID::WorldPort, world.port as u32);
                 p.add_uint(VarID::WorldLicenseUsers, world.max_users);
                 p.add_uint(VarID::WorldLicenseRange, world.world_size);

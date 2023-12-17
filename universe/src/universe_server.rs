@@ -43,10 +43,11 @@ impl UniverseServer {
 
     pub fn run(&mut self) {
         log::info!(
-            "Starting universe on {}:{}. Providing licenses for {}.",
+            "Starting universe on {}:{}. Providing licenses for {}. Protocol version {}.",
             self.config.bind_ip,
             self.config.port,
             self.config.license_ip,
+            Self::protocol_version(),
         );
         loop {
             self.accept_new_clients();
@@ -54,6 +55,16 @@ impl UniverseServer {
             self.client_manager.remove_dead_clients(&self.database);
             self.client_manager.send_heartbeats();
         }
+    }
+
+    fn protocol_version() -> &'static str {
+        #[cfg(feature = "protocol_v4")]
+        return "4";
+
+        #[cfg(feature = "protocol_v6")]
+        return "6";
+
+        return "";
     }
 
     fn accept_new_clients(&mut self) {

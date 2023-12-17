@@ -1,5 +1,6 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
+    io::Write,
     net::{IpAddr, SocketAddr},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -15,6 +16,7 @@ use crate::{
     AWConnection, AWCryptRSA,
 };
 use aw_core::{AWPacket, PacketType, ReasonCode};
+use byteorder::{LittleEndian, WriteBytesExt};
 use num_derive::FromPrimitive;
 
 /// Game-related client state
@@ -228,16 +230,12 @@ impl ClientManager {
         db: &Database,
         client: &Client,
         username: &Option<String>,
-        password: &Option<String>,
+        password: Option<&String>,
+        password_hash: Option<&Vec<u8>>,
         priv_id: Option<u32>,
         priv_pass: &Option<String>,
     ) -> Result<CitizenQuery, ReasonCode> {
         // Name and password must be present
-        let password = password.as_ref().ok_or(ReasonCode::InvalidPassword)?;
-        if password.is_empty() {
-            return Err(ReasonCode::InvalidPassword);
-        }
-
         let username = username.as_ref().ok_or(ReasonCode::NoSuchCitizen)?;
         if username.is_empty() {
             return Err(ReasonCode::NoSuchCitizen);
@@ -275,8 +273,39 @@ impl ClientManager {
             .or(Err(ReasonCode::NoSuchCitizen))?;
 
         // Is login password correct?
-        if login_citizen.password != *password {
-            return Err(ReasonCode::InvalidPassword);
+        #[cfg(feature = "protocol_v4")]
+        {
+            let password = password.ok_or(ReasonCode::InvalidPassword)?;
+            if password.is_empty() {
+                return Err(ReasonCode::InvalidPassword);
+            }
+            if login_citizen.password != *password {
+                return Err(ReasonCode::InvalidPassword);
+            }
+        }
+        #[cfg(feature = "protocol_v6")]
+        {
+            let mut correct_password_buf = Vec::<u8>::new();
+            correct_password_buf.write_u32::<LittleEndian>(login_citizen.password.len() as u32);
+            correct_password_buf.write_all(
+                &login_citizen
+                    .password
+                    .as_bytes()
+                    .iter()
+                    .rev()
+                    .map(|x| *x)
+                    .collect::<Vec<u8>>(),
+            );
+
+            let hashed_correct_password = md5::compute(correct_password_buf.to_vec());
+
+            let Some(password_hash) = password_hash else {
+                return Err(ReasonCode::InvalidPassword);
+            };
+
+            if *password_hash != hashed_correct_password.to_vec() {
+                return Err(ReasonCode::InvalidPassword);
+            }
         }
 
         // Is it enabled?

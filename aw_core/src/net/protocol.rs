@@ -1,19 +1,24 @@
 //! Networking protocol implementation
-use crate::crypt_a4::AWCryptA4;
 use crate::net::packet::{AWPacket, DeserializeError, PacketType};
 use crate::ReasonCode;
+use crate::{AWCryptStream, StreamKeyError};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
+#[cfg(feature = "stream_cipher_aes")]
+type StreamCipherType = crate::AWCryptAES;
+#[cfg(feature = "stream_cipher_rc4")]
+type StreamCipherType = crate::AWCryptA4;
+
 /// State of an instance of the AW protocol.
 pub struct AWProtocol {
     stream: TcpStream,
     data: Vec<u8>,
-    send_cipher: AWCryptA4,
+    send_cipher: StreamCipherType,
     should_encrypt: bool,
-    recv_cipher: Option<AWCryptA4>,
+    recv_cipher: Option<StreamCipherType>,
     dead: bool,
     inbound_packets: Sender<ProtocolMessage>,
     outbound_packets: Receiver<ProtocolMessage>,
@@ -31,7 +36,7 @@ impl AWProtocol {
         Self {
             stream,
             data: Vec::new(),
-            send_cipher: AWCryptA4::new(),
+            send_cipher: StreamCipherType::new(),
             should_encrypt: false,
             recv_cipher: None,
             dead: false,
@@ -44,13 +49,14 @@ impl AWProtocol {
     }
 
     /// Set the key to receive data (i.e. the key the other end of the connection is using).
-    pub fn set_recv_key(&mut self, key: &[u8]) {
-        self.recv_cipher = Some(AWCryptA4::from_key(key));
+    pub fn set_recv_key(&mut self, key: &[u8]) -> Result<(), StreamKeyError> {
+        self.recv_cipher = Some(StreamCipherType::from_key(key)?);
+        Ok(())
     }
 
     /// Get the key for this side of the connection.
     pub fn get_send_key(&self) -> Vec<u8> {
-        self.send_cipher.get_key()
+        self.send_cipher.get_initial_random_buffer()
     }
 
     /// Specify whether transmitted data should be encrypted.
@@ -252,7 +258,10 @@ impl AWProtocol {
                 self.send_or_kill(&mut packets, true);
             }
             ProtocolMessage::StreamKey(key) => {
-                self.recv_cipher = Some(AWCryptA4::from_key(&key));
+                match StreamCipherType::from_key(&key) {
+                    Ok(stream_cipher) => self.recv_cipher = Some(stream_cipher),
+                    Err(why) => self.kill(),
+                }
                 // There may be data that has already been sent, so we need to decrypt it now.
                 // self.recv_cipher.as_mut().unwrap().decrypt_in_place(&mut self.data);
             }

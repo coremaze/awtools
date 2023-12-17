@@ -46,7 +46,7 @@ pub enum VarID {
     AttributeMinimumWorld = 14,
     AttributeLatestWorld = 15,
     AttributeDefaultStartWorld = 16,
-    AttributeUserlist = 17,
+    AttributeUserlist = 17, // Used for password hash in AW 6
     AttributeNotepadTabURL = 18,
     AttributeMailTemplate = 19,
     AttributeMailFile = 20,
