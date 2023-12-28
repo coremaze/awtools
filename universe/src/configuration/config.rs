@@ -1,6 +1,10 @@
 use std::net::Ipv4Addr;
 
+use crate::configuration::config;
+
+use super::configurator::run_configurator;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 const UNIVERSE_CONFIG_PATH: &str = "universe.toml";
 
 /// Struct representing all configurations in the config file.
@@ -32,10 +36,22 @@ pub struct MysqlConfig {
 
 impl Config {
     /// Read and (if necessary) generate configuation file.
-    pub fn get() -> Result<Self, String> {
-        let config: Self = match std::fs::read_to_string(UNIVERSE_CONFIG_PATH) {
-            Ok(contents) => toml::from_str(&contents).map_err(|e| e.to_string())?,
-            Err(_) => Config::default(),
+    pub fn get_interactive() -> Result<Self, String> {
+        // Check if config file exists. If not, run configurator.
+        // If it does exist, parse it.
+        let config_path = Path::new(UNIVERSE_CONFIG_PATH);
+
+        let config = if !config_path.exists() {
+            println!(
+                "No config file was found at {}. Running configurator.",
+                config_path.display()
+            );
+            run_configurator()
+        } else {
+            match std::fs::read_to_string(config_path) {
+                Ok(contents) => toml::from_str(&contents).map_err(|e| e.to_string())?,
+                Err(why) => Err(why.to_string())?,
+            }
         };
 
         config.save();

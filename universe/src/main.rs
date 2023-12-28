@@ -7,11 +7,12 @@ pub use universe_server::UniverseServer;
 pub mod attributes;
 pub mod universe_license;
 pub use attributes::send_attributes;
-pub mod config;
 mod database;
 pub mod packet_handler;
 pub mod player;
 pub mod world;
+
+mod configuration;
 
 use env_logger::Builder;
 pub use log::{debug, error, info, trace, warn};
@@ -35,7 +36,7 @@ fn main() {
     let args = Args::parse();
     init_logging(args.log_level);
 
-    match config::Config::get() {
+    match configuration::Config::get_interactive() {
         Ok(config) => {
             start_universe(config);
         }
@@ -45,7 +46,7 @@ fn main() {
     }
 }
 
-fn start_universe(config: config::Config) {
+fn start_universe(config: configuration::Config) {
     match UniverseServer::new(config) {
         Ok(mut universe) => {
             universe.run();
