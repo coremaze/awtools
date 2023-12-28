@@ -8,6 +8,8 @@ use crate::{
     universe_license::LicenseGenerator,
 };
 use std::net::{SocketAddrV4, TcpListener};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 pub struct UniverseServer {
     config: configuration::UniverseConfig,
@@ -49,12 +51,23 @@ impl UniverseServer {
             self.config.license_ip,
             Self::protocol_version(),
         );
-        loop {
+
+        let running = Arc::new(AtomicBool::new(true));
+
+        let r = running.clone();
+        ctrlc::set_handler(move || {
+            r.store(false, Ordering::SeqCst);
+        })
+        .expect("Error setting Ctrl-C handler");
+
+        while running.load(Ordering::SeqCst) {
             self.accept_new_clients();
             self.service_clients();
             self.client_manager.remove_dead_clients(&self.database);
             self.client_manager.send_heartbeats();
         }
+
+        log::info!("Shutting down universe.");
     }
 
     fn protocol_version() -> &'static str {
