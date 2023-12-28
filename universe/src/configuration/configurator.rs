@@ -124,5 +124,6 @@ fn get_string(message: &str, default_value: &mut String) {
         }
 
         *default_value = input_trimmed.to_string();
+        return;
     }
 }
