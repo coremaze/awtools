@@ -1,6 +1,6 @@
 use mysql::*;
 
-use crate::config::{MysqlConfig, UniverseConfig};
+use crate::configuration::{MysqlConfig, UniverseConfig};
 
 pub use self::attrib::AttribDB;
 pub use self::cav::CavDB;

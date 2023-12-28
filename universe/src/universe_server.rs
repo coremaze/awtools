@@ -2,7 +2,7 @@ use aw_core::*;
 
 use crate::{
     client::{Client, ClientManager},
-    config,
+    configuration,
     database::Database,
     packet_handler,
     universe_license::LicenseGenerator,
@@ -10,7 +10,7 @@ use crate::{
 use std::net::{SocketAddrV4, TcpListener};
 
 pub struct UniverseServer {
-    config: config::UniverseConfig,
+    config: configuration::UniverseConfig,
     license_generator: LicenseGenerator,
     client_manager: ClientManager,
     database: Database,
@@ -18,7 +18,7 @@ pub struct UniverseServer {
 }
 
 impl UniverseServer {
-    pub fn new(config: config::Config) -> Result<Self, String> {
+    pub fn new(config: configuration::Config) -> Result<Self, String> {
         let database = Database::new(config.mysql, &config.universe)?;
 
         // The Universe server provides a license to incoming clients, which must contain information

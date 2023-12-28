@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::config::UniverseConfig;
+use crate::configuration::UniverseConfig;
 
 use super::{fetch_int, fetch_string, Database};
 use aw_core::ReasonCode;
