@@ -48,12 +48,7 @@ impl AWPacket {
 
     /// Get a variable from a packet.
     pub fn get_var(&self, var_id: VarID) -> Option<&AWPacketVar> {
-        for var in &self.vars {
-            if var.get_var_id() == var_id {
-                return Some(var);
-            }
-        }
-        None
+        self.vars.iter().find(|&var| var.get_var_id() == var_id)
     }
 
     pub fn get_vars(&self) -> &[AWPacketVar] {

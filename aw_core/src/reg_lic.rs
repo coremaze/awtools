@@ -51,7 +51,7 @@ impl AWRegLic {
         key_type: RSAKey,
     ) -> Result<String, String> {
         let bin = self.code_generate_binary(data, key_type)?;
-        Ok(base64::encode(&bin))
+        Ok(base64::encode(bin))
     }
 }
 

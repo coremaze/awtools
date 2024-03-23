@@ -3,9 +3,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::database::attrib::{AttribDB, Attribute};
 use crate::database::Database;
-use crate::{AWPacket, Client, PacketType, VarID};
+use crate::{AWPacket, PacketType, UniverseConnection, VarID};
 
-pub fn send_attributes(client: &Client, database: &Database) {
+pub fn send_attributes(conn: &UniverseConnection, database: &Database) {
     let mut packet = AWPacket::new(PacketType::Attributes);
     packet.set_header_0(0);
     packet.set_header_1(0);
@@ -133,7 +133,7 @@ pub fn send_attributes(client: &Client, database: &Database) {
             .to_string(),
     );
 
-    client.connection.send(packet);
+    conn.send(packet);
 }
 
 pub fn get_attributes(database: &Database) -> HashMap<Attribute, String> {
@@ -158,7 +158,7 @@ pub fn get_attributes(database: &Database) -> HashMap<Attribute, String> {
     result
 }
 
-pub fn set_attribute(var_id: VarID, value: &str, database: &Database) -> Result<(), ()> {
+pub fn set_attribute(var_id: VarID, value: &str, database: &Database) {
     let id = match var_id {
         VarID::AttributeAllowTourists => Attribute::AllowTourists,
         VarID::AttributeUnknownBilling1 => Attribute::UnknownBilling1,
@@ -185,11 +185,14 @@ pub fn set_attribute(var_id: VarID, value: &str, database: &Database) -> Result<
         VarID::AttributePAVObjectPath => Attribute::PAVObjectPath,
         VarID::AttributeUnknownUniverseSetting => Attribute::UnknownUniverseSetting,
         _ => {
-            return Err(());
+            log::warn!(
+                "Couldn't set attribute because {var_id:?} is not a valid attribute variable"
+            );
+            return;
         }
     };
 
-    database.attrib_set(id, value).map_err(|_| ())?;
-
-    Ok(())
+    if let Err(why) = database.attrib_set(id, value) {
+        log::warn!("Couldn't set attribute in database. {why:?}");
+    }
 }

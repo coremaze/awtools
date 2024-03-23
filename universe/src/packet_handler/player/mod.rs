@@ -19,33 +19,18 @@ pub use attribute::*;
 mod world;
 pub use world::*;
 
-use std::{
-    net::IpAddr,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{
-    client::{Client, ClientManager},
-    player::PlayerInfo,
-};
+use crate::{client::UniverseConnectionID, get_conn, get_conn_mut, UniverseServer};
 use aw_core::*;
 
-pub fn heartbeat(client: &Client) {
-    log::info!("Received heartbeat from {}", client.addr.ip());
+pub fn heartbeat(server: &UniverseServer, cid: UniverseConnectionID) {
+    let conn = get_conn!(server, cid, "heartbeat");
+
+    log::debug!("Received heartbeat from {}", conn.addr().ip());
 }
 
-pub fn ip_to_num(ip: IpAddr) -> u32 {
-    let mut res: u32 = 0;
-    if let std::net::IpAddr::V4(v4) = ip {
-        for octet in v4.octets().iter().rev() {
-            res <<= 8;
-            res |= *octet as u32;
-        }
-    }
-    res
-}
-
-pub fn user_list(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
+pub fn user_list(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Current time is before the unix epoch.")
@@ -60,5 +45,26 @@ pub fn user_list(client: &Client, packet: &AWPacket, client_manager: &ClientMana
         return;
     }
 
-    PlayerInfo::send_updates_to_one(&client_manager.get_player_infos(), client);
+    let conn = get_conn_mut!(server, cid, "user_list");
+
+    let ip = conn.addr().ip();
+
+    let Some(player) = conn.player_info_mut() else {
+        return;
+    };
+
+    let name = player.username.clone();
+
+    let player_list = &mut player.tabs.player_list;
+
+    let current_list = player_list.current().clone();
+
+    log::debug!(
+        "Sending the full CURRENT player list to {} ({}) current: {:?}",
+        ip,
+        name,
+        current_list
+    );
+
+    current_list.send_list(conn);
 }

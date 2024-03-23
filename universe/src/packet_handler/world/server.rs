@@ -1,14 +1,21 @@
 use crate::{
-    client::{Client, ClientType, Entity},
-    world::{WorldServerInfo, WorldStatus},
+    client::{ClientInfo, UniverseConnectionID},
+    get_conn_mut,
+    world::WorldServer,
+    UniverseServer,
 };
 use aw_core::{AWPacket, VarID};
 
-pub fn world_server_start(client: &Client, packet: &AWPacket) {
-    if let Some(client_type) = client.info().client_type {
+pub fn world_server_start(
+    server: &mut UniverseServer,
+    cid: UniverseConnectionID,
+    packet: &AWPacket,
+) {
+    let conn = get_conn_mut!(server, cid, "world_server_start");
+    if conn.client.is_some() {
         log::warn!(
-            "A client who already has type {:?} tried to start a world server.",
-            client_type
+            "A connection who already has client {:?} tried to start a world server.",
+            conn.client
         );
         return;
     }
@@ -18,21 +25,15 @@ pub fn world_server_start(client: &Client, packet: &AWPacket) {
     let world_port = packet.get_int(VarID::WorldPort);
 
     if let (Some(world_build), Some(world_port)) = (world_build, world_port) {
-        let client_entity = Entity::WorldServer(WorldServerInfo {
+        conn.client = Some(ClientInfo::WorldServer(WorldServer {
             build: world_build,
             server_port: world_port as u16,
             worlds: Vec::new(),
-        });
+        }));
 
-        client.info_mut().client_type = Some(ClientType::World);
-        client.info_mut().entity = Some(client_entity);
-
-        log::info!("World server {} connected.", client.addr.ip());
-    }
-}
-
-pub fn world_server_hide_all(server: &mut WorldServerInfo) {
-    for world in &mut server.worlds {
-        world.status = WorldStatus::Hidden;
+        log::info!(
+            "Connection {} has made itself a world server.",
+            conn.addr().ip()
+        );
     }
 }

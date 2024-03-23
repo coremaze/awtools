@@ -1,7 +1,7 @@
 use aw_core::*;
 
 mod client;
-pub use client::{Client, ClientType};
+pub use client::UniverseConnection;
 mod universe_server;
 pub use universe_server::UniverseServer;
 pub mod attributes;
@@ -9,7 +9,8 @@ pub mod universe_license;
 pub use attributes::send_attributes;
 mod database;
 pub mod packet_handler;
-pub mod player;
+pub mod tabs;
+pub mod telegram;
 pub mod world;
 
 mod configuration;
@@ -41,7 +42,7 @@ fn main() {
             start_universe(config);
         }
         Err(err) => {
-            eprintln!("Could not get universe configuration: {err}");
+            log::error!("Could not get universe configuration: {err}");
         }
     }
 }
@@ -52,7 +53,7 @@ fn start_universe(config: configuration::Config) {
             universe.run();
         }
         Err(err) => {
-            eprintln!("Could not create universe: {err}");
+            log::error!("Could not create universe: {err}");
         }
     }
 }

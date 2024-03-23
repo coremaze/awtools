@@ -1,38 +1,69 @@
 use std::{
-    cell::{Ref, RefCell, RefMut},
-    io::Write,
     net::{IpAddr, SocketAddr},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::{
-    database::{
-        citizen::{CitizenDB, CitizenQuery},
-        Database,
-    },
-    packet_handler::{self, update_contacts_of_user},
-    player::{PlayerInfo, PlayerState},
-    world::{World, WorldServerInfo},
+    tabs::{Tabs, WorldListEntry, WorldStatus},
+    world::{World, WorldServer},
     AWConnection, AWCryptRSA,
 };
-use aw_core::{AWPacket, PacketType, ReasonCode};
-use byteorder::{LittleEndian, WriteBytesExt};
-use num_derive::FromPrimitive;
+use aw_core::{AWPacket, AWPacketGroup, PacketType, ProtocolMessage};
+use std::collections::HashMap;
 
-/// Game-related client state
-#[derive(Default)]
-pub struct UserInfo {
-    pub client_type: Option<ClientType>,
-    pub entity: Option<Entity>,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PlayerState {
+    Hidden = 0,
+    Online = 1,
+}
+
+/// Information that every player has.
+#[derive(Debug)]
+pub struct GenericPlayer {
+    /// Browser build number
+    pub build: i32,
+
+    pub session_id: u16,
+    pub privilege_id: Option<u32>,
+    pub username: String,
+    pub nonce: Option<[u8; 255]>, // AW4 worlds allow 256 bytes, AW5 worlds allow 255 bytes
+    pub world: Option<String>,
+    pub ip: IpAddr,
+    pub afk: bool,
+
+    pub tabs: Tabs,
+}
+
+impl GenericPlayer {
+    pub fn new(session_id: u16, build: i32, privilege_id: Option<u32>, username: &str) -> Self {
+        Self {
+            build,
+            session_id,
+            privilege_id,
+            username: username.to_string(),
+            nonce: None,
+            world: None,
+            ip: IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+            afk: false,
+            tabs: Tabs::new(),
+        }
+    }
 }
 
 #[derive(Debug)]
-pub enum Entity {
-    Player(PlayerInfo),
-    WorldServer(WorldServerInfo),
+pub struct Citizen {
+    pub cit_id: u32,
+    pub player_info: GenericPlayer,
 }
 
-impl Entity {
+#[derive(Debug)]
+pub enum Player {
+    Citizen(Citizen),
+    Tourist(GenericPlayer),
+    Bot(GenericPlayer),
+}
+
+impl Player {
     pub fn new_citizen(
         citizen_id: u32,
         privilege_id: Option<u32>,
@@ -41,55 +72,170 @@ impl Entity {
         username: &str,
         ip: IpAddr,
     ) -> Self {
-        Self::Player(PlayerInfo {
-            build,
-            session_id,
-            citizen_id: Some(citizen_id),
-            privilege_id: privilege_id,
-            username: username.to_string(),
-            nonce: None,
-            world: None,
-            ip,
-            state: PlayerState::Online,
-            afk: false,
+        Self::Citizen(Citizen {
+            cit_id: citizen_id,
+            player_info: GenericPlayer {
+                build,
+                session_id,
+                privilege_id,
+                username: username.to_string(),
+                nonce: None,
+                world: None,
+                ip,
+                afk: false,
+                tabs: Default::default(),
+            },
         })
     }
 
     pub fn new_tourist(session_id: u16, build: i32, username: &str, ip: IpAddr) -> Self {
-        Self::Player(PlayerInfo {
+        Self::Tourist(GenericPlayer {
             build,
             session_id,
-            citizen_id: None,
             privilege_id: None,
             username: username.to_string(),
             nonce: None,
             world: None,
             ip,
-            state: PlayerState::Online,
             afk: false,
+            tabs: Default::default(),
         })
     }
 
-    pub fn is_player(&self) -> bool {
-        matches!(self, Entity::Player(_))
+    pub fn player_info(&self) -> &GenericPlayer {
+        match self {
+            Player::Citizen(citizen) => &citizen.player_info,
+            Player::Tourist(info) => info,
+            Player::Bot(info) => info,
+        }
     }
 
-    pub fn is_world(&self) -> bool {
-        matches!(self, Entity::WorldServer(_))
+    pub fn player_info_mut(&mut self) -> &mut GenericPlayer {
+        match self {
+            Player::Citizen(citizen) => &mut citizen.player_info,
+            Player::Tourist(info) => info,
+            Player::Bot(info) => info,
+        }
+    }
+
+    pub fn citizen(&self) -> Option<&Citizen> {
+        match self {
+            Player::Citizen(citizen) => Some(citizen),
+            _ => None,
+        }
+    }
+
+    pub fn citizen_mut(&mut self) -> Option<&mut Citizen> {
+        match self {
+            Player::Citizen(citizen) => Some(citizen),
+            _ => None,
+        }
+    }
+
+    pub fn citizen_id(&self) -> Option<u32> {
+        self.citizen().map(|citizen| citizen.cit_id)
     }
 }
 
-pub struct Client {
-    pub connection: AWConnection,
-    pub dead: RefCell<bool>,
+/// Game-related client state. Describes every client, regardless of whether
+/// they are a world server, a citizen, or a tourist.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
+pub enum ClientInfo {
+    WorldServer(WorldServer),
+    Player(Player),
+}
+
+impl ClientInfo {
+    pub fn citizen(&self) -> Option<&Citizen> {
+        match self {
+            ClientInfo::Player(player) => player.citizen(),
+            _ => None,
+        }
+    }
+
+    pub fn citizen_mut(&mut self) -> Option<&mut Citizen> {
+        match self {
+            ClientInfo::Player(player) => player.citizen_mut(),
+            ClientInfo::WorldServer(_) => None,
+        }
+    }
+
+    pub fn tourist(&self) -> Option<&GenericPlayer> {
+        match self {
+            ClientInfo::Player(Player::Tourist(info)) => Some(info),
+            _ => None,
+        }
+    }
+
+    pub fn tourist_mut(&mut self) -> Option<&mut GenericPlayer> {
+        match self {
+            ClientInfo::Player(Player::Tourist(info)) => Some(info),
+            _ => None,
+        }
+    }
+
+    pub fn player_info(&self) -> Option<&GenericPlayer> {
+        match self {
+            ClientInfo::WorldServer(_) => None,
+            ClientInfo::Player(player) => Some(player.player_info()),
+        }
+    }
+
+    pub fn player_info_mut(&mut self) -> Option<&mut GenericPlayer> {
+        match self {
+            ClientInfo::WorldServer(_) => None,
+            ClientInfo::Player(player) => Some(player.player_info_mut()),
+        }
+    }
+
+    pub fn has_admin_permissions(&self) -> bool {
+        // The admin account is always citizen ID 1
+        if let Self::Player(Player::Citizen(citizen)) = self {
+            if citizen.cit_id == 1 {
+                return true;
+            }
+        } else if let Some(player_info) = self.player_info() {
+            if player_info.privilege_id == Some(1) {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn citizen_id(&self) -> Option<u32> {
+        match self {
+            Self::Player(Player::Citizen(citizen)) => Some(citizen.cit_id),
+            _ => None,
+        }
+    }
+
+    pub fn effective_privilege(&self) -> u32 {
+        self.player_info()
+            .and_then(|player| {
+                player.privilege_id.and_then(|priv_id| {
+                    if priv_id != 0 {
+                        Some(priv_id)
+                    } else {
+                        self.citizen_id()
+                    }
+                })
+            })
+            .unwrap_or(0)
+    }
+}
+
+#[derive(Debug)]
+pub struct UniverseConnection {
+    connection: AWConnection,
     pub rsa: AWCryptRSA,
-    user_info: RefCell<UserInfo>,
-    pub addr: SocketAddr,
-    pub last_heartbeat: u64,
+    last_heartbeat: u64,
+    /// A connection may not have one of these yet if they just connected.
+    pub client: Option<ClientInfo>,
 }
 
-impl Client {
-    pub fn new(connection: AWConnection, addr: SocketAddr) -> Self {
+impl UniverseConnection {
+    pub fn new(connection: AWConnection) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Current time is before the unix epoch.")
@@ -97,321 +243,368 @@ impl Client {
 
         Self {
             connection,
-            dead: RefCell::new(false),
             rsa: AWCryptRSA::new(),
-            user_info: RefCell::new(Default::default()),
-            addr,
             last_heartbeat: now,
+            client: None,
         }
     }
 
-    pub fn kill(&self) {
-        *self.dead.borrow_mut() = true;
+    pub fn is_disconnected(&self) -> bool {
+        self.connection.is_disconnected()
     }
 
-    pub fn is_dead(&self) -> bool {
-        *self.dead.borrow()
+    pub fn send(&self, packet: AWPacket) {
+        self.connection.send(packet)
     }
 
-    pub fn info_mut(&self) -> RefMut<UserInfo> {
-        self.user_info.borrow_mut()
+    pub fn send_group(&self, packets: AWPacketGroup) {
+        self.connection.send_group(packets)
     }
 
-    pub fn info(&self) -> Ref<UserInfo> {
-        self.user_info.borrow()
+    pub fn recv(&self) -> Vec<ProtocolMessage> {
+        self.connection.recv()
+    }
+
+    pub fn addr(&self) -> SocketAddr {
+        self.connection.addr()
+    }
+
+    pub fn disconnect(&mut self) {
+        self.connection.disconnect()
+    }
+
+    pub fn set_recv_key(&self, key: &[u8]) {
+        self.connection.set_recv_key(key)
+    }
+
+    pub fn get_send_key(&self) -> Vec<u8> {
+        self.connection.get_send_key()
+    }
+
+    pub fn encrypt_data(&self, should: bool) {
+        self.connection.encrypt_data(should)
     }
 
     pub fn has_admin_permissions(&self) -> bool {
-        if let Some(Entity::Player(info)) = &self.info().entity {
-            info.citizen_id == Some(1) || info.privilege_id == Some(1)
+        if let Some(info) = &self.client {
+            info.has_admin_permissions()
         } else {
             false
         }
     }
+
+    pub fn player_info(&self) -> Option<&GenericPlayer> {
+        if let Some(info) = &self.client {
+            info.player_info()
+        } else {
+            None
+        }
+    }
+
+    pub fn player_info_mut(&mut self) -> Option<&mut GenericPlayer> {
+        if let Some(info) = &mut self.client {
+            info.player_info_mut()
+        } else {
+            None
+        }
+    }
+
+    pub fn is_player(&self) -> bool {
+        self.player_info().is_some()
+    }
 }
 
-#[derive(FromPrimitive, Clone, Copy, Debug, PartialEq)]
-pub enum ClientType {
-    World = 1,
-    UnspecifiedHuman = 2, // Temporary state between Citizen or Tourist
-    Bot = 3,
-    Citizen = 4,
-    Tourist = 5,
+#[derive(Eq, Hash, PartialEq, Copy, Clone, Debug)]
+pub struct UniverseConnectionID(u128);
+
+#[macro_export]
+macro_rules! get_conn {
+    ($server:expr, $cid:expr, $func_name:expr) => {
+        match $server.connections.get_connection($cid) {
+            Some(value) => value,
+            None => {
+                log::error!("{} was given an invalid CID.", $func_name);
+                return;
+            }
+        }
+    };
 }
 
-#[derive(Default)]
-pub struct ClientManager {
-    clients: Vec<Client>,
+#[macro_export]
+macro_rules! get_conn_mut {
+    ($server:expr, $cid:expr, $func_name:expr) => {
+        match $server.connections.get_connection_mut($cid) {
+            Some(value) => value,
+            None => {
+                log::error!("{} was given an invalid CID.", $func_name);
+                return;
+            }
+        }
+    };
 }
 
-impl ClientManager {
+pub struct UniverseConnections {
+    connections: HashMap<UniverseConnectionID, UniverseConnection>,
+    next_id: UniverseConnectionID,
+}
+
+impl Default for UniverseConnections {
+    fn default() -> Self {
+        Self {
+            connections: HashMap::new(),
+            next_id: UniverseConnectionID(0),
+        }
+    }
+}
+
+impl UniverseConnections {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn iter(
+        &self,
+    ) -> std::collections::hash_map::Iter<'_, UniverseConnectionID, UniverseConnection> {
+        // Callers shouldn't have mutable access to self.connections directly, to prevent insertions with an invalid ID
+        self.connections.iter()
+    }
+
+    pub fn iter_mut(
+        &mut self,
+    ) -> std::collections::hash_map::IterMut<'_, UniverseConnectionID, UniverseConnection> {
+        // Callers shouldn't have mutable access to self.connections directly, to prevent insertions with an invalid ID
+        self.connections.iter_mut()
+    }
+
+    pub fn cids(&self) -> Vec<UniverseConnectionID> {
+        return self
+            .connections
+            .keys()
+            .copied()
+            .collect::<Vec<UniverseConnectionID>>();
+    }
+
     pub fn create_session_id(&self) -> u16 {
         let mut new_session_id: u16 = 0;
         loop {
-            new_session_id += 1;
-            if self.get_client_by_session_id(new_session_id).is_none() {
+            new_session_id = new_session_id
+                .checked_add(1)
+                .expect("Ran out of session IDs.");
+            if self.get_by_session_id(new_session_id).is_none() {
                 break;
             }
         }
         new_session_id
     }
 
-    pub fn get_client_by_session_id(&self, session_id: u16) -> Option<&Client> {
-        for client in self.clients() {
-            if let Some(Entity::Player(info)) = &client.info().entity {
-                if info.session_id == session_id {
-                    return Some(client);
-                }
-            }
-        }
-        None
-    }
-
-    pub fn get_client_by_citizen_id(&self, citizen_id: u32) -> Option<&Client> {
-        for client in self.clients() {
-            if let Some(Entity::Player(info)) = &client.info().entity {
-                if info.citizen_id == Some(citizen_id) {
-                    return Some(client);
-                }
-            }
-        }
-        None
-    }
-
-    pub fn add_client(&mut self, client: Client) {
-        self.clients.push(client);
-    }
-
-    pub fn clients(&self) -> &Vec<Client> {
-        &self.clients
-    }
-
-    pub fn remove_dead_clients(&mut self, database: &Database) {
-        for client in self.clients().iter().filter(|x| x.is_dead()) {
-            log::info!("Disconnected {}", client.addr.ip());
-            if let Some(Entity::WorldServer(server_info)) = &mut client.info_mut().entity {
-                packet_handler::world_server_hide_all(server_info);
-            }
-            if let Some(Entity::WorldServer(server_info)) = &client.info().entity {
-                World::send_updates_to_all(&server_info.worlds, self);
-            }
-
-            if let Some(Entity::Player(player)) = &mut client.info_mut().entity {
-                player.state = PlayerState::Offline;
-            }
-            if let Some(Entity::Player(player)) = &client.info().entity {
-                PlayerInfo::send_update_to_all(player, self);
-
-                if let Some(citizen_id) = player.citizen_id {
-                    // Update the user's friends to tell them this user is now offline
-                    update_contacts_of_user(citizen_id, database, self);
-                }
-            }
-        }
-        self.clients = self.clients.drain(..).filter(|x| !x.is_dead()).collect();
-    }
-
-    pub fn check_tourist(&self, username: &str) -> Result<(), ReasonCode> {
-        check_valid_name(username, true)?;
-
-        for other_client in self.clients() {
-            if let Some(Entity::Player(info)) = &other_client.info().entity {
-                if info.username == username {
-                    return Err(ReasonCode::NameAlreadyUsed);
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn check_citizen(
-        &self,
-        db: &Database,
-        client: &Client,
-        username: &Option<String>,
-        password: Option<&String>,
-        password_hash: Option<&Vec<u8>>,
-        priv_id: Option<u32>,
-        priv_pass: &Option<String>,
-    ) -> Result<CitizenQuery, ReasonCode> {
-        // Name and password must be present
-        let username = username.as_ref().ok_or(ReasonCode::NoSuchCitizen)?;
-        if username.is_empty() {
-            return Err(ReasonCode::NoSuchCitizen);
-        }
-
-        // Name cannot be bot or tourist
-        if username.starts_with('[') || username.starts_with('"') {
-            return Err(ReasonCode::NoSuchCitizen);
-        }
-
-        // Checks if acquiring a privilege
-        if let Some(priv_id) = priv_id.filter(|x| *x != 0) {
-            // Get acting citizen
-            let priv_citizen = db
-                .citizen_by_number(priv_id)
-                .map_err(|_| ReasonCode::NoSuchActingCitizen)?;
-
-            // Is it enabled?
-            if priv_citizen.enabled == 0 && priv_citizen.id != 1 {
-                return Err(ReasonCode::NoSuchActingCitizen);
-            }
-
-            // Is the priv pass present and correct?
-            let priv_pass = priv_pass
-                .as_ref()
-                .ok_or(ReasonCode::ActingPasswordInvalid)?;
-            if *priv_pass != priv_citizen.priv_pass {
-                return Err(ReasonCode::ActingPasswordInvalid);
-            }
-        }
-
-        // Get login citizen
-        let login_citizen = db
-            .citizen_by_name(username)
-            .or(Err(ReasonCode::NoSuchCitizen))?;
-
-        // Is login password correct?
-        #[cfg(feature = "protocol_v4")]
-        {
-            let password = password.ok_or(ReasonCode::InvalidPassword)?;
-            if password.is_empty() {
-                return Err(ReasonCode::InvalidPassword);
-            }
-            if login_citizen.password != *password {
-                return Err(ReasonCode::InvalidPassword);
-            }
-        }
-        #[cfg(feature = "protocol_v6")]
-        {
-            let mut correct_password_buf = Vec::<u8>::new();
-            correct_password_buf.write_u32::<LittleEndian>(login_citizen.password.len() as u32);
-            correct_password_buf.write_all(
-                &login_citizen
-                    .password
-                    .as_bytes()
-                    .iter()
-                    .rev()
-                    .map(|x| *x)
-                    .collect::<Vec<u8>>(),
-            );
-
-            let hashed_correct_password = md5::compute(correct_password_buf.to_vec());
-
-            let Some(password_hash) = password_hash else {
-                return Err(ReasonCode::InvalidPassword);
+    /// Looks up a UniverseConnectionID with a session ID if one exists
+    pub fn get_by_session_id(&self, session_id: u16) -> Option<UniverseConnectionID> {
+        for (&id, client) in self.iter() {
+            let Some(user_info) = &client.client else {
+                continue;
+            };
+            let Some(player_info) = user_info.player_info() else {
+                continue;
             };
 
-            if *password_hash != hashed_correct_password.to_vec() {
-                return Err(ReasonCode::InvalidPassword);
+            if player_info.session_id == session_id {
+                return Some(id);
             }
         }
+        None
+    }
 
-        // Is it enabled?
-        if login_citizen.enabled == 0 {
-            return Err(ReasonCode::CitizenDisabled);
-        }
-
-        // Is this citizen already logged in?
-        for other_client in self.clients() {
-            if let Some(Entity::Player(info)) = &other_client.info().entity {
-                if info.citizen_id == Some(login_citizen.id) {
-                    // Don't give an error if the client is already logged in as this user.
-                    if client as *const Client != other_client as *const Client {
-                        return Err(ReasonCode::IdentityAlreadyInUse);
-                    }
+    pub fn get_by_citizen_id(&self, citizen_id: u32) -> Option<UniverseConnectionID> {
+        for (&id, conn) in self.iter() {
+            if let Some(ClientInfo::Player(Player::Citizen(citizen))) = &conn.client {
+                if citizen.cit_id == citizen_id {
+                    return Some(id);
                 }
             }
         }
+        None
+    }
 
-        Ok(login_citizen)
+    pub fn get_connection(&self, id: UniverseConnectionID) -> Option<&UniverseConnection> {
+        self.connections.get(&id)
+    }
+
+    pub fn get_connection_mut(
+        &mut self,
+        id: UniverseConnectionID,
+    ) -> Option<&mut UniverseConnection> {
+        self.connections.get_mut(&id)
+    }
+
+    pub fn add_connection(&mut self, conn: UniverseConnection) {
+        let id = self.next_id;
+        self.next_id.0 = self
+            .next_id
+            .0
+            .checked_add(1)
+            .expect("Ran out of connection IDs.");
+        self.connections.insert(id, conn);
     }
 
     pub fn send_heartbeats(&mut self) {
-        for client in &mut self.clients {
+        for conn in self.connections.values_mut() {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Current time is before the unix epoch.")
                 .as_secs();
 
             // 30 seconds between each heartbeat
-            let next_heartbeat = client.last_heartbeat + 30;
+            let next_heartbeat = conn.last_heartbeat + 30;
 
             if next_heartbeat <= now {
-                log::info!("Sending heartbeat to {}", client.addr.ip());
+                log::debug!("Sending heartbeat to {}", conn.connection.addr().ip());
                 let packet = AWPacket::new(PacketType::Heartbeat);
-                client.connection.send(packet);
-                client.last_heartbeat = now;
+                conn.connection.send(packet);
+                conn.last_heartbeat = now;
             }
         }
     }
 
-    pub fn get_world_by_name(&self, name: &str) -> Option<World> {
-        for client in self.clients() {
-            if let Some(Entity::WorldServer(server)) = &client.info().entity {
-                for world in &server.worlds {
-                    if world.name.eq_ignore_ascii_case(name) {
-                        return Some(world.clone());
-                    }
+    pub fn disconnected_cids(&self) -> Vec<UniverseConnectionID> {
+        self.connections
+            .iter()
+            .filter(|(_, conn)| conn.is_disconnected())
+            .map(|(cid, _)| *cid)
+            .collect::<Vec<UniverseConnectionID>>()
+    }
+
+    pub fn remove_disconnected(&mut self) {
+        for cid in self.disconnected_cids() {
+            self.connections.remove(&cid);
+        }
+    }
+
+    pub fn send_tab_updates(&mut self) {
+        for (&_cid, conn) in self.connections.iter_mut() {
+            let ip = conn.addr().ip();
+
+            let Some(player) = conn.player_info_mut() else {
+                continue;
+            };
+
+            let username = player.username.clone();
+
+            let player_list_difference = player.tabs.player_list.make_difference_list();
+            let contact_list_difference = player.tabs.contact_list.make_difference_list();
+            let world_list_difference = player.tabs.world_list.make_difference_list();
+            player.tabs.player_list.update();
+            player.tabs.contact_list.update();
+            player.tabs.world_list.update();
+
+            if !player_list_difference.is_empty() {
+                log::debug!(
+                    "Sending a player list update to IP {} name {:?}. The update is {:?}",
+                    ip,
+                    username,
+                    player_list_difference
+                );
+
+                player_list_difference.send_list(conn);
+            }
+
+            if !contact_list_difference.is_empty() {
+                log::debug!(
+                    "Sending a contact list update to IP {} name {:?}. The update is {:?}",
+                    ip,
+                    username,
+                    contact_list_difference
+                );
+
+                contact_list_difference.send_list(conn);
+            }
+
+            if !world_list_difference.is_empty() {
+                log::debug!(
+                    "Sending a world list update to IP {} name {:?}. The update is {:?}",
+                    ip,
+                    username,
+                    world_list_difference
+                );
+
+                world_list_difference.send_list(conn);
+            }
+        }
+    }
+
+    pub fn get_world_by_name(&self, name: &str) -> Option<&World> {
+        for conn in self.connections.values() {
+            let Some(user_info) = conn.client.as_ref() else {
+                continue;
+            };
+
+            let ClientInfo::WorldServer(server) = user_info else {
+                continue;
+            };
+
+            for world in &server.worlds {
+                if world.name.eq_ignore_ascii_case(name) {
+                    log::trace!(
+                        "get_world_by_name({name:?}) got some {world:?} from conn {conn:?}"
+                    );
+                    return Some(world);
                 }
             }
         }
         None
     }
 
-    pub fn get_world_infos(&self) -> Vec<World> {
-        // Get a list of all the worlds
-        let mut world_list = Vec::<World>::new();
-        for client in self.clients() {
-            if let Some(Entity::WorldServer(world_server)) = &client.info().entity {
-                world_list.extend(world_server.worlds.clone());
+    pub fn get_world_entry_by_name(&self, name: &str) -> Option<WorldListEntry> {
+        for conn in self.connections.values() {
+            let Some(user_info) = conn.client.as_ref() else {
+                continue;
+            };
+
+            let ClientInfo::WorldServer(server) = user_info else {
+                continue;
+            };
+
+            for world in &server.worlds {
+                if world.name.eq_ignore_ascii_case(name) {
+                    return Some(WorldListEntry {
+                        name: world.name.clone(),
+                        status: WorldStatus::from_free_entry(world.free_entry),
+                        rating: world.rating,
+                        ip: conn.addr().ip(),
+                        port: server.server_port,
+                        max_users: world.max_users,
+                        world_size: world.world_size,
+                        user_count: world.user_count,
+                    });
+                }
             }
         }
-        world_list
+        None
     }
 
-    pub fn get_player_infos(&self) -> Vec<PlayerInfo> {
-        // Get a list of all the player infos
-        let mut player_list = Vec::<PlayerInfo>::new();
-        for client in self.clients() {
-            if let Some(Entity::Player(player_info)) = &client.info().entity {
-                player_list.push(player_info.clone());
+    pub fn get_all_world_entries(&self) -> Vec<WorldListEntry> {
+        let mut entries = Vec::<WorldListEntry>::new();
+        for conn in self.connections.values() {
+            let Some(user_info) = conn.client.as_ref() else {
+                continue;
+            };
+
+            let ClientInfo::WorldServer(server) = user_info else {
+                continue;
+            };
+
+            for world in &server.worlds {
+                entries.push(WorldListEntry {
+                    name: world.name.clone(),
+                    status: WorldStatus::from_free_entry(world.free_entry),
+                    rating: world.rating,
+                    ip: conn.addr().ip(),
+                    port: server.server_port,
+                    max_users: world.max_users,
+                    world_size: world.world_size,
+                    user_count: world.user_count,
+                });
             }
         }
-        player_list
+        entries
     }
-}
-
-fn check_valid_name(name: &str, is_tourist: bool) -> Result<(), ReasonCode> {
-    let mut name = name.to_string();
-
-    if is_tourist {
-        // Tourist names must start and end with quotes
-        if !name.starts_with('"') || !name.ends_with('"') {
-            return Err(ReasonCode::NoSuchCitizen);
-        }
-
-        // Strip quotes to continue check
-        name.remove(0);
-        name.remove(name.len() - 1);
-    }
-
-    if name.len() < 2 {
-        return Err(ReasonCode::NameTooShort);
-    }
-
-    if name.ends_with(' ') {
-        return Err(ReasonCode::NameEndsWithBlank);
-    }
-
-    if name.starts_with(' ') {
-        return Err(ReasonCode::NameContainsInvalidBlank);
-    }
-
-    if !name.chars().all(char::is_alphanumeric) {
-        return Err(ReasonCode::NameContainsNonalphanumericChar);
-    }
-
-    Ok(())
 }

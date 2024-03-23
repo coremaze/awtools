@@ -1,4 +1,4 @@
-use mysql::*;
+use mysql::{Pool, PooledConn, Row, Value};
 
 use crate::configuration::{MysqlConfig, UniverseConfig};
 
@@ -17,11 +17,9 @@ pub mod eject;
 pub mod license;
 pub mod telegram;
 
-type Result<T, E> = core::result::Result<T, E>;
 use std::error::Error;
 pub struct Database {
     pool: Pool,
-    config: MysqlConfig,
 }
 
 impl Database {
@@ -35,7 +33,7 @@ impl Database {
         let pool = Pool::new(uri.as_str())
             .map_err(|err| format!("Could not create database connection pool: {err}"))?;
 
-        let db = Self { pool, config };
+        let db = Self { pool };
 
         db.init_tables(universe_config);
 
@@ -60,7 +58,7 @@ impl Database {
 pub fn fetch_int(row: &Row, name: &str) -> Option<i64> {
     for column in row.columns_ref() {
         let column_value = &row[column.name_str().as_ref()];
-        let column_name = column.name_str().to_string();
+        let column_name = column.name_str();
         if column_name == name {
             match column_value {
                 Value::Int(x) => {
@@ -78,7 +76,7 @@ pub fn fetch_int(row: &Row, name: &str) -> Option<i64> {
 pub fn fetch_string(row: &Row, name: &str) -> Option<String> {
     for column in row.columns_ref() {
         let column_value = &row[column.name_str().as_ref()];
-        let column_name = column.name_str().to_string();
+        let column_name = column.name_str();
         if column_name == name {
             match column_value {
                 Value::Bytes(x) => {

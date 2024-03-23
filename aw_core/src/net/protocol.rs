@@ -2,8 +2,8 @@
 use crate::net::packet::{AWPacket, DeserializeError, PacketType};
 use crate::ReasonCode;
 use crate::{AWCryptStream, StreamKeyError};
-use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::io::{self, Read, Write};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
@@ -46,6 +46,11 @@ impl AWProtocol {
             other_inbound_packets: Some(inbound_packets_rx),
             other_outbound_packets: Some(outbound_packets_tx),
         }
+    }
+
+    /// Get the address of the connected peer
+    pub fn peer_addr(&self) -> io::Result<SocketAddr> {
+        self.stream.peer_addr()
     }
 
     /// Set the key to receive data (i.e. the key the other end of the connection is using).
@@ -260,7 +265,7 @@ impl AWProtocol {
             ProtocolMessage::StreamKey(key) => {
                 match StreamCipherType::from_key(&key) {
                     Ok(stream_cipher) => self.recv_cipher = Some(stream_cipher),
-                    Err(why) => self.kill(),
+                    Err(_) => self.kill(),
                 }
                 // There may be data that has already been sent, so we need to decrypt it now.
                 // self.recv_cipher.as_mut().unwrap().decrypt_in_place(&mut self.data);

@@ -19,11 +19,11 @@ bitflags! {
         const TELEGRAMS_ALLOWED = 0b0000_0000_0001_0000;
         const TELEGRAMS_BLOCKED = 0b0000_0000_0010_0000;
 
-        const JOIN_ALLOWED = 0b0000_0000_0100_0000;
-        const JOIN_BLOCKED = 0b0000_0000_1000_0000;
-
         const FILE_TRANSFER_ALLOWED = 0b0000_0001_0000_0000;
         const FILE_TRANSFER_BLOCKED = 0b0000_0010_0000_0000;
+
+        const JOIN_ALLOWED = 0b0000_0000_0100_0000;
+        const JOIN_BLOCKED = 0b0000_0000_1000_0000;
 
         const CHAT_ALLOWED = 0b0000_0100_0000_0000;
         const CHAT_BLOCKED = 0b0000_1000_0000_0000;
@@ -126,6 +126,7 @@ impl ContactOptions {
     }
 }
 
+#[derive(Debug)]
 pub struct ContactQuery {
     pub citizen: u32,
     pub contact: u32,
