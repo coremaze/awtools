@@ -47,7 +47,7 @@ struct IdentifyFields {
 }
 
 fn get_identify_fields(packet: &AWPacket) -> Option<IdentifyFields> {
-    let Some(world_name) = packet.get_string(VarID::WorldStartWorldName) else {
+    let Some(world_name) = packet.get_string(VarID::WorldName) else {
         log::info!("Failed to identify player because no world name was provided");
         return None;
     };
@@ -118,7 +118,7 @@ fn identify_player(
     }
 
     // Not currently checking IP address or port
-    response.add_string(VarID::WorldStartWorldName, fields.world_name.clone());
+    response.add_string(VarID::WorldName, fields.world_name.clone());
     response.add_int(VarID::SessionID, fields.session_id);
     response.add_uint(VarID::IdentifyUserIP, fields.player_ip);
     response.add_int(VarID::PlayerPort, fields.player_port);

@@ -135,6 +135,10 @@ impl Player {
     pub fn citizen_id(&self) -> Option<u32> {
         self.citizen().map(|citizen| citizen.cit_id)
     }
+
+    pub fn username(&self) -> String {
+        self.player_info().username.clone()
+    }
 }
 
 /// Game-related client state. Describes every client, regardless of whether
@@ -172,6 +176,13 @@ impl ClientInfo {
         match self {
             ClientInfo::Player(Player::Tourist(info)) => Some(info),
             _ => None,
+        }
+    }
+
+    pub fn player(&self) -> Option<&Player> {
+        match self {
+            ClientInfo::WorldServer(_) => None,
+            ClientInfo::Player(player) => Some(player),
         }
     }
 
@@ -311,6 +322,10 @@ impl UniverseConnection {
 
     pub fn is_player(&self) -> bool {
         self.player_info().is_some()
+    }
+
+    pub fn is_bot(&self) -> bool {
+        matches!(&self.client, Some(ClientInfo::Player(Player::Bot(_))))
     }
 }
 

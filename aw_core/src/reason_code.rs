@@ -178,6 +178,7 @@ pub enum ReasonCode {
     UnableToUpdateCav = 514,
     UnableToDeleteCav = 515,
     NoSuchCav = 516,
+    NoCavTemplate = 517,       // Not publicly documented
     UnableToGetContacts = 520, // Not publicly documented
     WorldInstanceAlreadyExists = 521,
     WorldInstanceInvalid = 522,
@@ -202,5 +203,17 @@ impl ReasonCode {
 
     pub fn is_ok(&self) -> bool {
         !self.is_err()
+    }
+}
+
+impl From<ReasonCode> for i32 {
+    fn from(val: ReasonCode) -> Self {
+        val as i32
+    }
+}
+
+impl From<ReasonCode> for u32 {
+    fn from(val: ReasonCode) -> Self {
+        val as u32
     }
 }

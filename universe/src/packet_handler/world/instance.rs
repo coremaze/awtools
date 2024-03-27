@@ -24,7 +24,7 @@ pub fn world_start(server: &mut UniverseServer, cid: UniverseConnectionID, packe
 
     let world_build = world_server.build;
 
-    let Some(world_name) = packet.get_string(VarID::WorldStartWorldName) else {
+    let Some(world_name) = packet.get_string(VarID::WorldName) else {
         return;
     };
 
@@ -42,7 +42,7 @@ pub fn world_start(server: &mut UniverseServer, cid: UniverseConnectionID, packe
 
     let mut p = AWPacket::new(PacketType::WorldStart);
 
-    p.add_string(VarID::WorldStartWorldName, world_name.clone());
+    p.add_string(VarID::WorldName, world_name.clone());
 
     let lic = match validate_world(server, world_build, &world_name, &world_password) {
         Ok(x) => x,
@@ -108,7 +108,7 @@ fn add_world_to_world_server(server: &mut UniverseServer, cid: UniverseConnectio
 }
 
 pub fn world_stop(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
-    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
+    let world_name = match packet.get_string(VarID::WorldName) {
         Some(x) => x,
         None => return,
     };
@@ -218,7 +218,7 @@ pub fn world_stats_update(
         return;
     };
 
-    let Some(world_name) = packet.get_string(VarID::WorldStartWorldName) else {
+    let Some(world_name) = packet.get_string(VarID::WorldName) else {
         return;
     };
 

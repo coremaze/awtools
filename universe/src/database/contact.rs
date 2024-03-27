@@ -146,6 +146,8 @@ pub trait ContactDB {
     fn contact_telegrams_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
     fn contact_friend_requests_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
     fn contact_status_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
+    fn contact_joins_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
+    fn contact_invites_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
 }
 
 impl ContactDB for Database {
@@ -372,6 +374,24 @@ impl ContactDB for Database {
         }
 
         true
+    }
+
+    fn contact_joins_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+        let contact = match self.contact_get(citizen_id, contact_id) {
+            Ok(x) => x,
+            _ => return true,
+        };
+
+        contact.options.is_join_allowed()
+    }
+
+    fn contact_invites_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+        let contact = match self.contact_get(citizen_id, contact_id) {
+            Ok(x) => x,
+            _ => return true,
+        };
+
+        contact.options.is_invite_allowed()
     }
 }
 

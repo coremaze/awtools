@@ -60,14 +60,14 @@ pub fn world_list(server: &UniverseServer, cid: UniverseConnectionID, _packet: &
 }
 
 pub fn world_lookup(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
-    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
+    let world_name = match packet.get_string(VarID::WorldName) {
         Some(x) => x,
         None => return,
     };
 
     let mut p = AWPacket::new(PacketType::WorldLookup);
 
-    p.add_string(VarID::WorldStartWorldName, world_name.clone());
+    p.add_string(VarID::WorldName, world_name.clone());
 
     match server.connections.get_world_entry_by_name(&world_name) {
         Some(world) => {

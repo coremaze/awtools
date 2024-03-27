@@ -19,6 +19,9 @@ pub use attribute::*;
 mod world;
 pub use world::*;
 
+mod teleport;
+pub use teleport::*;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{client::UniverseConnectionID, get_conn, get_conn_mut, UniverseServer};

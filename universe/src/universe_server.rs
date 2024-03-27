@@ -185,7 +185,7 @@ impl UniverseServer {
     }
 
     fn handle_packet(&mut self, packet: &AWPacket, client_id: UniverseConnectionID) {
-        // log::debug!("Handling packet {packet:?}");
+        log::trace!("Handling packet {packet:?}");
         match packet.get_opcode() {
             PacketType::PublicKeyRequest => packet_handler::public_key_request(self, client_id),
             PacketType::StreamKeyResponse => {
@@ -234,6 +234,9 @@ impl UniverseServer {
             PacketType::SetAFK => packet_handler::set_afk(self, client_id, packet),
             PacketType::ContactConfirm => packet_handler::contact_confirm(self, client_id, packet),
             PacketType::ContactList => packet_handler::contact_list(self, client_id, packet),
+            PacketType::Join => packet_handler::join(self, client_id, packet),
+            PacketType::JoinReply => packet_handler::join_reply(self, client_id, packet),
+            PacketType::Botgram => packet_handler::botgram(self, client_id, packet),
             _ => {
                 log::warn!("Unhandled packet {packet:?}");
             }

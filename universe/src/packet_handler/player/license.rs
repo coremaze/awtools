@@ -10,7 +10,7 @@ pub fn license_add(server: &UniverseServer, cid: UniverseConnectionID, packet: &
 
     let conn = get_conn!(server, cid, "license_add");
 
-    let Some(world_name) = packet.get_string(VarID::WorldStartWorldName) else {
+    let Some(world_name) = packet.get_string(VarID::WorldName) else {
         p.add_int(
             VarID::ReasonCode,
             ReasonCode::NameContainsInvalidBlank as i32,
@@ -115,7 +115,7 @@ fn send_license_lookup(
     }
 
     // World name to iterate from should be included
-    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
+    let world_name = match packet.get_string(VarID::WorldName) {
         Some(x) => x,
         None => return,
     };
@@ -223,7 +223,7 @@ pub fn license_change(server: &UniverseServer, cid: UniverseConnectionID, packet
 
 fn license_to_vars(lic: &LicenseQuery, admin: bool) -> Vec<AWPacketVar> {
     let mut result = vec![
-        AWPacketVar::String(VarID::WorldStartWorldName, lic.name.clone()),
+        AWPacketVar::String(VarID::WorldName, lic.name.clone()),
         AWPacketVar::Uint(VarID::WorldLicenseID, lic.id),
         AWPacketVar::Uint(VarID::WorldLicenseUsers, lic.users),
         AWPacketVar::Uint(VarID::WorldLicenseRange, lic.world_size),
@@ -275,7 +275,7 @@ fn check_valid_world_name(name: &str) -> Result<(), ReasonCode> {
 
 fn license_from_packet(packet: &AWPacket) -> Result<LicenseQuery, String> {
     let name = packet
-        .get_string(VarID::WorldStartWorldName)
+        .get_string(VarID::WorldName)
         .ok_or_else(|| "No world name".to_string())?;
     let password = packet
         .get_string(VarID::WorldLicensePassword)
