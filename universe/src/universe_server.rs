@@ -1,21 +1,25 @@
 use aw_core::*;
 
 use crate::{
-    client::{Client, ClientManager},
+    client::{ClientInfo, UniverseConnection, UniverseConnectionID, UniverseConnections},
     configuration,
     database::Database,
-    packet_handler,
+    get_conn, packet_handler,
+    tabs::{regenerate_contact_list, regenerate_player_list, regenerate_world_list},
     universe_license::LicenseGenerator,
 };
-use std::net::{SocketAddrV4, TcpListener};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    net::{SocketAddrV4, TcpListener},
+};
 
 pub struct UniverseServer {
     config: configuration::UniverseConfig,
-    license_generator: LicenseGenerator,
-    client_manager: ClientManager,
-    database: Database,
+    pub license_generator: LicenseGenerator,
+    pub connections: UniverseConnections,
+    pub database: Database,
     listener: TcpListener,
 }
 
@@ -31,13 +35,13 @@ impl UniverseServer {
         let license_socket_addr =
             SocketAddrV4::new(config.universe.license_ip, config.universe.port);
 
-        let listener = TcpListener::bind(&bind_socket).unwrap();
+        let listener = TcpListener::bind(bind_socket).unwrap();
         listener.set_nonblocking(true).unwrap();
 
         Ok(Self {
             config: config.universe,
             license_generator: LicenseGenerator::new(&license_socket_addr),
-            client_manager: Default::default(),
+            connections: UniverseConnections::new(),
             database,
             listener,
         })
@@ -63,8 +67,9 @@ impl UniverseServer {
         while running.load(Ordering::SeqCst) {
             self.accept_new_clients();
             self.service_clients();
-            self.client_manager.remove_dead_clients(&self.database);
-            self.client_manager.send_heartbeats();
+            self.remove_dead_clients();
+            self.connections.send_tab_updates();
+            self.connections.send_heartbeats();
         }
 
         log::info!("Shutting down universe.");
@@ -76,32 +81,99 @@ impl UniverseServer {
 
         #[cfg(feature = "protocol_v6")]
         return "6";
-
-        return "";
     }
 
     fn accept_new_clients(&mut self) {
         while let Ok((stream, addr)) = self.listener.accept() {
-            let client = Client::new(AWConnection::new(AWProtocol::new(stream)), addr);
-            self.client_manager.add_client(client);
+            let conn = UniverseConnection::new(AWConnection::new(AWProtocol::new(stream)));
+            self.connections.add_connection(conn);
+            log::info!("{} connected.", addr.ip());
         }
     }
 
     fn service_clients(&mut self) {
-        for client in self.client_manager.clients() {
-            let messages = client.connection.recv();
-            self.handle_messages(messages, client);
+        // Collect all new messages from clients
+        let messages: HashMap<UniverseConnectionID, Vec<ProtocolMessage>> = self
+            .connections
+            .iter()
+            .filter_map(|(&id, conn)| {
+                let messages = conn.recv();
+                if messages.is_empty() {
+                    return None;
+                }
+
+                Some((id, messages))
+            })
+            .collect();
+
+        // Handle all messages
+        for (client_id, messages) in messages {
+            self.handle_messages(messages, client_id);
         }
     }
 
-    fn handle_messages(&self, messages: Vec<ProtocolMessage>, client: &Client) {
+    pub fn remove_dead_clients(&mut self) {
+        let disconnected_conn_ids = self.connections.disconnected_cids();
+        if disconnected_conn_ids.is_empty() {
+            return;
+        }
+        for cid in &disconnected_conn_ids {
+            let conn = get_conn!(self, *cid, "remove_dead_clients");
+            log::info!("Removed client {}", conn.addr().ip());
+        }
+
+        // Figure out whether the player lists need to be remade, and remake them if so.
+        let mut regen_player_lists = false;
+        for client_id in &disconnected_conn_ids {
+            let Some(conn) = self.connections.get_connection(*client_id) else {
+                continue;
+            };
+            if conn.is_player() {
+                regen_player_lists = true;
+                break;
+            };
+        }
+
+        // Figure out whether the world lists need to be remade, and remake them if so.
+        let mut regen_world_lists = false;
+        for client_id in &disconnected_conn_ids {
+            let Some(conn) = self.connections.get_connection(*client_id) else {
+                continue;
+            };
+            if let Some(ClientInfo::WorldServer(_)) = &conn.client {
+                regen_world_lists = true;
+                break;
+            }
+        }
+
+        // Discard all the clients that have disconnected.
+        self.connections.remove_disconnected();
+
+        if regen_player_lists {
+            for cid in self.connections.cids() {
+                regenerate_player_list(self, cid);
+                // This could be done only on the removed player's contacts
+                regenerate_contact_list(self, cid);
+            }
+        }
+
+        if regen_world_lists {
+            for cid in self.connections.cids() {
+                regenerate_world_list(self, cid);
+            }
+        }
+    }
+
+    fn handle_messages(&mut self, messages: Vec<ProtocolMessage>, cid: UniverseConnectionID) {
         for message in messages {
             match message {
                 ProtocolMessage::Packet(packet) => {
-                    self.handle_packet(&packet, client);
+                    self.handle_packet(&packet, cid);
                 }
                 ProtocolMessage::Disconnect => {
-                    client.kill();
+                    if let Some(conn) = self.connections.get_connection_mut(cid) {
+                        conn.disconnect()
+                    }
                 }
                 ProtocolMessage::StreamKey(_)
                 | ProtocolMessage::Encrypt(_)
@@ -112,90 +184,61 @@ impl UniverseServer {
         }
     }
 
-    fn handle_packet(&self, packet: &AWPacket, client: &Client) {
-        log::debug!("Handling packet {packet:?}");
+    fn handle_packet(&mut self, packet: &AWPacket, client_id: UniverseConnectionID) {
+        log::trace!("Handling packet {packet:?}");
         match packet.get_opcode() {
-            PacketType::PublicKeyRequest => packet_handler::public_key_request(client),
+            PacketType::PublicKeyRequest => packet_handler::public_key_request(self, client_id),
             PacketType::StreamKeyResponse => {
-                packet_handler::stream_key_response(client, packet, &self.database)
+                packet_handler::stream_key_response(self, client_id, packet)
             }
-            PacketType::PublicKeyResponse => packet_handler::public_key_response(client, packet),
-            PacketType::Login => packet_handler::login(
-                client,
-                packet,
-                &self.client_manager,
-                &self.license_generator,
-                &self.database,
-            ),
-            PacketType::Heartbeat => packet_handler::heartbeat(client),
-            PacketType::WorldServerStart => packet_handler::world_server_start(client, packet),
-            PacketType::UserList => packet_handler::user_list(client, packet, &self.client_manager),
-            PacketType::AttributeChange => packet_handler::attribute_change(
-                client,
-                packet,
-                &self.database,
-                &self.client_manager,
-            ),
-            PacketType::CitizenNext => packet_handler::citizen_next(client, packet, &self.database),
-            PacketType::CitizenPrev => packet_handler::citizen_prev(client, packet, &self.database),
+            PacketType::PublicKeyResponse => {
+                packet_handler::public_key_response(self, client_id, packet)
+            }
+            PacketType::Login => packet_handler::login(self, client_id, packet),
+            PacketType::Heartbeat => packet_handler::heartbeat(self, client_id),
+            PacketType::WorldServerStart => {
+                packet_handler::world_server_start(self, client_id, packet)
+            }
+            PacketType::UserList => packet_handler::user_list(self, client_id, packet),
+            PacketType::AttributeChange => {
+                packet_handler::attribute_change(self, client_id, packet)
+            }
+            PacketType::CitizenNext => packet_handler::citizen_next(self, client_id, packet),
+            PacketType::CitizenPrev => packet_handler::citizen_prev(self, client_id, packet),
             PacketType::CitizenLookupByName => {
-                packet_handler::citizen_lookup_by_name(client, packet, &self.database)
+                packet_handler::citizen_lookup_by_name(self, client_id, packet)
             }
             PacketType::CitizenLookupByNumber => {
-                packet_handler::citizen_lookup_by_number(client, packet, &self.database)
+                packet_handler::citizen_lookup_by_number(self, client_id, packet)
             }
-            PacketType::CitizenChange => {
-                packet_handler::citizen_change(client, packet, &self.database)
-            }
-            PacketType::LicenseAdd => packet_handler::license_add(client, packet, &self.database),
-            PacketType::LicenseByName => {
-                packet_handler::license_by_name(client, packet, &self.database)
-            }
-            PacketType::LicenseNext => packet_handler::license_next(client, packet, &self.database),
-            PacketType::LicensePrev => packet_handler::license_prev(client, packet, &self.database),
-            PacketType::LicenseChange => {
-                packet_handler::license_change(client, packet, &self.database)
-            }
-            PacketType::WorldStart => {
-                packet_handler::world_start(client, packet, &self.database, &self.client_manager)
-            }
-            PacketType::WorldStop => {
-                packet_handler::world_stop(client, packet, &self.client_manager)
-            }
-            PacketType::WorldList => {
-                packet_handler::world_list(client, packet, &self.client_manager)
-            }
-            PacketType::WorldLookup => {
-                packet_handler::world_lookup(client, packet, &self.client_manager)
-            }
-            PacketType::Identify => {
-                packet_handler::identify(client, packet, &self.client_manager, &self.database)
-            }
+            PacketType::CitizenChange => packet_handler::citizen_change(self, client_id, packet),
+            PacketType::LicenseAdd => packet_handler::license_add(self, client_id, packet),
+            PacketType::LicenseByName => packet_handler::license_by_name(self, client_id, packet),
+            PacketType::LicenseNext => packet_handler::license_next(self, client_id, packet),
+            PacketType::LicensePrev => packet_handler::license_prev(self, client_id, packet),
+            PacketType::LicenseChange => packet_handler::license_change(self, client_id, packet),
+            PacketType::WorldStart => packet_handler::world_start(self, client_id, packet),
+            PacketType::WorldStop => packet_handler::world_stop(self, client_id, packet),
+            PacketType::WorldList => packet_handler::world_list(self, client_id, packet),
+            PacketType::WorldLookup => packet_handler::world_lookup(self, client_id, packet),
+            PacketType::Identify => packet_handler::identify(self, client_id, packet),
             PacketType::WorldStatsUpdate => {
-                packet_handler::world_stats_update(client, packet, &self.client_manager)
+                packet_handler::world_stats_update(self, client_id, packet)
             }
-            PacketType::CitizenAdd => packet_handler::citizen_add(client, packet, &self.database),
-            PacketType::ContactAdd => {
-                packet_handler::contact_add(client, packet, &self.database, &self.client_manager)
-            }
-            PacketType::TelegramSend => {
-                packet_handler::telegram_send(client, packet, &self.database, &self.client_manager)
-            }
+            PacketType::CitizenAdd => packet_handler::citizen_add(self, client_id, packet),
+            PacketType::ContactAdd => packet_handler::contact_add(self, client_id, packet),
+            PacketType::TelegramSend => packet_handler::telegram_send(self, client_id, packet),
             PacketType::TelegramGet => {
-                packet_handler::telegram_get(client, packet, &self.database);
+                packet_handler::telegram_get(self, client_id, packet);
             }
-            PacketType::SetAFK => packet_handler::set_afk(client, packet),
-            PacketType::ContactConfirm => packet_handler::contact_confirm(
-                client,
-                packet,
-                &self.database,
-                &self.client_manager,
-            ),
-            PacketType::ContactList => {
-                packet_handler::contact_list(client, packet, &self.database, &self.client_manager)
-            }
+            PacketType::SetAFK => packet_handler::set_afk(self, client_id, packet),
+            PacketType::ContactConfirm => packet_handler::contact_confirm(self, client_id, packet),
+            PacketType::ContactList => packet_handler::contact_list(self, client_id, packet),
+            PacketType::Join => packet_handler::join(self, client_id, packet),
+            PacketType::JoinReply => packet_handler::join_reply(self, client_id, packet),
+            PacketType::Botgram => packet_handler::botgram(self, client_id, packet),
             _ => {
-                log::info!("Unhandled packet {packet:?}");
+                log::warn!("Unhandled packet {packet:?}");
             }
         }
     }

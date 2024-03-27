@@ -1,24 +1,21 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
-    client::{Client, ClientManager, Entity},
-    database::CitizenDB,
-    database::Database,
-    database::{telegram::TelegramQuery, ContactDB, TelegramDB},
+    client::{ClientInfo, UniverseConnectionID},
+    database::{telegram::TelegramQuery, CitizenDB, ContactDB, Database, TelegramDB},
+    get_conn,
+    telegram::send_telegram_update_available,
+    UniverseConnection, UniverseServer,
 };
 use aw_core::*;
 
-pub fn telegram_send(
-    client: &Client,
-    packet: &AWPacket,
-    database: &Database,
-    client_manager: &ClientManager,
-) {
-    let rc = match try_send_telegram_from_packet(client, packet, database) {
+pub fn telegram_send(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
+    let conn = get_conn!(server, cid, "telegram_send");
+    let rc = match try_send_telegram_from_packet(conn, packet, &server.database) {
         Ok(citizen_id) => {
             // Alert recipient of new telegram
-            if let Some(target_client) = client_manager.get_client_by_citizen_id(citizen_id) {
-                send_telegram_update_available(target_client, database);
+            if let Some(target_cid) = server.connections.get_by_citizen_id(citizen_id) {
+                send_telegram_update_available(server, target_cid);
             }
 
             ReasonCode::Success
@@ -29,24 +26,22 @@ pub fn telegram_send(
     let mut response = AWPacket::new(PacketType::TelegramSend);
     response.add_int(VarID::ReasonCode, rc as i32);
 
-    client.connection.send(response);
+    conn.send(response);
 }
 
 fn try_send_telegram_from_packet(
-    client: &Client,
+    conn: &UniverseConnection,
     packet: &AWPacket,
     database: &Database,
 ) -> Result<u32, ReasonCode> {
     // Must be a player
-    let player_info = match &client.info().entity {
-        Some(Entity::Player(x)) => x.clone(),
-        _ => return Err(ReasonCode::NotLoggedIn),
+    let Some(ClientInfo::Player(player)) = &conn.client else {
+        return Err(ReasonCode::NotLoggedIn);
     };
 
     // Must be logged in as a citizen
-    let citizen_id = match player_info.citizen_id {
-        Some(x) => x,
-        None => return Err(ReasonCode::NotLoggedIn),
+    let Some(citizen_id) = player.citizen_id() else {
+        return Err(ReasonCode::NotLoggedIn);
     };
 
     // TODO: aw_citizen_privacy
@@ -81,24 +76,13 @@ fn try_send_telegram_from_packet(
     Ok(target_citizen.id)
 }
 
-pub fn send_telegram_update_available(client: &Client, database: &Database) {
-    if let Some(Entity::Player(player)) = &client.info().entity {
-        if let Some(citizen_id) = player.citizen_id {
-            let telegrams = database.telegram_get_undelivered(citizen_id);
-            if !telegrams.is_empty() {
-                let packet = AWPacket::new(PacketType::TelegramNotify);
-                client.connection.send(packet);
-            }
-        }
-    }
-}
-
-pub fn telegram_get(client: &Client, packet: &AWPacket, database: &Database) {
+pub fn telegram_get(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let mut response = AWPacket::new(PacketType::TelegramDeliver);
+    let conn = get_conn!(server, cid, "telegram_get");
 
-    let rc = match try_telegram_get(client, packet, database) {
+    let rc = match try_telegram_get(conn, packet, &server.database) {
         Ok((telegram, more_remain)) => {
-            let from_name = match database.citizen_by_number(telegram.from) {
+            let from_name = match server.database.citizen_by_number(telegram.from) {
                 Ok(cit) => cit.name,
                 Err(_) => "<unknown>".to_string(),
             };
@@ -118,22 +102,22 @@ pub fn telegram_get(client: &Client, packet: &AWPacket, database: &Database) {
 
     response.add_int(VarID::ReasonCode, rc as i32);
 
-    client.connection.send(response);
+    conn.send(response);
 }
 
 pub fn try_telegram_get(
-    client: &Client,
+    conn: &UniverseConnection,
     _packet: &AWPacket,
     database: &Database,
 ) -> Result<(TelegramQuery, bool), ReasonCode> {
-    let playerinfo = match &client.info().entity {
-        Some(Entity::Player(x)) => x.clone(),
-        _ => return Err(ReasonCode::UnableToGetTelegram),
+    // Must be a player
+    let Some(ClientInfo::Player(player)) = &conn.client else {
+        return Err(ReasonCode::UnableToGetTelegram);
     };
 
-    let citizen_id = match playerinfo.citizen_id {
-        Some(x) => x,
-        None => return Err(ReasonCode::UnableToGetTelegram),
+    // Must be logged in as a citizen
+    let Some(citizen_id) = player.citizen_id() else {
+        return Err(ReasonCode::UnableToGetTelegram);
     };
 
     let telegrams = database.telegram_get_undelivered(citizen_id);

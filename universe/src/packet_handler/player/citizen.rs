@@ -1,93 +1,93 @@
 use crate::{
-    client::{Client, ClientType, Entity},
-    database::citizen::CitizenQuery,
-    database::CitizenDB,
-    database::Database,
+    client::{ClientInfo, Player, UniverseConnectionID},
+    database::{citizen::CitizenQuery, CitizenDB, Database},
+    get_conn, UniverseConnection, UniverseServer,
 };
 use aw_core::*;
 
-pub fn citizen_next(client: &Client, packet: &AWPacket, database: &Database) {
-    let mut rc = ReasonCode::Success;
+pub fn citizen_next(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let mut response = AWPacket::new(PacketType::CitizenInfo);
-
-    if !client.has_admin_permissions() {
-        log::info!(
-            "Client {} tried to use CitizenNext but is not an admin",
-            client.addr.ip()
-        );
-        rc = ReasonCode::Unauthorized;
-    } else if let Some(Entity::Player(info)) = &client.info().entity {
-        // TODO: next should be able to skip IDs
-        let citizen_id = packet.get_uint(VarID::CitizenNumber).unwrap_or(0);
-        match database.citizen_by_number(citizen_id.saturating_add(1)) {
-            Ok(citizen) => {
-                let same_citizen_id = Some(citizen.id) == info.citizen_id;
-                let is_admin = client.has_admin_permissions();
-                let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
-                for v in vars {
-                    response.add_var(v);
-                }
-            }
-            Err(_) => {
-                rc = ReasonCode::NoSuchCitizen;
-            }
-        }
-    }
-
+    let conn = get_conn!(server, cid, "citizen_next");
+    let rc = try_citizen_next_or_prev(server, conn, packet, &mut response, true);
     response.add_int(VarID::ReasonCode, rc as i32);
 
-    client.connection.send(response);
+    conn.send(response);
 }
 
-pub fn citizen_prev(client: &Client, packet: &AWPacket, database: &Database) {
-    let mut rc = ReasonCode::Success;
+pub fn citizen_prev(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let mut response = AWPacket::new(PacketType::CitizenInfo);
-
-    if !client.has_admin_permissions() {
-        log::info!(
-            "Client {} tried to use CitizenPrev but is not an admin",
-            client.addr.ip()
-        );
-        rc = ReasonCode::Unauthorized;
-    } else if let Some(Entity::Player(info)) = &client.info().entity {
-        // TODO: prev should be able to skip IDs
-        let citizen_id = packet.get_uint(VarID::CitizenNumber).unwrap_or(0);
-        match database.citizen_by_number(citizen_id.saturating_sub(1)) {
-            Ok(citizen) => {
-                let same_citizen_id = Some(citizen.id) == info.citizen_id;
-                let is_admin = client.has_admin_permissions();
-                let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
-                for v in vars {
-                    response.add_var(v);
-                }
-            }
-            Err(_) => {
-                rc = ReasonCode::NoSuchCitizen;
-            }
-        }
-    }
-
+    let conn = get_conn!(server, cid, "citizen_prev");
+    let rc = try_citizen_next_or_prev(server, conn, packet, &mut response, false);
     response.add_int(VarID::ReasonCode, rc as i32);
 
-    client.connection.send(response);
+    conn.send(response);
 }
 
-pub fn citizen_lookup_by_name(client: &Client, packet: &AWPacket, database: &Database) {
+fn try_citizen_next_or_prev(
+    server: &UniverseServer,
+    conn: &UniverseConnection,
+    packet: &AWPacket,
+    response: &mut AWPacket,
+    next: bool,
+) -> ReasonCode {
+    if !conn.has_admin_permissions() {
+        log::info!(
+            "Client {} tried to use Citizen{} but is not an admin",
+            conn.addr().ip(),
+            if next { "Next" } else { "Prev" }
+        );
+        return ReasonCode::Unauthorized;
+    }
+
+    let Some(player_citizen) = conn.client.as_ref().and_then(|x| x.citizen()) else {
+        // The user attempting to do this should be a citizen
+        return ReasonCode::Unauthorized;
+    };
+
+    // TODO: should be able to skip IDs
+    let citizen_id = packet.get_uint(VarID::CitizenNumber).unwrap_or(0);
+    let next_citizen_id = if next {
+        citizen_id.saturating_add(1)
+    } else {
+        citizen_id.saturating_sub(1)
+    };
+
+    let Ok(citizen) = server.database.citizen_by_number(next_citizen_id) else {
+        return ReasonCode::NoSuchCitizen;
+    };
+
+    let same_citizen_id = citizen.id == player_citizen.cit_id;
+    let is_admin = conn.has_admin_permissions();
+    let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
+    for v in vars {
+        response.add_var(v);
+    }
+
+    ReasonCode::Success
+}
+
+pub fn citizen_lookup_by_name(
+    server: &UniverseServer,
+    cid: UniverseConnectionID,
+    packet: &AWPacket,
+) {
     let mut rc = ReasonCode::Success;
     let mut response = AWPacket::new(PacketType::CitizenInfo);
 
-    if !client.has_admin_permissions() {
+    let conn = get_conn!(server, cid, "citizen_lookup_by_name");
+
+    if !conn.has_admin_permissions() {
         log::info!(
             "Client {} tried to use CitizenLookupByName but is not an admin",
-            client.addr.ip()
+            conn.addr().ip()
         );
         rc = ReasonCode::Unauthorized;
-    } else if let Some(Entity::Player(info)) = &client.info().entity {
+    } else if let Some(player_citizen) = conn.client.as_ref().and_then(|x| x.citizen()) {
         match packet.get_string(VarID::CitizenName) {
-            Some(citizen_name) => match database.citizen_by_name(&citizen_name) {
+            Some(citizen_name) => match server.database.citizen_by_name(&citizen_name) {
                 Ok(citizen) => {
-                    let same_citizen_id = Some(citizen.id) == info.citizen_id;
-                    let is_admin = client.has_admin_permissions();
+                    let same_citizen_id = citizen.id == player_citizen.cit_id;
+                    let is_admin = conn.has_admin_permissions();
                     let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
                     for v in vars {
                         response.add_var(v);
@@ -105,25 +105,31 @@ pub fn citizen_lookup_by_name(client: &Client, packet: &AWPacket, database: &Dat
 
     response.add_int(VarID::ReasonCode, rc as i32);
 
-    client.connection.send(response);
+    conn.send(response);
 }
 
-pub fn citizen_lookup_by_number(client: &Client, packet: &AWPacket, database: &Database) {
+pub fn citizen_lookup_by_number(
+    server: &UniverseServer,
+    cid: UniverseConnectionID,
+    packet: &AWPacket,
+) {
     let mut rc = ReasonCode::Success;
     let mut response = AWPacket::new(PacketType::CitizenInfo);
 
-    if !client.has_admin_permissions() {
+    let conn = get_conn!(server, cid, "citizen_lookup_by_number");
+
+    if !conn.has_admin_permissions() {
         log::info!(
             "Client {} tried to use CitizenLookupByNumber but is not an admin",
-            client.addr.ip()
+            conn.addr().ip()
         );
         rc = ReasonCode::Unauthorized;
-    } else if let Some(Entity::Player(info)) = &client.info().entity {
+    } else if let Some(player_citizen) = conn.client.as_ref().and_then(|x| x.citizen()) {
         match packet.get_uint(VarID::CitizenNumber) {
-            Some(citizen_id) => match database.citizen_by_number(citizen_id) {
+            Some(citizen_id) => match server.database.citizen_by_number(citizen_id) {
                 Ok(citizen) => {
-                    let same_citizen_id = Some(citizen.id) == info.citizen_id;
-                    let is_admin = client.has_admin_permissions();
+                    let same_citizen_id = citizen.id == player_citizen.cit_id;
+                    let is_admin = conn.has_admin_permissions();
                     let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
                     for v in vars {
                         response.add_var(v);
@@ -141,10 +147,10 @@ pub fn citizen_lookup_by_number(client: &Client, packet: &AWPacket, database: &D
 
     response.add_int(VarID::ReasonCode, rc as i32);
 
-    client.connection.send(response);
+    conn.send(response);
 }
 
-pub fn citizen_change(client: &Client, packet: &AWPacket, database: &Database) {
+pub fn citizen_change(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let changed_info = citizen_from_packet(packet);
     if changed_info.is_err() {
         log::trace!("Could not change citizen: {:?}", changed_info);
@@ -153,18 +159,20 @@ pub fn citizen_change(client: &Client, packet: &AWPacket, database: &Database) {
     let changed_info = changed_info.unwrap();
     let mut rc = ReasonCode::Success;
 
-    if let Some(Entity::Player(info)) = &client.info().entity {
+    let conn = get_conn!(server, cid, "citizen_change");
+
+    if let Some(player_citizen) = conn.client.as_ref().and_then(|x| x.citizen()) {
         // Client needs to be the user in question or an admin
-        if Some(changed_info.id) != info.citizen_id && !client.has_admin_permissions() {
+        if changed_info.id != player_citizen.cit_id && !conn.has_admin_permissions() {
             rc = ReasonCode::Unauthorized;
         } else {
-            match database.citizen_by_number(changed_info.id) {
+            match server.database.citizen_by_number(changed_info.id) {
                 Ok(original_info) => {
                     if let Err(x) = modify_citizen(
                         &original_info,
                         &changed_info,
-                        database,
-                        client.has_admin_permissions(),
+                        &server.database,
+                        conn.has_admin_permissions(),
                     ) {
                         rc = x;
                     }
@@ -180,7 +188,7 @@ pub fn citizen_change(client: &Client, packet: &AWPacket, database: &Database) {
     log::trace!("Change citizen: {:?}", rc);
     response.add_int(VarID::ReasonCode, rc as i32);
 
-    client.connection.send(response);
+    conn.send(response);
 }
 
 fn modify_citizen(
@@ -366,9 +374,14 @@ fn citizen_from_packet(packet: &AWPacket) -> Result<CitizenQuery, String> {
     })
 }
 
-pub fn citizen_add(client: &Client, packet: &AWPacket, database: &Database) {
+pub fn citizen_add(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let mut response = AWPacket::new(PacketType::CitizenChangeResult);
-    let rc = match try_add_citizen(client, packet, database) {
+
+    let conn = get_conn!(server, cid, "citizen_add");
+
+    // TODO: If no number is provided, default to the next available number.
+
+    let rc = match try_add_citizen(conn, packet, &server.database) {
         Ok(new_cit) => {
             response.add_uint(VarID::CitizenNumber, new_cit.id);
             response.add_string(VarID::CitizenName, new_cit.name);
@@ -381,11 +394,11 @@ pub fn citizen_add(client: &Client, packet: &AWPacket, database: &Database) {
     log::trace!("Add citizen: {:?}", rc);
     response.add_int(VarID::ReasonCode, rc as i32);
 
-    client.connection.send(response);
+    conn.send(response);
 }
 
 fn try_add_citizen(
-    client: &Client,
+    conn: &UniverseConnection,
     packet: &AWPacket,
     database: &Database,
 ) -> Result<CitizenQuery, ReasonCode> {
@@ -441,7 +454,7 @@ fn try_add_citizen(
     };
 
     // Client needs to be an admin
-    if !client.has_admin_permissions() {
+    if !conn.has_admin_permissions() {
         return Err(ReasonCode::Unauthorized);
     }
 
@@ -467,7 +480,7 @@ fn try_add_citizen(
 
     // Unimplemented: email filter
 
-    if client.info().client_type == Some(ClientType::Bot) {
+    if let Some(ClientInfo::Player(Player::Bot(_))) = conn.client {
         new_info.immigration = packet.get_uint(VarID::CitizenImmigration).unwrap_or(0);
         new_info.last_login = packet.get_uint(VarID::CitizenLastLogin).unwrap_or(0);
         new_info.total_time = packet.get_uint(VarID::CitizenTotalTime).unwrap_or(0);

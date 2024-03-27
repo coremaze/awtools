@@ -56,6 +56,11 @@ pub enum VarID {
 
     IdentifyUserIP = 26,
 
+    PositionNorth = 36,
+    PositionHeight = 37,
+    PositionRotation = 38,
+    PositionWest = 39,
+
     BotgramFromCitizenNumber = 40,
     BotgramFromUsername = 41,
     BotgramMessage = 42,
@@ -92,7 +97,7 @@ pub enum VarID {
     WorldLicenseHidden = 85,
     WorldLicenseLastAddress = 86,
     WorldLicenseLastStart = 87,
-    WorldStartWorldName = 88,
+    WorldName = 88,
     WorldLicenseID = 89,
     WorldLicensePassword = 90,
     WorldLicenseRange = 91,

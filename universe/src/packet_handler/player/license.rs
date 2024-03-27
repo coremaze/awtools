@@ -1,63 +1,66 @@
 use crate::{
-    client::{Client, Entity},
-    database::license::LicenseQuery,
-    database::Database,
-    database::LicenseDB,
+    client::UniverseConnectionID,
+    database::{license::LicenseQuery, Database, LicenseDB},
+    get_conn, UniverseConnection, UniverseServer,
 };
 use aw_core::*;
 
-pub fn license_add(client: &Client, packet: &AWPacket, database: &Database) {
+pub fn license_add(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let mut p = AWPacket::new(PacketType::LicenseChangeResult);
 
-    let _player_info = match &client.info().entity {
-        Some(Entity::Player(info)) => info,
-        _ => return,
+    let conn = get_conn!(server, cid, "license_add");
+
+    let Some(world_name) = packet.get_string(VarID::WorldName) else {
+        p.add_int(
+            VarID::ReasonCode,
+            ReasonCode::NameContainsInvalidBlank as i32,
+        );
+        conn.send(p);
+        return;
     };
 
-    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
-        Some(x) => x,
-        None => return,
-    };
-
-    if !client.has_admin_permissions() {
+    if !conn.has_admin_permissions() {
         log::trace!("Failed to add license due to lack of admin permissions");
         p.add_int(VarID::ReasonCode, ReasonCode::Unauthorized as i32);
-        client.connection.send(p);
+        conn.send(p);
         return;
     }
 
     if world_name.contains(' ') || world_name.is_empty() {
         log::trace!("Failed to add license due to invalid name");
         p.add_int(VarID::ReasonCode, ReasonCode::NoSuchLicense as i32);
-        client.connection.send(p);
+        conn.send(p);
         return;
     }
 
     let lic = match license_from_packet(packet) {
         Ok(x) => x,
-        Err(_) => return,
+        Err(why) => {
+            log::info!("Couldn't get license from packet: {why}");
+            return;
+        }
     };
 
-    if database.license_by_name(&lic.name).is_ok() {
+    if server.database.license_by_name(&lic.name).is_ok() {
         p.add_int(VarID::ReasonCode, ReasonCode::WorldAlreadyExists as i32);
-        client.connection.send(p);
+        conn.send(p);
         return;
     }
 
     if let Err(e) = check_valid_world_name(&lic.name) {
         p.add_int(VarID::ReasonCode, e as i32);
-        client.connection.send(p);
+        conn.send(p);
         return;
     }
 
-    if database.license_add(&lic).is_err() {
+    if server.database.license_add(&lic).is_err() {
         p.add_int(VarID::ReasonCode, ReasonCode::UnableToInsertName as i32);
-        client.connection.send(p);
+        conn.send(p);
         return;
     }
 
     p.add_int(VarID::ReasonCode, ReasonCode::Success as i32);
-    client.connection.send(p);
+    conn.send(p);
 }
 
 enum WorldLicenseLookupMethod {
@@ -66,20 +69,38 @@ enum WorldLicenseLookupMethod {
     Next,
 }
 
-pub fn license_by_name(client: &Client, packet: &AWPacket, database: &Database) {
-    send_license_lookup(client, packet, database, WorldLicenseLookupMethod::Exact);
+pub fn license_by_name(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
+    let conn = get_conn!(server, cid, "license_by_name");
+    send_license_lookup(
+        conn,
+        packet,
+        &server.database,
+        WorldLicenseLookupMethod::Exact,
+    );
 }
 
-pub fn license_next(client: &Client, packet: &AWPacket, database: &Database) {
-    send_license_lookup(client, packet, database, WorldLicenseLookupMethod::Next);
+pub fn license_next(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
+    let conn = get_conn!(server, cid, "license_next");
+    send_license_lookup(
+        conn,
+        packet,
+        &server.database,
+        WorldLicenseLookupMethod::Next,
+    );
 }
 
-pub fn license_prev(client: &Client, packet: &AWPacket, database: &Database) {
-    send_license_lookup(client, packet, database, WorldLicenseLookupMethod::Previous);
+pub fn license_prev(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
+    let conn = get_conn!(server, cid, "license_prev");
+    send_license_lookup(
+        conn,
+        packet,
+        &server.database,
+        WorldLicenseLookupMethod::Previous,
+    );
 }
 
 fn send_license_lookup(
-    client: &Client,
+    conn: &UniverseConnection,
     packet: &AWPacket,
     database: &Database,
     method: WorldLicenseLookupMethod,
@@ -87,14 +108,14 @@ fn send_license_lookup(
     let mut p = AWPacket::new(PacketType::LicenseResult);
 
     // Only admins should be able to query for world licenses
-    if !client.has_admin_permissions() {
+    if !conn.has_admin_permissions() {
         p.add_int(VarID::ReasonCode, ReasonCode::Unauthorized as i32);
-        client.connection.send(p);
+        conn.send(p);
         return;
     }
 
     // World name to iterate from should be included
-    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
+    let world_name = match packet.get_string(VarID::WorldName) {
         Some(x) => x,
         None => return,
     };
@@ -109,7 +130,7 @@ fn send_license_lookup(
     let rc = match license_result {
         Ok(lic) => {
             // Attach world license info to packet
-            let vars = license_to_vars(&lic, client.has_admin_permissions());
+            let vars = license_to_vars(&lic, conn.has_admin_permissions());
 
             for v in vars {
                 p.add_var(v);
@@ -125,16 +146,17 @@ fn send_license_lookup(
 
     p.add_int(VarID::ReasonCode, rc as i32);
 
-    client.connection.send(p);
+    conn.send(p);
 }
 
-pub fn license_change(client: &Client, packet: &AWPacket, database: &Database) {
+pub fn license_change(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let mut p = AWPacket::new(PacketType::LicenseResult);
+    let conn = get_conn!(server, cid, "license_change");
 
     // Only admins should be able change world licenses
-    if !client.has_admin_permissions() {
+    if !conn.has_admin_permissions() {
         p.add_int(VarID::ReasonCode, ReasonCode::Unauthorized as i32);
-        client.connection.send(p);
+        conn.send(p);
         return;
     }
 
@@ -147,16 +169,16 @@ pub fn license_change(client: &Client, packet: &AWPacket, database: &Database) {
     // Validate world name
     if let Err(rc) = check_valid_world_name(&changed_lic.name) {
         p.add_int(VarID::ReasonCode, rc as i32);
-        client.connection.send(p);
+        conn.send(p);
         return;
     }
 
     // Get the license to be changed
-    let original_lic = match database.license_by_name(&changed_lic.name) {
+    let original_lic = match server.database.license_by_name(&changed_lic.name) {
         Ok(lic) => lic,
         Err(_) => {
             p.add_int(VarID::ReasonCode, ReasonCode::NoSuchLicense as i32);
-            client.connection.send(p);
+            conn.send(p);
             return;
         }
     };
@@ -180,14 +202,14 @@ pub fn license_change(client: &Client, packet: &AWPacket, database: &Database) {
         voip: changed_lic.voip,
         plugins: changed_lic.plugins,
     };
-    if database.license_change(&new_lic).is_err() {
+    if server.database.license_change(&new_lic).is_err() {
         p.add_int(VarID::ReasonCode, ReasonCode::UnableToChangeLicense as i32);
-        client.connection.send(p);
+        conn.send(p);
         return;
     }
 
-    if let Ok(lic) = database.license_by_name(&changed_lic.name) {
-        let vars = license_to_vars(&lic, client.has_admin_permissions());
+    if let Ok(lic) = server.database.license_by_name(&changed_lic.name) {
+        let vars = license_to_vars(&lic, conn.has_admin_permissions());
 
         for v in vars {
             p.add_var(v);
@@ -196,12 +218,12 @@ pub fn license_change(client: &Client, packet: &AWPacket, database: &Database) {
 
     // TODO: Kill existing world if it is now invalid/expired
     p.add_int(VarID::ReasonCode, ReasonCode::Success as i32);
-    client.connection.send(p);
+    conn.send(p);
 }
 
 fn license_to_vars(lic: &LicenseQuery, admin: bool) -> Vec<AWPacketVar> {
     let mut result = vec![
-        AWPacketVar::String(VarID::WorldStartWorldName, lic.name.clone()),
+        AWPacketVar::String(VarID::WorldName, lic.name.clone()),
         AWPacketVar::Uint(VarID::WorldLicenseID, lic.id),
         AWPacketVar::Uint(VarID::WorldLicenseUsers, lic.users),
         AWPacketVar::Uint(VarID::WorldLicenseRange, lic.world_size),
@@ -253,7 +275,7 @@ fn check_valid_world_name(name: &str) -> Result<(), ReasonCode> {
 
 fn license_from_packet(packet: &AWPacket) -> Result<LicenseQuery, String> {
     let name = packet
-        .get_string(VarID::WorldStartWorldName)
+        .get_string(VarID::WorldName)
         .ok_or_else(|| "No world name".to_string())?;
     let password = packet
         .get_string(VarID::WorldLicensePassword)

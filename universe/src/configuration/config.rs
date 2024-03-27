@@ -1,7 +1,5 @@
 use std::net::Ipv4Addr;
 
-use crate::configuration::config;
-
 use super::configurator::run_configurator;
 use serde::{Deserialize, Serialize};
 use std::path::Path;

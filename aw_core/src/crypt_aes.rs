@@ -36,19 +36,15 @@ impl AWCryptStream for AWCryptAES {
 
         iv.copy_from_slice(&src[0x10..0x20]);
 
-        let mut i = 0; // key index - counts up
-        for j in src.iter().rev() {
-            // buffer index - counts down
+        for (i, j) in src.iter().rev().enumerate() {
             key[i % key.len()] = key[i % key.len()].wrapping_add(*j);
-
-            i += 1;
         }
 
-        let mut cipher = Aes256Ofb::new(&key.into(), &iv.into());
+        let cipher = Aes256Ofb::new(&key.into(), &iv.into());
 
         Ok(Self {
             init_rand_buf: src.to_vec(),
-            cipher: cipher,
+            cipher,
         })
     }
 

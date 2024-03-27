@@ -1,6 +1,7 @@
 use rand::{thread_rng, RngCore};
 use rsaref_rs::*;
 
+#[derive(Debug)]
 pub struct AWCryptRSA {
     random_struct: RandomStruct,
     public_key: Option<RSAPublicKey>,

@@ -1,84 +1,79 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
-    client::{Client, ClientManager, Entity},
-    database::{attrib::Attribute, license::LicenseQuery, AttribDB, Database, LicenseDB},
-    world::{World, WorldRating, WorldStatus},
+    client::{ClientInfo, UniverseConnectionID},
+    database::{attrib::Attribute, license::LicenseQuery, AttribDB, LicenseDB},
+    get_conn, get_conn_mut,
+    tabs::regenerate_world_list,
+    world::{World, WorldRating},
+    UniverseServer,
 };
-use aw_core::{AWPacket, AWPacketVar, PacketType, ReasonCode, VarID};
+use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
 use num_traits::FromPrimitive;
 
-pub fn world_start(
-    client: &Client,
-    packet: &AWPacket,
-    database: &Database,
-    client_manager: &ClientManager,
-) {
-    let (world_build, world_port) = match &client.info().entity {
-        Some(Entity::WorldServer(info)) => (info.build, info.server_port),
-        _ => {
-            return;
-        }
+pub fn world_start(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
+    let conn = get_conn!(server, cid, "world_start");
+
+    let Some(client) = &conn.client else {
+        return;
     };
 
-    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
-        Some(x) => x,
-        None => return,
+    let ClientInfo::WorldServer(world_server) = client else {
+        return;
     };
 
-    let world_password = match packet.get_string(VarID::WorldLicensePassword) {
-        Some(x) => x,
-        None => return,
+    let world_build = world_server.build;
+
+    let Some(world_name) = packet.get_string(VarID::WorldName) else {
+        return;
     };
 
-    let world_rating = match packet.get_byte(VarID::WorldRating) {
-        Some(x) => x,
-        None => return,
+    let Some(world_password) = packet.get_string(VarID::WorldLicensePassword) else {
+        return;
     };
 
-    let world_free_entry = match packet.get_byte(VarID::WorldFreeEntry) {
-        Some(x) => x,
-        None => return,
+    let Some(world_rating) = packet.get_byte(VarID::WorldRating) else {
+        return;
+    };
+
+    let Some(world_free_entry) = packet.get_byte(VarID::WorldFreeEntry) else {
+        return;
     };
 
     let mut p = AWPacket::new(PacketType::WorldStart);
 
-    p.add_string(VarID::WorldStartWorldName, world_name.clone());
+    p.add_string(VarID::WorldName, world_name.clone());
 
-    let lic = match validate_world(world_build, &world_name, &world_password, database) {
+    let lic = match validate_world(server, world_build, &world_name, &world_password) {
         Ok(x) => x,
         Err(rc) => {
             log::info!("Unable to start world: {rc:?}");
             p.add_int(VarID::ReasonCode, rc as i32);
-            client.connection.send(p);
+            conn.send(p);
             return;
         }
     };
 
     // Don't let clients start a world twice
-    if client_manager.get_world_by_name(&lic.name).is_some() {
+    if server.connections.get_world_by_name(&lic.name).is_some() {
+        log::info!(
+            "{:?} attempted to start a world {:?} twice.",
+            &conn,
+            &world_name
+        );
         p.add_int(VarID::ReasonCode, ReasonCode::WorldAlreadyStarted as i32);
-        client.connection.send(p);
+        conn.send(p);
         return;
     }
 
-    // Add a new world to the client's list of worlds
     let new_world = World {
         name: lic.name.clone(),
-        status: WorldStatus::from_free_entry(world_free_entry),
-        rating: WorldRating::from_u8(world_rating).unwrap_or_default(),
-        ip: client.addr.ip(),
-        port: world_port,
-        max_users: lic.users,
+        free_entry: world_free_entry != 0,
         world_size: lic.world_size,
+        max_users: lic.users,
+        rating: WorldRating::from_u8(world_rating).unwrap_or_default(),
         user_count: 0,
     };
-
-    let mut entity = client.info_mut().entity.take();
-    if let Some(Entity::WorldServer(server_info)) = &mut entity {
-        server_info.worlds.push(new_world.clone());
-    }
-    client.info_mut().entity = entity;
 
     p.add_uint(VarID::WorldLicenseExpiration, lic.expiration);
     p.add_uint(VarID::WorldLicenseUsers, lic.users);
@@ -88,36 +83,49 @@ pub fn world_start(
 
     p.add_int(VarID::ReasonCode, ReasonCode::Success as i32);
 
-    client.connection.send(p);
+    conn.send(p);
 
-    // Send update about new world to all players
-    World::send_update_to_all(&new_world, client_manager);
+    add_world_to_world_server(server, cid, new_world);
+
+    // Add information about the new world to everyone's world list
+    for cid in server.connections.cids() {
+        regenerate_world_list(server, cid)
+    }
 }
 
-pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
-    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
+fn add_world_to_world_server(server: &mut UniverseServer, cid: UniverseConnectionID, world: World) {
+    let conn = get_conn_mut!(server, cid, "add_world_to_world_server");
+
+    let Some(client) = &mut conn.client else {
+        return;
+    };
+
+    let ClientInfo::WorldServer(world_server) = client else {
+        return;
+    };
+
+    world_server.worlds.push(world);
+}
+
+pub fn world_stop(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
+    let world_name = match packet.get_string(VarID::WorldName) {
         Some(x) => x,
         None => return,
     };
 
-    let world_exists = client_manager.get_world_by_name(&world_name).is_some();
+    let world_exists = server.connections.get_world_by_name(&world_name).is_some();
+
+    let conn = get_conn_mut!(server, cid, "world_stop");
+
+    let Some(ClientInfo::WorldServer(world_server)) = &mut conn.client else {
+        return;
+    };
 
     // Remove the world from the client
-    let mut entity = client.info_mut().entity.take();
-    let mut removed_world: Option<World> = None;
-    if let Some(Entity::WorldServer(server_info)) = &mut entity {
-        let mut matched_index: Option<usize> = None;
-        for (i, e) in server_info.worlds.iter().enumerate() {
-            if e.name.eq_ignore_ascii_case(&world_name) {
-                matched_index = Some(i);
-                break;
-            }
-        }
-        if let Some(i) = matched_index {
-            removed_world = Some(server_info.worlds.remove(i));
-        }
-    }
-    client.info_mut().entity = entity;
+    log::trace!("Before remove: {world_server:?}");
+    let removed_world = world_server.remove_world(&world_name);
+    log::trace!("After remove: {world_server:?}");
+    log::trace!("{removed_world:?}");
 
     let rc = match world_exists {
         true => match removed_world {
@@ -127,26 +135,25 @@ pub fn world_stop(client: &Client, packet: &AWPacket, client_manager: &ClientMan
         false => ReasonCode::NoSuchWorld,
     };
 
-    // Remove world from clients' world list
-    if let Some(mut removed_world) = removed_world {
-        removed_world.status = WorldStatus::Hidden;
-        World::send_update_to_all(&removed_world, client_manager);
-    }
-
     let mut p = AWPacket::new(PacketType::WorldStop);
 
     p.add_int(VarID::ReasonCode, rc as i32);
 
-    client.connection.send(p);
+    conn.send(p);
+
+    // Remove world from clients' world list
+    for cid in server.connections.cids() {
+        regenerate_world_list(server, cid)
+    }
 }
 
 fn validate_world(
+    server: &UniverseServer,
     world_build: i32,
     name: &str,
     pass: &str,
-    database: &Database,
 ) -> Result<LicenseQuery, ReasonCode> {
-    let attribs = database.attrib_get()?;
+    let attribs = server.database.attrib_get()?;
 
     // Check to see if the world version is within universe constraints
     let minimum_world_build = attribs
@@ -171,7 +178,8 @@ fn validate_world(
 
     // TODO: Check for ejected client
 
-    let world_lic = database
+    let world_lic = server
+        .database
         .license_by_name(name)
         .map_err(|_| ReasonCode::InvalidWorld)?;
 
@@ -193,42 +201,43 @@ fn validate_world(
     Ok(world_lic)
 }
 
-pub fn world_stats_update(client: &Client, packet: &AWPacket, client_manager: &ClientManager) {
-    let world_rating = match packet.get_byte(VarID::WorldRating) {
-        Some(x) => x,
-        None => return,
-    };
-
-    let world_free_entry = match packet.get_byte(VarID::WorldFreeEntry) {
-        Some(x) => x,
-        None => return,
-    };
-
-    let user_count = match packet.get_uint(VarID::WorldUsers) {
-        Some(x) => x,
-        None => return,
-    };
-
-    let world_name = match packet.get_string(VarID::WorldStartWorldName) {
-        Some(x) => x,
-        None => return,
-    };
-
-    let world = if let Some(Entity::WorldServer(w)) = &mut client.info_mut().entity {
-        match w.get_world_mut(&world_name) {
-            Some(world) => {
-                world.rating = WorldRating::from_u8(world_rating).unwrap_or_default();
-                world.status = WorldStatus::from_free_entry(world_free_entry);
-                world.user_count = user_count;
-
-                world.clone()
-            }
-            // Return if the client doesn't own the given world
-            None => return,
-        }
-    } else {
+pub fn world_stats_update(
+    server: &mut UniverseServer,
+    cid: UniverseConnectionID,
+    packet: &AWPacket,
+) {
+    let Some(world_rating) = packet.get_byte(VarID::WorldRating) else {
         return;
     };
 
-    World::send_update_to_all(&world, client_manager);
+    let Some(world_free_entry) = packet.get_byte(VarID::WorldFreeEntry) else {
+        return;
+    };
+
+    let Some(user_count) = packet.get_uint(VarID::WorldUsers) else {
+        return;
+    };
+
+    let Some(world_name) = packet.get_string(VarID::WorldName) else {
+        return;
+    };
+
+    let conn = get_conn_mut!(server, cid, "world_stats_update");
+
+    let Some(ClientInfo::WorldServer(world_server)) = &mut conn.client else {
+        return;
+    };
+
+    let Some(world) = world_server.get_world_mut(&world_name) else {
+        return;
+    };
+
+    world.rating = WorldRating::from_u8(world_rating).unwrap_or_default();
+    world.free_entry = world_free_entry != 0;
+    world.user_count = user_count;
+
+    // Change world information in everyone's world list
+    for cid in server.connections.cids() {
+        regenerate_world_list(server, cid)
+    }
 }

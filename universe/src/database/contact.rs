@@ -19,11 +19,11 @@ bitflags! {
         const TELEGRAMS_ALLOWED = 0b0000_0000_0001_0000;
         const TELEGRAMS_BLOCKED = 0b0000_0000_0010_0000;
 
-        const JOIN_ALLOWED = 0b0000_0000_0100_0000;
-        const JOIN_BLOCKED = 0b0000_0000_1000_0000;
-
         const FILE_TRANSFER_ALLOWED = 0b0000_0001_0000_0000;
         const FILE_TRANSFER_BLOCKED = 0b0000_0010_0000_0000;
+
+        const JOIN_ALLOWED = 0b0000_0000_0100_0000;
+        const JOIN_BLOCKED = 0b0000_0000_1000_0000;
 
         const CHAT_ALLOWED = 0b0000_0100_0000_0000;
         const CHAT_BLOCKED = 0b0000_1000_0000_0000;
@@ -126,6 +126,7 @@ impl ContactOptions {
     }
 }
 
+#[derive(Debug)]
 pub struct ContactQuery {
     pub citizen: u32,
     pub contact: u32,
@@ -145,6 +146,8 @@ pub trait ContactDB {
     fn contact_telegrams_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
     fn contact_friend_requests_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
     fn contact_status_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
+    fn contact_joins_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
+    fn contact_invites_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
 }
 
 impl ContactDB for Database {
@@ -371,6 +374,24 @@ impl ContactDB for Database {
         }
 
         true
+    }
+
+    fn contact_joins_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+        let contact = match self.contact_get(citizen_id, contact_id) {
+            Ok(x) => x,
+            _ => return true,
+        };
+
+        contact.options.is_join_allowed()
+    }
+
+    fn contact_invites_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+        let contact = match self.contact_get(citizen_id, contact_id) {
+            Ok(x) => x,
+            _ => return true,
+        };
+
+        contact.options.is_invite_allowed()
     }
 }
 

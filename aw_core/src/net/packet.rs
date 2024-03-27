@@ -48,12 +48,7 @@ impl AWPacket {
 
     /// Get a variable from a packet.
     pub fn get_var(&self, var_id: VarID) -> Option<&AWPacketVar> {
-        for var in &self.vars {
-            if var.get_var_id() == var_id {
-                return Some(var);
-            }
-        }
-        None
+        self.vars.iter().find(|&var| var.get_var_id() == var_id)
     }
 
     pub fn get_vars(&self) -> &[AWPacketVar] {
@@ -430,7 +425,7 @@ pub enum PacketType {
     AvatarClick = 11,
     AvatarDelete = 12,
 
-    Invite = 14,
+    Botgram = 14,
     BotgramResponse = 15,
 
     Capabilities = 16,
@@ -572,6 +567,7 @@ pub enum PacketType {
     HudResult = 168,
     AvatarLocation = 169,
     ObjectQuery = 170,
+    Unknown171 = 171,
     LaserBeam = 183,
 
     Unknown = 0x7FFF,
