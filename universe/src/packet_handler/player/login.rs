@@ -1,5 +1,7 @@
+use std::net::IpAddr;
+
 use crate::{
-    client::{ClientInfo, Player, UniverseConnectionID},
+    client::{Bot, Citizen, ClientInfo, GenericPlayer, Player, UniverseConnectionID},
     database::{citizen::CitizenQuery, CitizenDB},
     get_conn_mut,
     tabs::{regenerate_contact_list_and_mutuals, regenerate_player_list, regenerate_world_list},
@@ -91,6 +93,23 @@ fn validate_login(
         LoginType::from_i32(login_type_num).ok_or(ReasonCode::NoSuchCitizen)?
     };
 
+    match login_type {
+        LoginType::WorldServer => {
+            // A world server can't log in!
+            Err(ReasonCode::NoSuchCitizen)
+        }
+        LoginType::UnspecifiedHuman => validate_human(server, cid, ip, packet, response),
+        LoginType::Bot => validate_bot(server, ip, packet, response),
+    }
+}
+
+fn validate_human(
+    server: &mut UniverseServer,
+    cid: UniverseConnectionID,
+    ip: IpAddr,
+    packet: &AWPacket,
+    response: &mut AWPacket,
+) -> Result<Player, ReasonCode> {
     let username = packet
         .get_string(VarID::LoginUsername)
         .ok_or(ReasonCode::NoSuchCitizen)?;
@@ -101,65 +120,163 @@ fn validate_login(
         .get_int(VarID::BrowserBuild)
         .ok_or(ReasonCode::NoSuchCitizen)?;
 
-    match login_type {
-        LoginType::WorldServer => {
-            // A world server can't log in!
-            Err(ReasonCode::NoSuchCitizen)
-        }
-        LoginType::UnspecifiedHuman => {
-            // A user is a tourist if they have quotes around their name
-            if username.starts_with('"') {
-                check_tourist(server, &username)?;
+    // A user is a tourist if they have quotes around their name
+    if username.starts_with('"') {
+        check_tourist(server, &username)?;
 
-                Ok(Player::new_tourist(
-                    server.connections.create_session_id(),
-                    browser_build,
-                    &username,
-                    ip,
-                ))
-            } else {
-                #[cfg(feature = "protocol_v4")]
-                let cit = check_citizen_v4(
-                    server,
-                    cid,
-                    &username,
-                    packet.get_string(VarID::Password).as_ref(), // V4 only
-                    privilege_id,
-                    privilege_password.as_ref(),
-                )?;
+        Ok(Player::Tourist(GenericPlayer {
+            build: browser_build,
+            session_id: server.connections.create_session_id(),
+            privilege_id: None,
+            username,
+            nonce: None,
+            world: None,
+            ip,
+            afk: false,
+            tabs: Default::default(),
+        }))
+    } else {
+        #[cfg(feature = "protocol_v4")]
+        let cit = check_citizen_v4(
+            server,
+            cid,
+            &username,
+            packet.get_string(VarID::Password).as_ref(), // V4 only
+            privilege_id,
+            privilege_password.as_ref(),
+        )?;
 
-                #[cfg(feature = "protocol_v6")]
-                let cit = check_citizen_v6(
-                    server,
-                    cid,
-                    &username,
-                    packet.get_data(VarID::AttributeUserlist).as_ref(), // V6 only
-                    privilege_id,
-                    privilege_password.as_ref(),
-                )?;
+        #[cfg(feature = "protocol_v6")]
+        let cit = check_citizen_v6(
+            server,
+            cid,
+            &username,
+            packet.get_data(VarID::AttributeUserlist).as_ref(), // V6 only
+            privilege_id,
+            privilege_password.as_ref(),
+        )?;
 
-                // Add packet variables with citizen info
-                response.add_uint(VarID::BetaUser, cit.beta);
-                response.add_uint(VarID::TrialUser, cit.trial);
-                response.add_uint(VarID::CitizenNumber, cit.id);
-                response.add_uint(VarID::CitizenPrivacy, cit.privacy);
-                response.add_uint(VarID::CAVEnabled, cit.cav_enabled);
+        // Add packet variables with citizen info
+        response.add_uint(VarID::BetaUser, cit.beta);
+        response.add_uint(VarID::TrialUser, cit.trial);
+        response.add_uint(VarID::CitizenNumber, cit.id);
+        response.add_uint(VarID::CitizenPrivacy, cit.privacy);
+        response.add_uint(VarID::CAVEnabled, cit.cav_enabled);
 
-                Ok(Player::new_citizen(
-                    cit.id,
-                    privilege_id,
-                    server.connections.create_session_id(),
-                    browser_build,
-                    &cit.name,
-                    ip,
-                ))
-            }
-        }
-        LoginType::Bot => {
-            log::warn!("Bots are not yet implemented.");
-            Err(ReasonCode::NoSuchCitizen)
-        }
+        Ok(Player::Citizen(Citizen {
+            cit_id: cit.id,
+            player_info: GenericPlayer {
+                build: browser_build,
+                session_id: server.connections.create_session_id(),
+                privilege_id,
+                username: cit.name,
+                nonce: None,
+                world: None,
+                ip,
+                afk: false,
+                tabs: Default::default(),
+            },
+        }))
     }
+}
+
+fn validate_bot(
+    server: &mut UniverseServer,
+    ip: IpAddr,
+    packet: &AWPacket,
+    response: &mut AWPacket,
+) -> Result<Player, ReasonCode> {
+    // Build is typically much lower for SDK than for browsers
+    let build = packet
+        .get_int(VarID::BrowserBuild)
+        .ok_or(ReasonCode::NoSuchCitizen)?;
+
+    // Bots need to specify the citizen ID of their owner
+    let login_id = packet
+        .get_uint(VarID::LoginID)
+        .ok_or(ReasonCode::NoSuchCitizen)?;
+
+    if login_id == 0 {
+        return Err(ReasonCode::NoSuchCitizen);
+    }
+
+    let _version = packet
+        .get_int(VarID::BrowserVersion)
+        .ok_or(ReasonCode::NoSuchCitizen)?;
+
+    // For bots, they need to send their name without brackets, but we respond
+    // telling their name including the brackets
+    let username = packet
+        .get_string(VarID::LoginUsername)
+        .ok_or(ReasonCode::NoSuchCitizen)?;
+
+    check_valid_name(&username, false)?;
+
+    // A description of what the bot is supposed to do
+    let application = packet
+        .get_string(VarID::Application)
+        .ok_or(ReasonCode::NoSuchCitizen)?;
+
+    // Bots log in using the privilege password of their owner
+    let privilege_password = packet
+        .get_string(VarID::PrivilegePassword)
+        .ok_or(ReasonCode::InvalidPassword)?;
+
+    // Normally also sends an AttributeCitizenChanges
+
+    let cit_query = server
+        .database
+        .citizen_by_number(login_id)
+        .map_err(|_| ReasonCode::NoSuchCitizen)?;
+
+    if privilege_password != cit_query.priv_pass {
+        return Err(ReasonCode::InvalidPassword);
+    }
+
+    let bots_max = cit_query.bot_limit;
+    let bots_owned = server
+        .connections
+        .iter()
+        .map(|(_, conn)| conn)
+        .filter(|conn| {
+            // Count the number of bots
+            if let Some(ClientInfo::Player(Player::Bot(bot))) = &conn.client {
+                // Who are logged in with the same login id
+                bot.owner_id == login_id
+            } else {
+                false
+            }
+        })
+        .count();
+
+    log::trace!("{login_id} currently has {bots_owned} bots, out of a limit of {bots_max}");
+
+    if bots_owned >= bots_max as usize {
+        return Err(ReasonCode::BotLimitExceeded);
+    }
+
+    response.add_uint(VarID::BetaUser, cit_query.beta);
+    response.add_uint(VarID::TrialUser, cit_query.trial);
+    response.add_uint(VarID::CitizenNumber, cit_query.id);
+    response.add_uint(VarID::CitizenPrivacy, cit_query.privacy);
+    response.add_uint(VarID::CAVEnabled, cit_query.cav_enabled);
+    response.add_string(VarID::PrivilegeUsername, cit_query.name);
+
+    Ok(Player::Bot(Bot {
+        owner_id: login_id,
+        application,
+        player_info: GenericPlayer {
+            build,
+            session_id: server.connections.create_session_id(),
+            privilege_id: Some(login_id),
+            username: format!("[{username}]"),
+            nonce: None,
+            world: None,
+            ip,
+            afk: false,
+            tabs: Default::default(),
+        },
+    }))
 }
 
 #[cfg(feature = "protocol_v4")]
@@ -395,10 +512,10 @@ fn add_license_data_to_packet(
     response: &mut AWPacket,
 ) {
     // Add license data (Specific to the IP/port binding that the client sees!)
-    if let Some(browser_build) = browser_build {
-        response.add_data(
-            VarID::UniverseLicense,
-            server.license_generator.create_license_data(browser_build),
-        );
-    }
+    response.add_data(
+        VarID::UniverseLicense,
+        server
+            .license_generator
+            .create_license_data(browser_build.unwrap_or(0)),
+    );
 }

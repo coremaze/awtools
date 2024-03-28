@@ -57,36 +57,43 @@ pub struct Citizen {
 }
 
 #[derive(Debug)]
+pub struct Bot {
+    pub owner_id: u32,
+    pub application: String,
+    pub player_info: GenericPlayer,
+}
+
+#[derive(Debug)]
 pub enum Player {
     Citizen(Citizen),
     Tourist(GenericPlayer),
-    Bot(GenericPlayer),
+    Bot(Bot),
 }
 
 impl Player {
-    pub fn new_citizen(
-        citizen_id: u32,
-        privilege_id: Option<u32>,
-        session_id: u16,
-        build: i32,
-        username: &str,
-        ip: IpAddr,
-    ) -> Self {
-        Self::Citizen(Citizen {
-            cit_id: citizen_id,
-            player_info: GenericPlayer {
-                build,
-                session_id,
-                privilege_id,
-                username: username.to_string(),
-                nonce: None,
-                world: None,
-                ip,
-                afk: false,
-                tabs: Default::default(),
-            },
-        })
-    }
+    // pub fn new_citizen(
+    //     citizen_id: u32,
+    //     privilege_id: Option<u32>,
+    //     session_id: u16,
+    //     build: i32,
+    //     username: &str,
+    //     ip: IpAddr,
+    // ) -> Self {
+    //     Self::Citizen(Citizen {
+    //         cit_id: citizen_id,
+    //         player_info: GenericPlayer {
+    //             build,
+    //             session_id,
+    //             privilege_id,
+    //             username: username.to_string(),
+    //             nonce: None,
+    //             world: None,
+    //             ip,
+    //             afk: false,
+    //             tabs: Default::default(),
+    //         },
+    //     })
+    // }
 
     pub fn new_tourist(session_id: u16, build: i32, username: &str, ip: IpAddr) -> Self {
         Self::Tourist(GenericPlayer {
@@ -102,11 +109,25 @@ impl Player {
         })
     }
 
+    // pub fn new_bot(session_id: u16, username: &str, ip: IpAddr) -> Self {
+    //     Self::Bot(GenericPlayer {
+    //         build: 1,
+    //         session_id,
+    //         privilege_id: Some(1),
+    //         username: username.to_string(),
+    //         nonce: None,
+    //         world: None,
+    //         ip,
+    //         afk: false,
+    //         tabs: Default::default(),
+    //     })
+    // }
+
     pub fn player_info(&self) -> &GenericPlayer {
         match self {
             Player::Citizen(citizen) => &citizen.player_info,
             Player::Tourist(info) => info,
-            Player::Bot(info) => info,
+            Player::Bot(bot) => &bot.player_info,
         }
     }
 
@@ -114,7 +135,7 @@ impl Player {
         match self {
             Player::Citizen(citizen) => &mut citizen.player_info,
             Player::Tourist(info) => info,
-            Player::Bot(info) => info,
+            Player::Bot(bot) => &mut bot.player_info,
         }
     }
 
@@ -265,10 +286,12 @@ impl UniverseConnection {
     }
 
     pub fn send(&self, packet: AWPacket) {
+        log::trace!("Sending {} packet {packet:?}", self.addr());
         self.connection.send(packet)
     }
 
     pub fn send_group(&self, packets: AWPacketGroup) {
+        log::trace!("Sending {} packets {packets:?}", self.addr());
         self.connection.send_group(packets)
     }
 

@@ -103,7 +103,7 @@ pub enum VarID {
     WorldLicenseRange = 91,
     WorldLicenseTourists = 92,
     WorldLicenseUsers = 93,
-    Unknown94 = 94,
+    Application = 94,
     Email = 95,
     LoginUsername = 96,
     LoginID = 97,
