@@ -71,58 +71,6 @@ pub enum Player {
 }
 
 impl Player {
-    // pub fn new_citizen(
-    //     citizen_id: u32,
-    //     privilege_id: Option<u32>,
-    //     session_id: u16,
-    //     build: i32,
-    //     username: &str,
-    //     ip: IpAddr,
-    // ) -> Self {
-    //     Self::Citizen(Citizen {
-    //         cit_id: citizen_id,
-    //         player_info: GenericPlayer {
-    //             build,
-    //             session_id,
-    //             privilege_id,
-    //             username: username.to_string(),
-    //             nonce: None,
-    //             world: None,
-    //             ip,
-    //             afk: false,
-    //             tabs: Default::default(),
-    //         },
-    //     })
-    // }
-
-    pub fn new_tourist(session_id: u16, build: i32, username: &str, ip: IpAddr) -> Self {
-        Self::Tourist(GenericPlayer {
-            build,
-            session_id,
-            privilege_id: None,
-            username: username.to_string(),
-            nonce: None,
-            world: None,
-            ip,
-            afk: false,
-            tabs: Default::default(),
-        })
-    }
-
-    // pub fn new_bot(session_id: u16, username: &str, ip: IpAddr) -> Self {
-    //     Self::Bot(GenericPlayer {
-    //         build: 1,
-    //         session_id,
-    //         privilege_id: Some(1),
-    //         username: username.to_string(),
-    //         nonce: None,
-    //         world: None,
-    //         ip,
-    //         afk: false,
-    //         tabs: Default::default(),
-    //     })
-    // }
-
     pub fn player_info(&self) -> &GenericPlayer {
         match self {
             Player::Citizen(citizen) => &citizen.player_info,
