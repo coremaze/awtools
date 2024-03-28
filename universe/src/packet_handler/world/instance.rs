@@ -1,10 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
-    client::{ClientInfo, UniverseConnectionID},
+    client::ClientInfo,
     database::{attrib::Attribute, license::LicenseQuery, AttribDB, LicenseDB},
     get_conn, get_conn_mut,
     tabs::regenerate_world_list,
+    universe_connection::UniverseConnectionID,
     world::{World, WorldRating},
     UniverseServer,
 };

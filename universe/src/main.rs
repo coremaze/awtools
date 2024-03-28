@@ -1,7 +1,6 @@
 use aw_core::*;
 
 mod client;
-pub use client::UniverseConnection;
 mod universe_server;
 pub use universe_server::UniverseServer;
 pub mod attributes;
@@ -11,7 +10,10 @@ mod database;
 pub mod packet_handler;
 pub mod tabs;
 pub mod telegram;
+pub mod universe_connection;
 pub mod world;
+pub use universe_connection::UniverseConnection;
+pub mod player;
 
 mod configuration;
 

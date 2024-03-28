@@ -3,12 +3,14 @@ use std::collections::HashMap;
 use aw_core::{AWPacket, AWPacketGroup, PacketType, VarID};
 
 use crate::{
-    client::{ClientInfo, UniverseConnectionID},
+    client::ClientInfo,
     database::{
         contact::{ContactOptions, ContactQuery},
         CitizenDB, ContactDB,
     },
-    get_conn_mut, UniverseConnection, UniverseServer,
+    get_conn_mut,
+    universe_connection::UniverseConnectionID,
+    UniverseConnection, UniverseServer,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]

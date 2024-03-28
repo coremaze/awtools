@@ -1,17 +1,20 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
-    client::{ClientInfo, Player, UniverseConnectionID},
+    client::ClientInfo,
     database::{
         contact::{ContactOptions, ContactQuery},
         CitizenDB, ContactDB, Database, TelegramDB,
     },
     get_conn, get_conn_mut,
+    player::Player,
     tabs::{
         regenerate_contact_list, regenerate_contact_list_and_mutuals, ContactListEntry,
         ContactState,
     },
-    telegram, UniverseConnection, UniverseServer,
+    telegram,
+    universe_connection::UniverseConnectionID,
+    UniverseConnection, UniverseServer,
 };
 use aw_core::*;
 

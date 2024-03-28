@@ -1,10 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
-    client::{ClientInfo, UniverseConnectionID},
+    client::ClientInfo,
     database::{telegram::TelegramQuery, CitizenDB, ContactDB, Database, TelegramDB},
     get_conn,
     telegram::send_telegram_update_available,
+    universe_connection::UniverseConnectionID,
     UniverseConnection, UniverseServer,
 };
 use aw_core::*;

@@ -1,12 +1,14 @@
 use aw_core::*;
 
 use crate::{
-    client::{ClientInfo, UniverseConnection, UniverseConnectionID, UniverseConnections},
+    client::ClientInfo,
     configuration,
     database::Database,
     get_conn, packet_handler,
     tabs::{regenerate_contact_list, regenerate_player_list, regenerate_world_list},
+    universe_connection::{UniverseConnectionID, UniverseConnections},
     universe_license::LicenseGenerator,
+    UniverseConnection,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

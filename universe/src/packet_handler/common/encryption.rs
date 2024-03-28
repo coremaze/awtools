@@ -1,4 +1,4 @@
-use crate::{attributes, client::UniverseConnectionID, get_conn_mut, UniverseServer};
+use crate::{attributes, get_conn_mut, universe_connection::UniverseConnectionID, UniverseServer};
 use aw_core::{AWCryptRSA, AWPacket, PacketType, VarID};
 
 /// Handle a client requesting the server's public RSA key.

@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use crate::{client::UniverseConnectionID, get_conn, get_conn_mut, UniverseServer};
+use crate::{get_conn, get_conn_mut, universe_connection::UniverseConnectionID, UniverseServer};
 use aw_core::*;
 
 use rand::Rng;

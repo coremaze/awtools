@@ -1,8 +1,6 @@
 use crate::{
-    client::{ClientInfo, UniverseConnectionID},
-    get_conn,
-    tabs::regenerate_contact_list_and_mutuals,
-    UniverseServer,
+    client::ClientInfo, get_conn, tabs::regenerate_contact_list_and_mutuals,
+    universe_connection::UniverseConnectionID, UniverseServer,
 };
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
 

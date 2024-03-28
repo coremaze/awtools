@@ -1,11 +1,13 @@
 use std::net::IpAddr;
 
 use crate::{
-    client::{Bot, Citizen, ClientInfo, GenericPlayer, Player, UniverseConnectionID},
+    client::ClientInfo,
     database::{citizen::CitizenQuery, CitizenDB},
     get_conn_mut,
+    player::{Bot, Citizen, GenericPlayer, Player},
     tabs::{regenerate_contact_list_and_mutuals, regenerate_player_list, regenerate_world_list},
     telegram::send_telegram_update_available,
+    universe_connection::UniverseConnectionID,
     UniverseServer,
 };
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};

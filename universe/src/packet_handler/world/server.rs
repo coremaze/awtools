@@ -1,8 +1,6 @@
 use crate::{
-    client::{ClientInfo, UniverseConnectionID},
-    get_conn_mut,
-    world::WorldServer,
-    UniverseServer,
+    client::ClientInfo, get_conn_mut, universe_connection::UniverseConnectionID,
+    world::WorldServer, UniverseServer,
 };
 use aw_core::{AWPacket, VarID};
 

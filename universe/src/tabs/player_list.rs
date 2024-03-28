@@ -7,8 +7,8 @@ use std::{
 use aw_core::{AWPacket, AWPacketGroup, PacketType, VarID};
 
 use crate::{
-    client::{ClientInfo, Player, PlayerState, UniverseConnectionID},
-    get_conn_mut, UniverseConnection, UniverseServer,
+    client::ClientInfo, get_conn_mut, player::Player, universe_connection::UniverseConnectionID,
+    UniverseConnection, UniverseServer,
 };
 
 fn ip_to_num(ip: IpAddr) -> u32 {
@@ -20,6 +20,12 @@ fn ip_to_num(ip: IpAddr) -> u32 {
         }
     }
     res
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PlayerState {
+    Hidden = 0,
+    Online = 1,
 }
 
 /// A player in the player list.

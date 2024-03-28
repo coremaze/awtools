@@ -7,10 +7,8 @@ use std::{
 use aw_core::{AWPacket, AWPacketGroup, PacketType, VarID};
 
 use crate::{
-    client::{ClientInfo, UniverseConnectionID},
-    get_conn_mut,
-    world::WorldRating,
-    UniverseConnection, UniverseServer,
+    client::ClientInfo, get_conn_mut, universe_connection::UniverseConnectionID,
+    world::WorldRating, UniverseConnection, UniverseServer,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]

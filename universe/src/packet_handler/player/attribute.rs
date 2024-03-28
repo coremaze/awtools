@@ -1,4 +1,4 @@
-use crate::{attributes, client::UniverseConnectionID, get_conn, UniverseServer};
+use crate::{attributes, get_conn, universe_connection::UniverseConnectionID, UniverseServer};
 use aw_core::*;
 
 pub fn attribute_change(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {

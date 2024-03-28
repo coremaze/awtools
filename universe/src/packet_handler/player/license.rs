@@ -1,7 +1,8 @@
 use crate::{
-    client::UniverseConnectionID,
     database::{license::LicenseQuery, Database, LicenseDB},
-    get_conn, UniverseConnection, UniverseServer,
+    get_conn,
+    universe_connection::UniverseConnectionID,
+    UniverseConnection, UniverseServer,
 };
 use aw_core::*;
 
