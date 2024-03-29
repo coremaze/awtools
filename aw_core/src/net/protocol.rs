@@ -6,6 +6,7 @@ use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
+use std::time::Duration;
 
 #[cfg(feature = "stream_cipher_aes")]
 type StreamCipherType = crate::AWCryptAES;
@@ -237,6 +238,7 @@ impl AWProtocol {
             }
 
             self.handle_messages();
+            thread::sleep(Duration::from_millis(1));
         }
 
         self.inbound_packets.send(ProtocolMessage::Disconnect).ok();

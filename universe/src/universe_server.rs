@@ -10,11 +10,15 @@ use crate::{
     universe_license::LicenseGenerator,
     UniverseConnection,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::{
     collections::HashMap,
     net::{SocketAddrV4, TcpListener},
+};
+use std::{
+    sync::atomic::{AtomicBool, Ordering},
+    thread::sleep,
+    time::Duration,
 };
 
 pub struct UniverseServer {
@@ -72,6 +76,7 @@ impl UniverseServer {
             self.remove_dead_clients();
             self.connections.send_tab_updates();
             self.connections.send_heartbeats();
+            sleep(Duration::from_millis(1));
         }
 
         log::info!("Shutting down universe.");
