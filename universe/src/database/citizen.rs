@@ -367,10 +367,9 @@ fn fetch_citizen(row: &Row) -> Result<CitizenQuery, ReasonCode> {
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let last_address: u32 = database::fetch_int(row, "LastAddress")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    // It is not unexpected for LastAddress to end up in the database as a negative number.
+    let last_address: u32 =
+        database::fetch_int(row, "LastAddress").ok_or(ReasonCode::DatabaseError)? as u32;
 
     let total_time: u32 = database::fetch_int(row, "TotalTime")
         .ok_or(ReasonCode::DatabaseError)?
