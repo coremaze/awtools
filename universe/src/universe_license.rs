@@ -29,6 +29,7 @@ impl LicenseGenerator {
     pub fn create_license_data(&self, browser_build: i32) -> Vec<u8> {
         let key = match browser_build {
             /* Vortex 5.1 */ 1217 => include_bytes!("keys/vortex.priv"),
+            /* Vortex 5.1 SDK */ 85 => include_bytes!("keys/vortex.priv"),
             /* Miuchiz R7 */ 2007 => include_bytes!("keys/vortex.priv"),
             /* Regular AW */ _ => include_bytes!("keys/aw.priv"),
         };
