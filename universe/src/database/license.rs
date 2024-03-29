@@ -239,10 +239,9 @@ fn fetch_license(row: &Row) -> Result<LicenseQuery, ReasonCode> {
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let last_address: u32 = database::fetch_int(row, "LastAddress")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    // It is not unexpected for LastAddress to end up in the database as a negative number.
+    let last_address: u32 =
+        database::fetch_int(row, "LastAddress").ok_or(ReasonCode::DatabaseError)? as u32;
 
     let users: u32 = database::fetch_int(row, "Users")
         .ok_or(ReasonCode::DatabaseError)?
