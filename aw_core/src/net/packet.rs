@@ -275,13 +275,19 @@ impl AWPacket {
             return Err(DeserializeError::InvalidHeader);
         }
 
-        if header.opcode == -1 && header.header_1 != 0 {
-            return Err(DeserializeError::Compressed(
-                header.serialized_length.into(),
-            ));
+        let serialized_length_usize: usize = header.serialized_length.into();
+
+        if serialized_length_usize > src.len() {
+            // We have the header, but we haven't received the rest of the packet yet.
+            // Probably need to wait for the next TCP frame.
+            return Err(DeserializeError::Length);
         }
 
-        Ok(header.serialized_length.into())
+        if header.opcode == -1 && header.header_1 != 0 {
+            return Err(DeserializeError::Compressed(serialized_length_usize));
+        }
+
+        Ok(serialized_length_usize)
     }
 }
 

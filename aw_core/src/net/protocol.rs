@@ -129,6 +129,7 @@ impl AWProtocol {
     /// Receive incoming bytes, return success
     pub fn recv(&mut self) -> Result<usize, String> {
         let mut buf = [0u8; 0x8000];
+        // let mut buf = [0u8; 0x1]; // Can use this to stress-test recv
         if let Ok(bytes_read) = self.stream.read(&mut buf) {
             // Decrypt incoming bytes if we have a key.
             if let Some(cipher) = &mut self.recv_cipher {
