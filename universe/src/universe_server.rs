@@ -18,7 +18,7 @@ use std::{
 };
 
 pub struct UniverseServer {
-    config: configuration::UniverseConfig,
+    pub config: configuration::UniverseConfig,
     pub license_generator: LicenseGenerator,
     pub connections: UniverseConnections,
     pub database: Database,
@@ -239,6 +239,7 @@ impl UniverseServer {
             PacketType::Join => packet_handler::join(self, client_id, packet),
             PacketType::JoinReply => packet_handler::join_reply(self, client_id, packet),
             PacketType::Botgram => packet_handler::botgram(self, client_id, packet),
+            PacketType::Immigrate => packet_handler::immigrate(self, client_id, packet),
             _ => {
                 log::warn!("Unhandled packet {packet:?}");
             }

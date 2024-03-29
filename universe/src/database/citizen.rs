@@ -37,6 +37,12 @@ pub trait CitizenDB {
     fn citizen_by_name(&self, name: &str) -> Result<CitizenQuery, ReasonCode>;
     fn citizen_by_number(&self, citizen_id: u32) -> Result<CitizenQuery, ReasonCode>;
     fn citizen_add(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode>;
+    fn citizen_add_next(
+        &self,
+        username: &str,
+        password: &str,
+        email: &str,
+    ) -> Result<(), ReasonCode>;
     fn citizen_change(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode>;
 }
 
@@ -160,6 +166,90 @@ impl CitizenDB for Database {
 
     fn citizen_add(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode> {
         let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
+
+        conn.exec_drop(
+            r"INSERT INTO awu_citizen(
+                ID, Immigration, Expiration, LastLogin, LastAddress, TotalTime, 
+                BotLimit, Beta, Enabled, Trial, Privacy, CAVEnabled, CAVTemplate, 
+                Name, Password, Email, PrivPass, Comment, URL) 
+            VALUES(:id, :immigration, :expiration, :last_login, :last_address, :total_time, 
+                :bot_limit, :beta, :enabled, :trial, :privacy, :cav_enabled, :cav_template, 
+                :name, :password, :email, :priv_pass, :comment, :url)",
+            params! {
+                "id" => citizen.id,
+                "immigration" => citizen.immigration,
+                "expiration" => citizen.expiration,
+                "last_login" => citizen.last_login,
+                "last_address" => citizen.last_address,
+                "total_time" => citizen.total_time,
+                "bot_limit" => citizen.bot_limit,
+                "beta" => citizen.beta,
+                "enabled" => citizen.enabled,
+                "trial" => citizen.trial,
+                "privacy" => citizen.privacy,
+                "cav_enabled" => citizen.cav_enabled,
+                "cav_template" => citizen.cav_template,
+                "name" => &citizen.name,
+                "password" => &citizen.password,
+                "email" => &citizen.email,
+                "priv_pass" => &citizen.priv_pass,
+                "comment" => &citizen.comment,
+                "url" => &citizen.url
+            },
+        )
+        .map_err(|_| ReasonCode::DatabaseError)?;
+
+        Ok(())
+    }
+
+    fn citizen_add_next(
+        &self,
+        username: &str,
+        password: &str,
+        email: &str,
+    ) -> Result<(), ReasonCode> {
+        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
+
+        // Get the next unused ID from the database
+        let next_id: Option<Row> = conn
+            .exec_first("SELECT MAX(ID) + 1 AS ID FROM awu_citizen", ())
+            .map_err(|_| ReasonCode::DatabaseError)?;
+
+        let id: u32 = match next_id {
+            Some(row) => database::fetch_int(&row, "ID")
+                .ok_or(ReasonCode::DatabaseError)?
+                .try_into()
+                .map_err(|_| ReasonCode::DatabaseError)?,
+            None => 1,
+        };
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Current time is before the unix epoch.")
+            .as_secs();
+
+        let citizen = CitizenQuery {
+            id,
+            changed: 0,
+            name: username.to_string(),
+            password: password.to_string(),
+            email: email.to_string(),
+            priv_pass: String::new(),
+            comment: String::new(),
+            url: String::new(),
+            immigration: now as u32,
+            expiration: 0,
+            last_login: 0,
+            last_address: 0,
+            total_time: 0,
+            bot_limit: 0,
+            beta: 0,
+            cav_enabled: 1,
+            cav_template: 0,
+            enabled: 1,
+            privacy: 0,
+            trial: 0,
+        };
 
         conn.exec_drop(
             r"INSERT INTO awu_citizen(

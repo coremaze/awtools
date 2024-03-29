@@ -551,7 +551,7 @@ pub enum PacketType {
     SetAFK = 152,
 
     Immigrate = 155,
-
+    ImmigrateResponse = 156,
     Register = 157,
 
     AvatarReload = 159,

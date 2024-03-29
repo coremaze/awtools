@@ -20,6 +20,7 @@ pub struct UniverseConfig {
     pub port: u16,
     pub user_list: bool,
     pub allow_citizen_changes: bool,
+    pub allow_immigration: bool,
 }
 
 /// Configuation section for the mysql connection
@@ -72,6 +73,7 @@ impl Default for UniverseConfig {
             port: 6670,
             user_list: true,
             allow_citizen_changes: true,
+            allow_immigration: true,
         }
     }
 }
