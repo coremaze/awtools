@@ -309,7 +309,7 @@ impl UniverseConnections {
                     contact_list_difference
                 );
 
-                contact_list_difference.send_list(conn);
+                contact_list_difference.send_limited_list(conn);
             }
 
             if !world_list_difference.is_empty() {

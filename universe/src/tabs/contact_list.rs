@@ -91,47 +91,102 @@ impl ContactList {
         self.entries.is_empty()
     }
 
-    fn make_packet_groups(&self) -> Vec<AWPacketGroup> {
-        let mut groups = Vec::<AWPacketGroup>::new();
+    /// This is from when we were sending the entire contact list at once,
+    /// but that caused the client to spam ContactList packets sometimes.
+    // fn make_packet_groups(&self) -> Vec<AWPacketGroup> {
+    //     let mut groups = Vec::<AWPacketGroup>::new();
+    //     let mut group = AWPacketGroup::new();
+
+    //     for entry in self.entries.values() {
+    //         let mut response = AWPacket::new(PacketType::ContactList);
+    //         response.add_string(VarID::ContactListName, entry.username.clone());
+    //         if let Some(world) = &entry.world {
+    //             response.add_string(VarID::ContactListWorld, world.clone());
+    //         }
+    //         response.add_int(VarID::ContactListStatus, entry.state as i32);
+    //         response.add_uint(VarID::ContactListCitizenID, entry.citizen_id);
+    //         response.add_byte(VarID::ContactListMore, 1);
+    //         response.add_uint(VarID::ContactListOptions, entry.options.bits());
+
+    //         if let Err(p) = group.push(response) {
+    //             groups.push(group);
+    //             group = AWPacketGroup::new();
+    //             group.push(p).ok();
+    //         }
+    //     }
+
+    //     let mut response = AWPacket::new(PacketType::ContactList);
+    //     response.add_uint(VarID::ContactListCitizenID, 0);
+    //     response.add_byte(VarID::ContactListMore, 0);
+
+    //     if let Err(p) = group.push(response) {
+    //         groups.push(group);
+    //         group = AWPacketGroup::new();
+    //         group.push(p).ok();
+    //     }
+
+    //     groups.push(group);
+
+    //     groups
+    // }
+
+    fn make_packet_group(&self) -> AWPacketGroup {
         let mut group = AWPacketGroup::new();
 
-        for entry in self.entries.values() {
-            let mut response = AWPacket::new(PacketType::ContactList);
-            response.add_string(VarID::ContactListName, entry.username.clone());
+        let ordered_ids = {
+            let mut k = self.entries.keys().copied().collect::<Vec<u32>>();
+            k.sort();
+            k
+        };
+
+        let mut more = false;
+        for id in ordered_ids {
+            let Some(entry) = self.entries.get(&id) else {
+                log::warn!("Attempted to get invalid id {id} from contact list {self:?}");
+                continue;
+            };
+
+            if group.serialize_len() > 0x1000 {
+                more = true;
+                break;
+            }
+
+            let mut p = AWPacket::new(PacketType::ContactList);
+            p.add_string(VarID::ContactListName, entry.username.clone());
             if let Some(world) = &entry.world {
-                response.add_string(VarID::ContactListWorld, world.clone());
+                p.add_string(VarID::ContactListWorld, world.clone());
             }
-            response.add_int(VarID::ContactListStatus, entry.state as i32);
-            response.add_uint(VarID::ContactListCitizenID, entry.citizen_id);
-            response.add_byte(VarID::ContactListMore, 1);
-            response.add_uint(VarID::ContactListOptions, entry.options.bits());
+            p.add_int(VarID::ContactListStatus, entry.state as i32);
+            p.add_uint(VarID::ContactListCitizenID, entry.citizen_id);
+            p.add_uint(VarID::ContactListOptions, entry.options.bits());
 
-            if let Err(p) = group.push(response) {
-                groups.push(group);
-                group = AWPacketGroup::new();
-                group.push(p).ok();
-            }
+            // This generally should not fail because we are stopping way before the max size of a group
+            if group.push(p).is_err() {
+                log::warn!("Failed to add a packet to a contact list group. (1)");
+            };
         }
 
-        let mut response = AWPacket::new(PacketType::ContactList);
-        response.add_uint(VarID::ContactListCitizenID, 0);
-        response.add_byte(VarID::ContactListMore, 0);
+        let mut p = AWPacket::new(PacketType::ContactList);
+        p.add_uint(VarID::ContactListCitizenID, 0);
+        p.add_byte(VarID::ContactListMore, if more { 1 } else { 0 });
+        if group.push(p).is_err() {
+            log::warn!("Failed to add a packet to a contact list group. (2)");
+        };
 
-        if let Err(p) = group.push(response) {
-            groups.push(group);
-            group = AWPacketGroup::new();
-            group.push(p).ok();
-        }
-
-        groups.push(group);
-
-        groups
+        group
     }
 
-    pub fn send_list(&self, target: &UniverseConnection) {
-        for group in self.make_packet_groups() {
-            target.send_group(group)
-        }
+    // pub fn send_list(&self, target: &UniverseConnection) {
+    //     for group in self.make_packet_groups() {
+    //         target.send_group(group)
+    //     }
+    // }
+
+    /// This is "limited" because it only makes as many packets as it can before the
+    /// length gets over 0x1000. The client must request another starting from a new citizen ID.
+    pub fn send_limited_list(&self, target: &UniverseConnection) {
+        let group = self.make_packet_group();
+        target.send_group(group);
     }
 }
 
@@ -189,6 +244,18 @@ impl UpdatingContactList {
 
     pub fn current(&self) -> &ContactList {
         &self.current
+    }
+
+    pub fn current_starting_from(&self, starting_id: u32) -> ContactList {
+        let mut current = self.current.clone();
+        let mut new_entries = HashMap::<u32, ContactListEntry>::new();
+        for (k, v) in current.entries.drain() {
+            if k > starting_id {
+                new_entries.insert(k, v);
+            }
+        }
+        current.entries = new_entries;
+        current
     }
 
     fn hide_current(&mut self) {

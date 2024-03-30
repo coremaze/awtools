@@ -216,7 +216,10 @@ fn try_contact_confirm(
     Ok(())
 }
 
-pub fn contact_list(server: &mut UniverseServer, cid: UniverseConnectionID, _packet: &AWPacket) {
+pub fn contact_list(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
+    let Some(starting_id) = packet.get_uint(VarID::ContactListCitizenID) else {
+        return;
+    };
     let citizen_id = {
         let conn = get_conn_mut!(server, cid, "contact_list");
         let Some(ClientInfo::Player(Player::Citizen(citizen))) = &conn.client else {
@@ -240,16 +243,16 @@ pub fn contact_list(server: &mut UniverseServer, cid: UniverseConnectionID, _pac
 
     let name = player.username.clone();
 
-    let current_list = player.tabs.contact_list.current();
+    let current_list = player.tabs.contact_list.current_starting_from(starting_id);
 
     log::debug!(
-        "Sending the full CURRENT contact list to {} ({}) current: {:?}",
+        "Sending the CURRENT contact list starting from id {starting_id} to {} ({}) current: {:?}",
         ip,
         name,
         current_list
     );
 
-    current_list.send_list(conn);
+    current_list.send_limited_list(conn);
 }
 
 pub fn contact_entry(contact: &ContactQuery, server: &UniverseServer) -> ContactListEntry {
