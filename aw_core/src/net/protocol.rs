@@ -267,11 +267,13 @@ impl AWProtocol {
             }
             ProtocolMessage::StreamKey(key) => {
                 match StreamCipherType::from_key(&key) {
-                    Ok(stream_cipher) => self.recv_cipher = Some(stream_cipher),
+                    Ok(mut stream_cipher) => {
+                        // There may be data that has already been sent, so we need to decrypt it now.
+                        stream_cipher.decrypt_in_place(&mut self.data);
+                        self.recv_cipher = Some(stream_cipher);
+                    }
                     Err(_) => self.kill(),
                 }
-                // There may be data that has already been sent, so we need to decrypt it now.
-                // self.recv_cipher.as_mut().unwrap().decrypt_in_place(&mut self.data);
             }
             ProtocolMessage::Encrypt(should) => {
                 self.encrypt_data(should);
