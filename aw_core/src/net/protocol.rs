@@ -93,7 +93,10 @@ impl AWProtocol {
                 PacketType::PublicKeyResponse
                 | PacketType::StreamKeyResponse
                 | PacketType::Attributes
-                | PacketType::Login
+                // When you are the server, this header should be 1, but
+                // when you are the client, this header should be 2, or else
+                // a normal universe server will return RC_MUST_UPGRADE
+                // | PacketType::Login
                 | PacketType::Tunnel => {
                     packet.set_header_1(1);
                 }
