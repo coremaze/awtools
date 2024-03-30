@@ -1450,7 +1450,7 @@ dependencies = [
 [[package]]
 name = "rsaref-rs"
 version = "0.1.0"
-source = "git+https://github.com/ChrisMiuchiz/rsaref-rs.git#182fa922af932783db737d894e901f598568715d"
+source = "git+https://github.com/ChrisMiuchiz/rsaref-rs.git#55ed70b18999c02b12f3b903c3fb7c8eaf5fb622"
 dependencies = [
  "md-5",
  "num-integer",
