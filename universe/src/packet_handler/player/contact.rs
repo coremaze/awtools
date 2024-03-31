@@ -315,3 +315,42 @@ pub fn contact_entry(contact: &ContactQuery, server: &UniverseServer) -> Contact
         options: contact.options,
     }
 }
+
+pub fn contact_delete(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
+    let Some(other_cit_id) = packet.get_uint(VarID::ContactListCitizenID) else {
+        return;
+    };
+
+    let conn = get_conn!(server, cid, "contact_delete");
+
+    let Some(self_cit_id) = conn.client.as_ref().and_then(ClientInfo::citizen_id) else {
+        return;
+    };
+
+    let blocked_by_other_person = server.database.contact_blocked(other_cit_id, self_cit_id);
+
+    let mut rc = ReasonCode::Success;
+    match server.database.contact_delete(self_cit_id, other_cit_id) {
+        Ok(()) => {
+            if !blocked_by_other_person {
+                if let Err(why) = server.database.contact_delete(other_cit_id, self_cit_id) {
+                    log::warn!("Unable to delete contact (1) {other_cit_id} {self_cit_id} {why:?}");
+                }
+            }
+        }
+        Err(why) => {
+            log::warn!("Unable to delete contact (2) {self_cit_id} {other_cit_id} {why:?}");
+            rc = ReasonCode::UnableToSetContact;
+        }
+    }
+
+    let mut response = AWPacket::new(PacketType::ContactDelete);
+    response.add_uint(VarID::ReasonCode, rc.into());
+    conn.send(response);
+
+    regenerate_contact_list(server, cid);
+
+    if let Some(other_cid) = server.connections.get_by_citizen_id(other_cit_id) {
+        regenerate_contact_list(server, other_cid);
+    }
+}

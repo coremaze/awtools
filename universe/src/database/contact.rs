@@ -148,6 +148,7 @@ pub trait ContactDB {
     fn contact_status_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
     fn contact_joins_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
     fn contact_invites_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
+    fn contact_delete(&self, citizen_id: u32, contact_id: u32) -> Result<(), ReasonCode>;
 }
 
 impl ContactDB for Database {
@@ -392,6 +393,22 @@ impl ContactDB for Database {
         };
 
         contact.options.is_invite_allowed()
+    }
+
+    fn contact_delete(&self, citizen_id: u32, contact_id: u32) -> Result<(), ReasonCode> {
+        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
+
+        // Add the contact pair if it is not already existent
+        conn.exec_drop(
+            r"DELETE FROM awu_contact WHERE Citizen=:citizen_id  AND Contact=:contact_id;",
+            params! {
+                "citizen_id" => citizen_id,
+                "contact_id" => contact_id,
+            },
+        )
+        .map_err(|_| ReasonCode::DatabaseError)?;
+
+        Ok(())
     }
 }
 
