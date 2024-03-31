@@ -56,8 +56,7 @@ impl PlayerListEntry {
     pub fn make_list_packet(&self, to_admin: bool, id_in_list: PlayerListID) -> AWPacket {
         let mut p = AWPacket::new(PacketType::UserList);
 
-        // Client also expects var 178 as a string, but don't know what it is for.
-        // p.add_string(VarID::UserList178, format!("178"));
+        // p.add_string(VarID::UserListEmailAddress, format!("178"));
         p.add_string(VarID::UserListName, self.username.clone());
         p.add_uint(VarID::UserListID, id_in_list.0);
         p.add_uint(VarID::UserListCitizenID, self.citizen_id.unwrap_or(0));

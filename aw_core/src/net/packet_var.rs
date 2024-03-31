@@ -122,7 +122,7 @@ pub enum VarID {
     UniverseLicense = 171,
     UserListAddress = 176,
     UserListCitizenID = 177,
-    UserList178 = 178,
+    UserListEmailAddress = 178,
     UserListID = 180,
     UserListMore = 181,
     UserListName = 182,
