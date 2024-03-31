@@ -253,7 +253,8 @@ fn validate_bot(
 
     log::trace!("{login_id} currently has {bots_owned} bots, out of a limit of {bots_max}");
 
-    if bots_owned >= bots_max as usize {
+    // Administrator (ID 1) shouldn't be restricted by bot limit
+    if bots_owned >= bots_max as usize && login_id != 1 {
         return Err(ReasonCode::BotLimitExceeded);
     }
 
