@@ -298,7 +298,7 @@ impl UniverseConnections {
                     player_list_difference
                 );
 
-                player_list_difference.send_list(conn);
+                player_list_difference.send_full_list(conn);
             }
 
             if !contact_list_difference.is_empty() {

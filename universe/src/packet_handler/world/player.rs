@@ -1,6 +1,9 @@
 use crate::{
-    client::ClientInfo, get_conn, tabs::regenerate_contact_list_and_mutuals,
-    universe_connection::UniverseConnectionID, UniverseServer,
+    client::ClientInfo,
+    get_conn,
+    tabs::{regenerate_contact_list_and_mutuals, regenerate_player_list},
+    universe_connection::UniverseConnectionID,
+    UniverseServer,
 };
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
 
@@ -133,6 +136,11 @@ fn identify_player(
     response.add_uint(VarID::PrivilegeUserID, effective_privilege);
 
     player.player_info_mut().world = Some(fields.world_name.clone());
+
+    // Regenerate the player list becase of possible change in world state
+    for cid in server.connections.cids() {
+        regenerate_player_list(server, cid);
+    }
 
     ReasonCode::Success
 }

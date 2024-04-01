@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    net::IpAddr,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{collections::HashMap, net::IpAddr};
 
 use aw_core::{AWPacket, AWPacketGroup, PacketType, VarID};
 
@@ -25,7 +21,8 @@ fn ip_to_num(ip: IpAddr) -> u32 {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PlayerState {
     Hidden = 0,
-    Online = 1,
+    InWorld = 1,
+    Available = 2,
 }
 
 /// A player in the player list.
@@ -48,7 +45,18 @@ impl PlayerListEntry {
             username: player.player_info().username.clone(),
             world: player.player_info().world.clone(),
             ip: player.player_info().ip,
-            state: PlayerState::Online,
+            // The first-party Universe uses Available only if the user is a bot.
+            // However, the only person who can see bots in the user list is the Administrator,
+            // who has a different user list which does not show this information.
+            // As a result, "Available" is never actually shown in that universe.
+            // I think this is a bug, so I am making it apply to all users, not just bots.
+            // This means that users who have connected to the Universe but which have not
+            // yet joined a world will be shown as "Available" instead of "In World".
+            state: if player.player_info().world.is_some() {
+                PlayerState::InWorld
+            } else {
+                PlayerState::Available
+            },
             afk: player.player_info().afk,
         }
     }
@@ -78,20 +86,38 @@ impl PlayerListEntry {
 #[derive(Eq, Hash, PartialEq, Copy, Clone, Debug)]
 pub struct PlayerListID(u32);
 
+impl PlayerListID {
+    fn increment(&self) -> PlayerListID {
+        // 0 should not be valid
+        let next_u32 = self.0.checked_add(1).unwrap_or(1);
+        PlayerListID(next_u32)
+    }
+}
+
+impl Default for PlayerListID {
+    fn default() -> Self {
+        // 0 should not be valid
+        Self(1)
+    }
+}
+
+impl PartialOrd for PlayerListID {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PlayerListID {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
 /// The list of players that a client is currently aware of.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PlayerList {
     players: HashMap<PlayerListID, PlayerListEntry>,
     next_id: PlayerListID,
-}
-
-impl Default for PlayerList {
-    fn default() -> Self {
-        Self {
-            players: HashMap::new(),
-            next_id: PlayerListID(0),
-        }
-    }
 }
 
 impl PlayerList {
@@ -104,7 +130,8 @@ impl PlayerList {
         let mut new_id = self.next_id;
         let starting_id = new_id;
         while self.players.contains_key(&new_id) {
-            new_id.0 = new_id.0.wrapping_add(1);
+            new_id = new_id.increment();
+
             if new_id == starting_id {
                 panic!("No valid player list IDs left!");
             }
@@ -114,11 +141,21 @@ impl PlayerList {
 
     /// Updates the next_id to the next valid PlayerListID.
     fn increment_next_id(&mut self) {
-        self.next_id.0 = self.next_id.0.wrapping_add(1);
+        self.next_id = self.next_id.increment();
     }
 
     /// Adds a player to the list and returns their PlayerListID.
     pub fn add_player(&mut self, player: PlayerListEntry) -> PlayerListID {
+        // Make sure IDs don't change if they don't have to
+        for (id, existing_player) in &mut self.players {
+            if existing_player.username == player.username
+                && existing_player.citizen_id == player.citizen_id
+            {
+                *existing_player = player;
+                return *id;
+            }
+        }
+
         let id = self.get_next_valid_id();
         self.increment_next_id();
 
@@ -163,58 +200,86 @@ impl PlayerList {
         self.players.is_empty()
     }
 
-    fn make_packet_groups(&self, to_admin: bool) -> Vec<AWPacketGroup> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Current time is before the unix epoch.")
-            .as_secs();
-
-        let player_packets = self
-            .players
-            .iter()
-            .map(|(id, player)| player.make_list_packet(to_admin, *id))
-            .collect::<Vec<AWPacket>>();
+    fn make_packet_group_starting_from(
+        &self,
+        continuation_id: u32,
+        to_admin: bool,
+    ) -> AWPacketGroup {
+        let ids_in_order = {
+            let mut k = self
+                .players
+                .keys()
+                .filter(|id| id.0 >= continuation_id)
+                .copied()
+                .collect::<Vec<PlayerListID>>();
+            k.sort();
+            k
+        };
 
         // Group packets into larger transmissions for efficiency
-        let mut groups: Vec<AWPacketGroup> = Vec::new();
         let mut group = AWPacketGroup::new();
+        let mut next_continuation_id: Option<PlayerListID> = None;
 
-        for player_packet in player_packets {
-            if let Err(p) = group.push(player_packet) {
-                groups.push(group);
-                group = AWPacketGroup::new();
+        for list_id in ids_in_order {
+            let Some(player) = self.players.get(&list_id) else {
+                log::warn!("Attempted to get invalid id {list_id:?} from player list {self:?}");
+                continue;
+            };
 
-                let mut more = AWPacket::new(PacketType::UserListResult);
-                // Yes, expect another UserList packet from the server
-                more.add_byte(VarID::UserListMore, 1);
-                more.add_uint(VarID::UserList3DayUnknown, now as u32);
-                group.push(more).ok();
-                group.push(p).ok();
+            if group.serialize_len() > 0x1000 {
+                next_continuation_id = Some(list_id);
+                break;
+            }
+
+            let entry_packet = player.make_list_packet(to_admin, list_id);
+            // This generally should not fail because we are stopping way before the max size of a group
+            if group.push(entry_packet).is_err() {
+                log::warn!("Failed to add a packet to a player list group. (1)");
+            };
+        }
+
+        let mut p = AWPacket::new(PacketType::UserListResult);
+        match next_continuation_id {
+            Some(next) => {
+                p.add_byte(VarID::UserListMore, 1);
+                p.add_uint(VarID::UserListContinuationID, next.0);
+            }
+            None => {
+                p.add_byte(VarID::UserListMore, 0);
+                p.add_uint(VarID::UserListContinuationID, 0);
             }
         }
+        if group.push(p).is_err() {
+            log::warn!("Failed to add a packet to a player list group. (2)");
+        };
 
-        // Send packet indicating that the server is done
-        let mut p = AWPacket::new(PacketType::UserListResult);
-        p.add_byte(VarID::UserListMore, 0);
-        p.add_uint(VarID::UserList3DayUnknown, now as u32);
-
-        if let Err(p) = group.push(p) {
-            groups.push(group);
-            group = AWPacketGroup::new();
-            group.push(p).ok();
-        }
-
-        groups.push(group);
-
-        groups
+        group
     }
 
-    pub fn send_list(&self, target: &UniverseConnection) {
-        let groups = self.make_packet_groups(target.has_admin_permissions());
+    pub fn send_full_list(&self, target: &UniverseConnection) {
+        let mut group = AWPacketGroup::new();
 
-        for group in groups {
-            target.send_group(group.clone());
+        for (id, player) in &self.players {
+            if group.serialize_len() > 0x4000 {
+                target.send_group(group);
+                group = AWPacketGroup::new();
+            }
+            let packet = player.make_list_packet(target.has_admin_permissions(), *id);
+            group.push(packet).ok();
+
+            let mut more = AWPacket::new(PacketType::UserListResult);
+            more.add_byte(VarID::UserListMore, 0);
+            more.add_uint(VarID::UserListContinuationID, id.0);
+            group.push(more).ok();
         }
+        target.send_group(group);
+    }
+
+    pub fn send_list_starting_from(&self, target: &UniverseConnection, continuation_id: u32) {
+        let group =
+            self.make_packet_group_starting_from(continuation_id, target.has_admin_permissions());
+
+        target.send_group(group);
     }
 }
 

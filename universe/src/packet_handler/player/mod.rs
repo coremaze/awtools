@@ -22,8 +22,6 @@ pub use world::*;
 mod teleport;
 pub use teleport::*;
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use crate::{get_conn, get_conn_mut, universe_connection::UniverseConnectionID, UniverseServer};
 use aw_core::*;
 
@@ -34,19 +32,8 @@ pub fn heartbeat(server: &UniverseServer, cid: UniverseConnectionID) {
 }
 
 pub fn user_list(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Current time is before the unix epoch.")
-        .as_secs() as i32;
-
-    // I am not entirely sure what the purpose of this is, but it has some sort
-    // of relation to 3 days. It sends our values back to us with this, so we
-    // can use this to deny the client from spamming for updates, which causes
-    // flickering of the user list with very large numbers of players.
-    let time_val = packet.get_int(VarID::UserList3DayUnknown).unwrap_or(0);
-    if now.saturating_sub(3) < time_val {
-        return;
-    }
+    // This is normally based on the time, but it seems easier to just use the IDs we already have.
+    let continuation_id = packet.get_uint(VarID::UserListContinuationID).unwrap_or(0);
 
     let conn = get_conn_mut!(server, cid, "user_list");
 
@@ -69,5 +56,5 @@ pub fn user_list(server: &mut UniverseServer, cid: UniverseConnectionID, packet:
         current_list
     );
 
-    current_list.send_list(conn);
+    current_list.send_list_starting_from(conn, continuation_id);
 }

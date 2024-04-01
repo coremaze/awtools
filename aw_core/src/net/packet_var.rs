@@ -127,7 +127,7 @@ pub enum VarID {
     UserListMore = 181,
     UserListName = 182,
     UserListPrivilegeID = 183,
-    UserList3DayUnknown = 184,
+    UserListContinuationID = 184,
     UserListState = 185,
     UserListWorldName = 186,
     WorldFreeEntry = 187,
