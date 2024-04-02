@@ -26,22 +26,6 @@ pub struct GenericPlayer {
     pub tabs: Tabs,
 }
 
-impl GenericPlayer {
-    pub fn new(session_id: u16, build: i32, privilege_id: Option<u32>, username: &str) -> Self {
-        Self {
-            build,
-            session_id,
-            privilege_id,
-            username: username.to_string(),
-            nonce: None,
-            world: None,
-            ip: IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-            afk: false,
-            tabs: Tabs::new(),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Citizen {
     pub cit_id: u32,
