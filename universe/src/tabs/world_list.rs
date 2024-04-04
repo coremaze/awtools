@@ -210,7 +210,7 @@ pub fn regenerate_world_list(server: &mut UniverseServer, cid: UniverseConnectio
         return;
     };
     log::trace!("regenerate_world_list: Adding worlds to cid {cid:?}");
-    let world_list = &mut p.player_info_mut().tabs.world_list;
+    let world_list = &mut p.base_player_mut().tabs.world_list;
     world_list.hide_current();
     for e in entries {
         log::trace!("regenerate_world_list: {e:?}");

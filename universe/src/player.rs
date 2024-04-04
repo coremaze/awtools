@@ -29,30 +29,30 @@ pub struct GenericPlayer {
 #[derive(Debug)]
 pub struct Citizen {
     pub cit_id: u32,
-    pub player_info: GenericPlayer,
+    pub base_player: GenericPlayer,
 }
 
 #[derive(Debug)]
 pub struct Bot {
     pub owner_id: u32,
     pub application: String,
-    pub player_info: GenericPlayer,
+    pub base_player: GenericPlayer,
 }
 
 impl Player {
-    pub fn player_info(&self) -> &GenericPlayer {
+    pub fn base_player(&self) -> &GenericPlayer {
         match self {
-            Player::Citizen(citizen) => &citizen.player_info,
+            Player::Citizen(citizen) => &citizen.base_player,
             Player::Tourist(info) => info,
-            Player::Bot(bot) => &bot.player_info,
+            Player::Bot(bot) => &bot.base_player,
         }
     }
 
-    pub fn player_info_mut(&mut self) -> &mut GenericPlayer {
+    pub fn base_player_mut(&mut self) -> &mut GenericPlayer {
         match self {
-            Player::Citizen(citizen) => &mut citizen.player_info,
+            Player::Citizen(citizen) => &mut citizen.base_player,
             Player::Tourist(info) => info,
-            Player::Bot(bot) => &mut bot.player_info,
+            Player::Bot(bot) => &mut bot.base_player,
         }
     }
 
@@ -75,6 +75,6 @@ impl Player {
     }
 
     pub fn username(&self) -> String {
-        self.player_info().username.clone()
+        self.base_player().username.clone()
     }
 }

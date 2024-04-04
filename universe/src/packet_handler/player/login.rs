@@ -36,14 +36,14 @@ pub fn login(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AW
     let rc = match validate_login(server, cid, packet, &mut response) {
         Ok(player) => {
             // Inform the client of their displayed username and their new session ID
-            response.add_string(VarID::CitizenName, player.player_info().username.clone());
-            response.add_int(VarID::SessionID, player.player_info().session_id.into());
+            response.add_string(VarID::CitizenName, player.base_player().username.clone());
+            response.add_int(VarID::SessionID, player.base_player().session_id.into());
 
             let conn = get_conn_mut!(server, cid, "login");
             log::info!(
                 "{:?} is logging in as {}.",
                 conn.addr().ip(),
-                &player.player_info().username
+                &player.base_player().username
             );
 
             new_clientinfo = Some(ClientInfo::Player(player));
@@ -167,7 +167,7 @@ fn validate_human(
 
         Ok(Player::Citizen(Citizen {
             cit_id: cit.id,
-            player_info: GenericPlayer {
+            base_player: GenericPlayer {
                 build: browser_build,
                 session_id: server.connections.create_session_id(),
                 privilege_id,
@@ -268,7 +268,7 @@ fn validate_bot(
     Ok(Player::Bot(Bot {
         owner_id: login_id,
         application,
-        player_info: GenericPlayer {
+        base_player: GenericPlayer {
             build,
             session_id: server.connections.create_session_id(),
             privilege_id: Some(login_id),

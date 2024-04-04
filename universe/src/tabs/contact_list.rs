@@ -292,7 +292,7 @@ pub fn regenerate_contact_list(server: &mut UniverseServer, cid: UniverseConnect
     let Some(ClientInfo::Player(player)) = &mut conn.client else {
         return;
     };
-    let contact_list = &mut player.player_info_mut().tabs.contact_list;
+    let contact_list = &mut player.base_player_mut().tabs.contact_list;
     contact_list.hide_current();
     for e in entries {
         contact_list.add_contact(e);
@@ -344,8 +344,8 @@ fn contact_entry(contact: &ContactQuery, server: &UniverseServer) -> ContactList
         Some(cid) => match server.connections.get_connection(cid) {
             Some(conn) => match &conn.client {
                 Some(ClientInfo::Player(p)) => {
-                    world = p.player_info().world.clone();
-                    if p.player_info().afk {
+                    world = p.base_player().world.clone();
+                    if p.base_player().afk {
                         ContactState::Afk
                     } else {
                         ContactState::Online

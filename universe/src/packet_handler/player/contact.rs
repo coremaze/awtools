@@ -142,11 +142,11 @@ pub fn set_afk(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &
     };
 
     let is_afk = afk_status != 0;
-    citizen.player_info.afk = is_afk;
+    citizen.base_player.afk = is_afk;
     log::debug!(
         "{:?} AFK: {:?}",
-        citizen.player_info.username,
-        citizen.player_info.afk
+        citizen.base_player.username,
+        citizen.base_player.afk
     );
 
     // Really only need to regenerate mutuals
@@ -278,8 +278,8 @@ pub fn contact_entry(contact: &ContactQuery, server: &UniverseServer) -> Contact
         Some(cid) => match server.connections.get_connection(cid) {
             Some(conn) => match &conn.client {
                 Some(ClientInfo::Player(p)) => {
-                    world = p.player_info().world.clone();
-                    if p.player_info().afk {
+                    world = p.base_player().world.clone();
+                    if p.base_player().afk {
                         ContactState::Afk
                     } else {
                         ContactState::Online

@@ -51,14 +51,14 @@ impl ClientInfo {
     pub fn player_info(&self) -> Option<&GenericPlayer> {
         match self {
             ClientInfo::WorldServer(_) => None,
-            ClientInfo::Player(player) => Some(player.player_info()),
+            ClientInfo::Player(player) => Some(player.base_player()),
         }
     }
 
     pub fn player_info_mut(&mut self) -> Option<&mut GenericPlayer> {
         match self {
             ClientInfo::WorldServer(_) => None,
-            ClientInfo::Player(player) => Some(player.player_info_mut()),
+            ClientInfo::Player(player) => Some(player.base_player_mut()),
         }
     }
 

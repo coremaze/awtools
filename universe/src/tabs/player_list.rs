@@ -41,10 +41,10 @@ impl PlayerListEntry {
     pub fn from_player(player: &Player) -> Self {
         Self {
             citizen_id: player.citizen_id(),
-            privilege_id: player.player_info().privilege_id,
-            username: player.player_info().username.clone(),
-            world: player.player_info().world.clone(),
-            ip: player.player_info().ip,
+            privilege_id: player.base_player().privilege_id,
+            username: player.base_player().username.clone(),
+            world: player.base_player().world.clone(),
+            ip: player.base_player().ip,
             // The first-party Universe uses Available only if the user is a bot.
             // However, the only person who can see bots in the user list is the Administrator,
             // who has a different user list which does not show this information.
@@ -52,12 +52,12 @@ impl PlayerListEntry {
             // I think this is a bug, so I am making it apply to all users, not just bots.
             // This means that users who have connected to the Universe but which have not
             // yet joined a world will be shown as "Available" instead of "In World".
-            state: if player.player_info().world.is_some() {
+            state: if player.base_player().world.is_some() {
                 PlayerState::InWorld
             } else {
                 PlayerState::Available
             },
-            afk: player.player_info().afk,
+            afk: player.base_player().afk,
         }
     }
 
@@ -380,7 +380,7 @@ pub fn regenerate_player_list(server: &mut UniverseServer, cid: UniverseConnecti
     let Some(ClientInfo::Player(p)) = &mut conn.client else {
         return;
     };
-    let player_list = &mut p.player_info_mut().tabs.player_list;
+    let player_list = &mut p.base_player_mut().tabs.player_list;
     player_list.hide_current();
     for e in entries {
         player_list.add_player(e);

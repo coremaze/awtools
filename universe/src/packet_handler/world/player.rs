@@ -109,7 +109,7 @@ fn identify_player(
         return ReasonCode::NoSuchSession;
     };
 
-    let Some(player_nonce) = player.player_info().nonce else {
+    let Some(player_nonce) = player.base_player().nonce else {
         return ReasonCode::NoSuchSession;
     };
 
@@ -125,17 +125,17 @@ fn identify_player(
     response.add_int(VarID::PlayerPort, fields.player_port);
 
     response.add_uint(VarID::LoginID, player.citizen_id().unwrap_or(0));
-    response.add_int(VarID::BrowserBuild, player.player_info().build);
-    response.add_string(VarID::LoginUsername, player.player_info().username.clone());
+    response.add_int(VarID::BrowserBuild, player.base_player().build);
+    response.add_string(VarID::LoginUsername, player.base_player().username.clone());
     log::trace!(
         "Effective privilege of {} is {}",
-        &player.player_info().username,
+        &player.base_player().username,
         effective_privilege,
     );
     // Effective privilege controls what rights the World server gives the player.
     response.add_uint(VarID::PrivilegeUserID, effective_privilege);
 
-    player.player_info_mut().world = Some(fields.world_name.clone());
+    player.base_player_mut().world = Some(fields.world_name.clone());
 
     // Regenerate the player list becase of possible change in world state
     for cid in server.connections.cids() {
