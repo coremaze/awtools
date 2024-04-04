@@ -24,13 +24,7 @@ pub fn contact_add(server: &mut UniverseServer, cid: UniverseConnectionID, packe
 
     let rc = match try_add_contact(conn, packet, &server.database) {
         Ok((cit_id, cont_id)) => {
-            if !server.database.contact_blocked(cit_id, cont_id)
-                && server
-                    .database
-                    .contact_friend_requests_allowed(cont_id, cit_id)
-            {
-                alert_friend_request(cit_id, cont_id, server);
-            }
+            alert_friend_request(cit_id, cont_id, server);
             response.add_uint(VarID::ContactListCitizenID, cont_id);
             // response.add_uint(
             //     VarID::ContactListOptions,
@@ -106,21 +100,26 @@ fn try_add_contact(
         return Err(ReasonCode::ContactAddBlocked);
     }
 
-    // Stop people from adding each other when they are already friends
-    if database
+    let source_has_contact = !database
         .contact_get(citizen_id, contact_citizen.id)
-        .is_err()
-        || database
-            .contact_get(contact_citizen.id, citizen_id)
-            .is_err()
-    {
-        options.remove(ContactOptions::FRIEND_REQUEST_ALLOWED);
-        options.insert(ContactOptions::FRIEND_REQUEST_BLOCKED);
+        .is_err();
 
-        database
-            .contact_set(citizen_id, contact_citizen.id, options.bits())
-            .map_err(|_| ReasonCode::UnableToSetContact)?;
+    let target_has_contact = !database
+        .contact_get(contact_citizen.id, citizen_id)
+        .is_err();
+
+    // Stop people from adding each other when they are already friends
+    if source_has_contact && target_has_contact {
+        // Haven't checked if this is the right error code to send
+        return Err(ReasonCode::UnableToSetContact);
     }
+
+    options.remove(ContactOptions::FRIEND_REQUEST_ALLOWED);
+    options.insert(ContactOptions::FRIEND_REQUEST_BLOCKED);
+
+    database
+        .contact_set(citizen_id, contact_citizen.id, options.bits())
+        .map_err(|_| ReasonCode::UnableToSetContact)?;
 
     Ok((citizen_id, contact_citizen.id))
 }
