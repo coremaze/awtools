@@ -246,6 +246,7 @@ impl UniverseServer {
             PacketType::Botgram => packet_handler::botgram(self, client_id, packet),
             PacketType::Immigrate => packet_handler::immigrate(self, client_id, packet),
             PacketType::ContactDelete => packet_handler::contact_delete(self, client_id, packet),
+            PacketType::ContactChange => packet_handler::contact_change(self, client_id, packet),
             _ => {
                 log::warn!("Unhandled packet {packet:?}");
             }

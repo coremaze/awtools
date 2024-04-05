@@ -2,16 +2,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     client::ClientInfo,
-    database::{
-        contact::{ContactOptions, ContactQuery},
-        CitizenDB, ContactDB, Database, TelegramDB,
-    },
+    database::{contact::ContactOptions, CitizenDB, ContactDB, Database, TelegramDB},
     get_conn, get_conn_mut,
-    player::Player,
-    tabs::{
-        regenerate_contact_list, regenerate_contact_list_and_mutuals, ContactListEntry,
-        ContactState,
-    },
+    tabs::{regenerate_contact_list, regenerate_contact_list_and_mutuals},
     telegram,
     universe_connection::UniverseConnectionID,
     UniverseConnection, UniverseServer,
@@ -94,19 +87,14 @@ fn try_add_contact(
         .map_err(|_| ReasonCode::NoSuchCitizen)?;
 
     let mut options = ContactOptions::from_bits_truncate(contact_options);
-    if database.contact_blocked(citizen_id, contact_citizen.id)
-        && !options.contains(ContactOptions::ALL_BLOCKED)
-    {
+    let other_has_blocked_you = database.contact_blocked(contact_citizen.id, citizen_id);
+    if other_has_blocked_you && !options.contains(ContactOptions::ALL_BLOCKED) {
         return Err(ReasonCode::ContactAddBlocked);
     }
 
-    let source_has_contact = !database
-        .contact_get(citizen_id, contact_citizen.id)
-        .is_err();
+    let source_has_contact = database.contact_get(citizen_id, contact_citizen.id).is_ok();
 
-    let target_has_contact = !database
-        .contact_get(contact_citizen.id, citizen_id)
-        .is_err();
+    let target_has_contact = database.contact_get(contact_citizen.id, citizen_id).is_ok();
 
     // Stop people from adding each other when they are already friends
     if source_has_contact && target_has_contact {
@@ -219,19 +207,9 @@ pub fn contact_list(server: &mut UniverseServer, cid: UniverseConnectionID, pack
     let Some(starting_id) = packet.get_uint(VarID::ContactListCitizenID) else {
         return;
     };
-    let citizen_id = {
-        let conn = get_conn_mut!(server, cid, "contact_list");
-        let Some(ClientInfo::Player(Player::Citizen(citizen))) = &conn.client else {
-            return;
-        };
-        citizen.cit_id
-    };
 
-    let contacts = server.database.contact_get_all(citizen_id);
-    let mut entries = Vec::<ContactListEntry>::new();
-    for contact in &contacts {
-        entries.push(contact_entry(contact, server));
-    }
+    regenerate_contact_list(server, cid);
+
     let conn = get_conn_mut!(server, cid, "contact_list");
 
     let ip = conn.addr().ip();
@@ -252,67 +230,6 @@ pub fn contact_list(server: &mut UniverseServer, cid: UniverseConnectionID, pack
     );
 
     current_list.send_limited_list(conn);
-}
-
-pub fn contact_entry(contact: &ContactQuery, server: &UniverseServer) -> ContactListEntry {
-    let mut username = "".to_string();
-    let mut world: Option<String> = None;
-
-    let contact_citizen = match server.database.citizen_by_number(contact.contact) {
-        Ok(x) => x,
-        Err(_) => {
-            return ContactListEntry {
-                username,
-                world,
-                state: ContactState::Hidden,
-                citizen_id: contact.contact,
-                options: ContactOptions::default(),
-            }
-        }
-    };
-
-    username = contact_citizen.name;
-
-    let mut status = match server.connections.get_by_citizen_id(contact.contact) {
-        Some(cid) => match server.connections.get_connection(cid) {
-            Some(conn) => match &conn.client {
-                Some(ClientInfo::Player(p)) => {
-                    world = p.base_player().world.clone();
-                    if p.base_player().afk {
-                        ContactState::Afk
-                    } else {
-                        ContactState::Online
-                    }
-                }
-                _ => {
-                    log::error!(
-                        "Connection received in contact_name_world_state is not a citizen."
-                    );
-                    ContactState::Offline
-                }
-            },
-            None => {
-                log::error!("Got an invalid CID in contact_name_world_state");
-                ContactState::Offline
-            }
-        },
-        None => ContactState::Offline,
-    };
-
-    if !server
-        .database
-        .contact_status_allowed(contact.contact, contact.citizen)
-    {
-        status = ContactState::Unknown;
-    }
-
-    ContactListEntry {
-        username,
-        world,
-        state: status,
-        citizen_id: contact.contact,
-        options: contact.options,
-    }
 }
 
 pub fn contact_delete(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
@@ -352,4 +269,53 @@ pub fn contact_delete(server: &mut UniverseServer, cid: UniverseConnectionID, pa
     if let Some(other_cid) = server.connections.get_by_citizen_id(other_cit_id) {
         regenerate_contact_list(server, other_cid);
     }
+}
+
+pub fn contact_change(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
+    let Some(option_changes) = packet
+        .get_uint(VarID::ContactListOptions)
+        .and_then(ContactOptions::from_bits)
+    else {
+        return;
+    };
+
+    let Some(contact_cit_id) = packet.get_uint(VarID::ContactListCitizenID) else {
+        return;
+    };
+
+    let Some(self_citizen_id) = get_conn!(server, cid, "contact_change")
+        .client
+        .as_ref()
+        .and_then(ClientInfo::citizen_id)
+    else {
+        return;
+    };
+
+    let original_options = match server.database.contact_get(self_citizen_id, contact_cit_id) {
+        Ok(q) => q.options,
+        Err(_) => return,
+    };
+
+    let new_options = original_options.apply_changes(option_changes);
+
+    server
+        .database
+        .contact_set(self_citizen_id, contact_cit_id, new_options.bits())
+        .ok();
+
+    if option_changes.contains(ContactOptions::ALL_BLOCKED) {
+        server
+            .database
+            .contact_delete(contact_cit_id, self_citizen_id)
+            .ok();
+    }
+
+    if contact_cit_id == 0 {
+        if let Ok(mut cit_q) = server.database.citizen_by_number(self_citizen_id) {
+            cit_q.privacy = new_options.bits();
+            server.database.citizen_change(&cit_q).ok();
+        }
+    }
+
+    regenerate_contact_list_and_mutuals(server, cid);
 }

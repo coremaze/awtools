@@ -321,7 +321,7 @@ pub fn regenerate_contact_list_and_mutuals(server: &mut UniverseServer, cid: Uni
     }
 }
 
-fn contact_entry(contact: &ContactQuery, server: &UniverseServer) -> ContactListEntry {
+pub fn contact_entry(contact: &ContactQuery, server: &UniverseServer) -> ContactListEntry {
     let mut username = "".to_string();
     let mut world: Option<String> = None;
 
@@ -366,11 +366,15 @@ fn contact_entry(contact: &ContactQuery, server: &UniverseServer) -> ContactList
         None => ContactState::Offline,
     };
 
-    if !server
+    let status_is_allowed_for_you = server
         .database
-        .contact_status_allowed(contact.contact, contact.citizen)
-    {
+        .contact_status_allowed(contact.contact, contact.citizen);
+
+    let status_is_allowed_for_all = server.database.contact_status_allowed(contact.contact, 0);
+
+    if !status_is_allowed_for_you || !status_is_allowed_for_all {
         status = ContactState::Unknown;
+        world = None;
     }
 
     ContactListEntry {

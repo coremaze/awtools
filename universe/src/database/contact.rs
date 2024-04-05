@@ -37,6 +37,111 @@ bitflags! {
 }
 
 impl ContactOptions {
+    /// Returns a new ContactOptions, keeping the old options where the applied options are neither allowed nor blocked
+    pub fn apply_changes(&self, other: ContactOptions) -> ContactOptions {
+        let mut new_options = *self;
+
+        if other.contains(ContactOptions::STATUS_ALLOWED)
+            || other.contains(ContactOptions::STATUS_BLOCKED)
+        {
+            new_options.set(
+                ContactOptions::STATUS_ALLOWED,
+                other.contains(ContactOptions::STATUS_ALLOWED),
+            );
+
+            new_options.set(
+                ContactOptions::STATUS_BLOCKED,
+                other.contains(ContactOptions::STATUS_BLOCKED),
+            );
+        }
+
+        if other.contains(ContactOptions::LOCATION_ALLOWED)
+            || other.contains(ContactOptions::LOCATION_BLOCKED)
+        {
+            new_options.set(
+                ContactOptions::LOCATION_ALLOWED,
+                other.contains(ContactOptions::LOCATION_ALLOWED),
+            );
+
+            new_options.set(
+                ContactOptions::LOCATION_BLOCKED,
+                other.contains(ContactOptions::LOCATION_BLOCKED),
+            );
+        }
+
+        if other.contains(ContactOptions::TELEGRAMS_ALLOWED)
+            || other.contains(ContactOptions::TELEGRAMS_BLOCKED)
+        {
+            new_options.set(
+                ContactOptions::TELEGRAMS_ALLOWED,
+                other.contains(ContactOptions::TELEGRAMS_ALLOWED),
+            );
+
+            new_options.set(
+                ContactOptions::TELEGRAMS_BLOCKED,
+                other.contains(ContactOptions::TELEGRAMS_BLOCKED),
+            );
+        }
+
+        if other.contains(ContactOptions::FILE_TRANSFER_ALLOWED)
+            || other.contains(ContactOptions::FILE_TRANSFER_BLOCKED)
+        {
+            new_options.set(
+                ContactOptions::FILE_TRANSFER_ALLOWED,
+                other.contains(ContactOptions::FILE_TRANSFER_ALLOWED),
+            );
+
+            new_options.set(
+                ContactOptions::FILE_TRANSFER_BLOCKED,
+                other.contains(ContactOptions::FILE_TRANSFER_BLOCKED),
+            );
+        }
+
+        if other.contains(ContactOptions::JOIN_ALLOWED)
+            || other.contains(ContactOptions::JOIN_BLOCKED)
+        {
+            new_options.set(
+                ContactOptions::JOIN_ALLOWED,
+                other.contains(ContactOptions::JOIN_ALLOWED),
+            );
+
+            new_options.set(
+                ContactOptions::JOIN_BLOCKED,
+                other.contains(ContactOptions::JOIN_BLOCKED),
+            );
+        }
+
+        if other.contains(ContactOptions::CHAT_ALLOWED)
+            || other.contains(ContactOptions::CHAT_BLOCKED)
+        {
+            new_options.set(
+                ContactOptions::CHAT_ALLOWED,
+                other.contains(ContactOptions::CHAT_ALLOWED),
+            );
+
+            new_options.set(
+                ContactOptions::CHAT_BLOCKED,
+                other.contains(ContactOptions::CHAT_BLOCKED),
+            );
+        }
+
+        if other.contains(ContactOptions::FRIEND_REQUEST_ALLOWED)
+            || other.contains(ContactOptions::FRIEND_REQUEST_BLOCKED)
+        {
+            new_options.set(
+                ContactOptions::FRIEND_REQUEST_ALLOWED,
+                other.contains(ContactOptions::FRIEND_REQUEST_ALLOWED),
+            );
+
+            new_options.set(
+                ContactOptions::FRIEND_REQUEST_BLOCKED,
+                other.contains(ContactOptions::FRIEND_REQUEST_BLOCKED),
+            );
+        }
+
+        new_options
+    }
+
     pub fn is_blocked(&self) -> bool {
         self.contains(ContactOptions::ALL_BLOCKED)
     }
