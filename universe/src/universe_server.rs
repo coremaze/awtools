@@ -114,8 +114,8 @@ impl UniverseServer {
             .collect();
 
         // Handle all messages
-        for (client_id, messages) in messages {
-            self.handle_messages(messages, client_id);
+        for (cid, messages) in messages {
+            self.handle_messages(messages, cid);
         }
     }
 
@@ -131,8 +131,8 @@ impl UniverseServer {
 
         // Figure out whether the player lists need to be remade, and remake them if so.
         let mut regen_player_lists = false;
-        for client_id in &disconnected_conn_ids {
-            let Some(conn) = self.connections.get_connection(*client_id) else {
+        for cid in &disconnected_conn_ids {
+            let Some(conn) = self.connections.get_connection(*cid) else {
                 continue;
             };
             if conn.is_player() {
@@ -143,8 +143,8 @@ impl UniverseServer {
 
         // Figure out whether the world lists need to be remade, and remake them if so.
         let mut regen_world_lists = false;
-        for client_id in &disconnected_conn_ids {
-            let Some(conn) = self.connections.get_connection(*client_id) else {
+        for cid in &disconnected_conn_ids {
+            let Some(conn) = self.connections.get_connection(*cid) else {
                 continue;
             };
             if let Some(ClientInfo::WorldServer(_)) = &conn.client {
@@ -191,62 +191,50 @@ impl UniverseServer {
         }
     }
 
-    fn handle_packet(&mut self, packet: &AWPacket, client_id: UniverseConnectionID) {
+    fn handle_packet(&mut self, packet: &AWPacket, cid: UniverseConnectionID) {
         log::trace!("Handling packet {packet:?}");
         match packet.get_opcode() {
-            PacketType::PublicKeyRequest => packet_handler::public_key_request(self, client_id),
-            PacketType::StreamKeyResponse => {
-                packet_handler::stream_key_response(self, client_id, packet)
-            }
-            PacketType::PublicKeyResponse => {
-                packet_handler::public_key_response(self, client_id, packet)
-            }
-            PacketType::Login => packet_handler::login(self, client_id, packet),
-            PacketType::Heartbeat => packet_handler::heartbeat(self, client_id),
-            PacketType::WorldServerStart => {
-                packet_handler::world_server_start(self, client_id, packet)
-            }
-            PacketType::UserList => packet_handler::user_list(self, client_id, packet),
-            PacketType::AttributeChange => {
-                packet_handler::attribute_change(self, client_id, packet)
-            }
-            PacketType::CitizenNext => packet_handler::citizen_next(self, client_id, packet),
-            PacketType::CitizenPrev => packet_handler::citizen_prev(self, client_id, packet),
+            PacketType::PublicKeyRequest => packet_handler::public_key_request(self, cid),
+            PacketType::StreamKeyResponse => packet_handler::stream_key_response(self, cid, packet),
+            PacketType::PublicKeyResponse => packet_handler::public_key_response(self, cid, packet),
+            PacketType::Login => packet_handler::login(self, cid, packet),
+            PacketType::Heartbeat => packet_handler::heartbeat(self, cid),
+            PacketType::WorldServerStart => packet_handler::world_server_start(self, cid, packet),
+            PacketType::UserList => packet_handler::user_list(self, cid, packet),
+            PacketType::AttributeChange => packet_handler::attribute_change(self, cid, packet),
+            PacketType::CitizenNext => packet_handler::citizen_next(self, cid, packet),
+            PacketType::CitizenPrev => packet_handler::citizen_prev(self, cid, packet),
             PacketType::CitizenLookupByName => {
-                packet_handler::citizen_lookup_by_name(self, client_id, packet)
+                packet_handler::citizen_lookup_by_name(self, cid, packet)
             }
             PacketType::CitizenLookupByNumber => {
-                packet_handler::citizen_lookup_by_number(self, client_id, packet)
+                packet_handler::citizen_lookup_by_number(self, cid, packet)
             }
-            PacketType::CitizenChange => packet_handler::citizen_change(self, client_id, packet),
-            PacketType::LicenseAdd => packet_handler::license_add(self, client_id, packet),
-            PacketType::LicenseByName => packet_handler::license_by_name(self, client_id, packet),
-            PacketType::LicenseNext => packet_handler::license_next(self, client_id, packet),
-            PacketType::LicensePrev => packet_handler::license_prev(self, client_id, packet),
-            PacketType::LicenseChange => packet_handler::license_change(self, client_id, packet),
-            PacketType::WorldStart => packet_handler::world_start(self, client_id, packet),
-            PacketType::WorldStop => packet_handler::world_stop(self, client_id, packet),
-            PacketType::WorldList => packet_handler::world_list(self, client_id, packet),
-            PacketType::WorldLookup => packet_handler::world_lookup(self, client_id, packet),
-            PacketType::Identify => packet_handler::identify(self, client_id, packet),
-            PacketType::WorldStatsUpdate => {
-                packet_handler::world_stats_update(self, client_id, packet)
-            }
-            PacketType::CitizenAdd => packet_handler::citizen_add(self, client_id, packet),
-            PacketType::ContactAdd => packet_handler::contact_add(self, client_id, packet),
-            PacketType::TelegramSend => packet_handler::telegram_send(self, client_id, packet),
-            PacketType::TelegramGet => {
-                packet_handler::telegram_get(self, client_id, packet);
-            }
-            PacketType::SetAFK => packet_handler::set_afk(self, client_id, packet),
-            PacketType::ContactConfirm => packet_handler::contact_confirm(self, client_id, packet),
-            PacketType::ContactList => packet_handler::contact_list(self, client_id, packet),
-            PacketType::Join => packet_handler::join(self, client_id, packet),
-            PacketType::JoinReply => packet_handler::join_reply(self, client_id, packet),
-            PacketType::Botgram => packet_handler::botgram(self, client_id, packet),
-            PacketType::Immigrate => packet_handler::immigrate(self, client_id, packet),
-            PacketType::ContactDelete => packet_handler::contact_delete(self, client_id, packet),
-            PacketType::ContactChange => packet_handler::contact_change(self, client_id, packet),
+            PacketType::CitizenChange => packet_handler::citizen_change(self, cid, packet),
+            PacketType::LicenseAdd => packet_handler::license_add(self, cid, packet),
+            PacketType::LicenseByName => packet_handler::license_by_name(self, cid, packet),
+            PacketType::LicenseNext => packet_handler::license_next(self, cid, packet),
+            PacketType::LicensePrev => packet_handler::license_prev(self, cid, packet),
+            PacketType::LicenseChange => packet_handler::license_change(self, cid, packet),
+            PacketType::WorldStart => packet_handler::world_start(self, cid, packet),
+            PacketType::WorldStop => packet_handler::world_stop(self, cid, packet),
+            PacketType::WorldList => packet_handler::world_list(self, cid, packet),
+            PacketType::WorldLookup => packet_handler::world_lookup(self, cid, packet),
+            PacketType::Identify => packet_handler::identify(self, cid, packet),
+            PacketType::WorldStatsUpdate => packet_handler::world_stats_update(self, cid, packet),
+            PacketType::CitizenAdd => packet_handler::citizen_add(self, cid, packet),
+            PacketType::ContactAdd => packet_handler::contact_add(self, cid, packet),
+            PacketType::TelegramSend => packet_handler::telegram_send(self, cid, packet),
+            PacketType::TelegramGet => packet_handler::telegram_get(self, cid, packet),
+            PacketType::SetAFK => packet_handler::set_afk(self, cid, packet),
+            PacketType::ContactConfirm => packet_handler::contact_confirm(self, cid, packet),
+            PacketType::ContactList => packet_handler::contact_list(self, cid, packet),
+            PacketType::Join => packet_handler::join(self, cid, packet),
+            PacketType::JoinReply => packet_handler::join_reply(self, cid, packet),
+            PacketType::Botgram => packet_handler::botgram(self, cid, packet),
+            PacketType::Immigrate => packet_handler::immigrate(self, cid, packet),
+            PacketType::ContactDelete => packet_handler::contact_delete(self, cid, packet),
+            PacketType::ContactChange => packet_handler::contact_change(self, cid, packet),
             _ => {
                 log::warn!("Unhandled packet {packet:?}");
             }
