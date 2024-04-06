@@ -8,6 +8,7 @@ use std::io::{Cursor, Read, Write};
 
 #[derive(FromPrimitive)]
 pub enum DataType {
+    Unknown = 0,
     Byte = 1,
     Int = 2,
     Float = 3,
@@ -17,6 +18,7 @@ pub enum DataType {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AWPacketVar {
+    Unknown(VarID, Vec<u8>),
     Byte(VarID, u8),
     Int(VarID, i32),
     Uint(VarID, u32),
@@ -53,6 +55,11 @@ pub enum VarID {
     AttributeMailCommand = 21,
     AttributePAVObjectPath = 22,
     AttributeUnknownUniverseSetting = 23,
+    AttributeUnknownUniverseSetting24 = 24,
+    AttributePAVObjectPasswordObfuscated = 25,
+    // AttributeUnknownUniverseSetting26 = 26,
+    AttributeUnknownUniverseSetting27 = 27,
+    AttributeUnknownUniverseSetting28 = 28,
 
     IdentifyUserIP = 26,
 
@@ -164,6 +171,7 @@ impl AWPacketVar {
             AWPacketVar::Float(var_id, _) => *var_id,
             AWPacketVar::String(var_id, _) => *var_id,
             AWPacketVar::Data(var_id, _) => *var_id,
+            AWPacketVar::Unknown(var_id, _) => *var_id,
         }
     }
 
@@ -177,6 +185,7 @@ impl AWPacketVar {
             AWPacketVar::Float(_, _) => DataType::Float,
             AWPacketVar::String(_, _) => DataType::String,
             AWPacketVar::Data(_, _) => DataType::Data,
+            AWPacketVar::Unknown(_, _) => DataType::Unknown,
         }
     }
 
@@ -188,6 +197,7 @@ impl AWPacketVar {
             AWPacketVar::Float(_, _) => 4,
             AWPacketVar::String(_, string) => string_to_latin1(string).len() + 1,
             AWPacketVar::Data(_, buf) => buf.len(),
+            AWPacketVar::Unknown(_, buf) => buf.len(),
         }
     }
 
@@ -230,6 +240,9 @@ impl AWPacketVar {
                 result.write_all(&[0u8]).unwrap();
             }
             AWPacketVar::Data(_, x) => {
+                result.write_all(x).unwrap();
+            }
+            AWPacketVar::Unknown(_, x) => {
                 result.write_all(x).unwrap();
             }
         };
@@ -293,6 +306,13 @@ impl AWPacketVar {
                     .read_exact(&mut buf)
                     .map_err(|_| "Could not deserialize Data data")?;
                 AWPacketVar::Data(var_id, buf)
+            }
+            DataType::Unknown => {
+                let mut buf = vec![0u8; size as usize];
+                reader
+                    .read_exact(&mut buf)
+                    .map_err(|_| "Could not deserialize Unknown data")?;
+                AWPacketVar::Unknown(var_id, buf)
             }
         };
 

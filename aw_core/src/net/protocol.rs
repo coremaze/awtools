@@ -170,8 +170,9 @@ impl AWProtocol {
                 self.remove_from_buf(consumed_bytes);
                 return Ok(Some(packet));
             }
-            Err(_) => {
+            Err(why) => {
                 // Failed to deserialize packet
+                log::debug!("Failed to deserialize packet: {why:?}");
                 self.recv()?;
             }
         }
