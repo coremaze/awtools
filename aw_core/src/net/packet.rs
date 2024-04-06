@@ -12,7 +12,7 @@ use std::io::{Cursor, Read, Write};
 #[derive(Debug, PartialEq, Clone)]
 pub struct AWPacket {
     vars: Vec<AWPacketVar>,
-    opcode: PacketType,
+    opcode: PacketTypeResult,
     header_0: u16,
     header_1: u16,
 }
@@ -22,14 +22,14 @@ impl AWPacket {
     pub fn new(opcode: PacketType) -> Self {
         Self {
             vars: Vec::new(),
-            opcode,
+            opcode: PacketTypeResult::PacketType(opcode),
             header_0: 0, // Defaults to 2 in AW 6
             header_1: 2, // Defaults to 3 in AW 6
         }
     }
 
     /// Get the type of the packet.
-    pub fn get_opcode(&self) -> PacketType {
+    pub fn get_type(&self) -> PacketTypeResult {
         self.opcode
     }
 
@@ -171,7 +171,7 @@ impl AWPacket {
         let header = TagHeader {
             serialized_length: serialize_len,
             header_0: self.header_0,
-            opcode: self.opcode as i16,
+            opcode: self.opcode.into(),
             header_1: self.header_1,
             var_count: self.vars.len() as u16,
         };
@@ -251,10 +251,10 @@ impl AWPacket {
             ));
         }
 
-        let opcode = PacketType::from_i16(header.opcode).unwrap_or_else(|| {
-            log::debug!("Deserialized unknown packet ID {}", header.opcode);
-            PacketType::Unknown
-        });
+        let opcode = match PacketType::from_i16(header.opcode) {
+            Some(packet_type) => PacketTypeResult::PacketType(packet_type),
+            None => PacketTypeResult::Unknown(header.opcode),
+        };
 
         Ok((
             Self {
@@ -573,10 +573,22 @@ pub enum PacketType {
     HudResult = 168,
     AvatarLocation = 169,
     ObjectQuery = 170,
-    Unknown171 = 171,
     LaserBeam = 183,
+}
 
-    Unknown = 0x7FFF,
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum PacketTypeResult {
+    PacketType(PacketType),
+    Unknown(i16),
+}
+
+impl From<PacketTypeResult> for i16 {
+    fn from(value: PacketTypeResult) -> Self {
+        match value {
+            PacketTypeResult::PacketType(packet_type) => packet_type as i16,
+            PacketTypeResult::Unknown(num) => num,
+        }
+    }
 }
 
 #[cfg(test)]

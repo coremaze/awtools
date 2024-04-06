@@ -1,7 +1,7 @@
 //! Networking protocol implementation
 use crate::net::packet::{AWPacket, DeserializeError, PacketType};
-use crate::ReasonCode;
 use crate::{AWCryptStream, StreamKeyError};
+use crate::{PacketTypeResult, ReasonCode};
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -89,7 +89,10 @@ impl AWProtocol {
     /// Send packets.
     pub fn send(&mut self, packets: &mut [AWPacket], compression: bool) -> Result<(), ReasonCode> {
         for packet in packets.iter_mut() {
-            match packet.get_opcode() {
+            let PacketTypeResult::PacketType(packet_type) = packet.get_type() else {
+                continue;
+            };
+            match packet_type {
                 PacketType::PublicKeyResponse
                 | PacketType::StreamKeyResponse
                 | PacketType::Attributes
@@ -307,7 +310,9 @@ impl AWProtocol {
             }
         };
 
-        self.last_packet_type = Some(packet.get_opcode());
+        if let PacketTypeResult::PacketType(packet_type) = packet.get_type() {
+            self.last_packet_type = Some(packet_type);
+        }
 
         let send_result = self.inbound_packets.send(ProtocolMessage::Packet(packet));
 

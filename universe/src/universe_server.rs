@@ -193,7 +193,18 @@ impl UniverseServer {
 
     fn handle_packet(&mut self, packet: &AWPacket, cid: UniverseConnectionID) {
         log::trace!("Handling packet {packet:?}");
-        match packet.get_opcode() {
+
+        let packet_type = match packet.get_type() {
+            PacketTypeResult::Unknown(opcode) => {
+                log::warn!(
+                    "Received unknown packet opcode {opcode} from {cid:?}. Packet: {packet:?}"
+                );
+                return;
+            }
+            PacketTypeResult::PacketType(packet_type) => packet_type,
+        };
+
+        match packet_type {
             PacketType::PublicKeyRequest => packet_handler::public_key_request(self, cid),
             PacketType::StreamKeyResponse => packet_handler::stream_key_response(self, cid, packet),
             PacketType::PublicKeyResponse => packet_handler::public_key_response(self, cid, packet),
