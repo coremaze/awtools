@@ -3,7 +3,6 @@ use std::net::Ipv4Addr;
 use super::configurator::run_configurator;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-const UNIVERSE_CONFIG_PATH: &str = "universe.toml";
 
 /// Struct representing all configurations in the config file.
 #[derive(Deserialize, Serialize, Debug, Default)]
@@ -35,10 +34,10 @@ pub struct MysqlConfig {
 
 impl Config {
     /// Read and (if necessary) generate configuation file.
-    pub fn get_interactive() -> Result<Self, String> {
+    pub fn get_interactive(config_path: impl AsRef<Path>) -> Result<Self, String> {
         // Check if config file exists. If not, run configurator.
         // If it does exist, parse it.
-        let config_path = Path::new(UNIVERSE_CONFIG_PATH);
+        let config_path = config_path.as_ref();
 
         let config = if !config_path.exists() {
             println!(
@@ -53,15 +52,15 @@ impl Config {
             }
         };
 
-        config.save();
+        config.save(config_path);
 
         Ok(config)
     }
 
     /// Write configuation to disk.
-    pub fn save(&self) {
+    pub fn save(&self, config_path: impl AsRef<Path>) {
         let contents = toml::to_string(&self).unwrap_or_default();
-        std::fs::write(UNIVERSE_CONFIG_PATH, contents).ok();
+        std::fs::write(config_path, contents).ok();
     }
 }
 

@@ -27,6 +27,10 @@ struct Args {
     #[clap(long, value_parser, default_value_t = log::LevelFilter::Info)]
     /// Verbosity of logging: <off | error | warn | info | debug | trace>
     log_level: log::LevelFilter,
+
+    #[clap(long, default_value = "universe.toml")]
+    /// Path to the TOML configuration file for the universe server
+    config_file: String,
 }
 
 fn init_logging(level: log::LevelFilter) {
@@ -39,7 +43,7 @@ fn main() {
     let args = Args::parse();
     init_logging(args.log_level);
 
-    match configuration::Config::get_interactive() {
+    match configuration::Config::get_interactive(&args.config_file) {
         Ok(config) => {
             start_universe(config);
         }
