@@ -36,7 +36,7 @@ pub enum Attribute {
     MailFile = 20,
     MailCommand = 21,
     PAVObjectPath = 22,
-    UnknownUniverseSetting = 23,
+    TextureAndSeqObjectPath = 23,
 }
 
 pub trait AttribDB {

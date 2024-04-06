@@ -54,14 +54,12 @@ pub enum VarID {
     AttributeMailFile = 20,
     AttributeMailCommand = 21,
     AttributePAVObjectPath = 22,
-    AttributeUnknownUniverseSetting = 23,
-    AttributeUnknownUniverseSetting24 = 24,
+    AttributeTextureAndSeqObjectPath = 23,
+    AttributeObjectRefresh = 24,
     AttributePAVObjectPasswordObfuscated = 25,
-    // AttributeUnknownUniverseSetting26 = 26,
-    AttributeUnknownUniverseSetting27 = 27,
-    AttributeUnknownUniverseSetting28 = 28,
-
-    IdentifyUserIP = 26,
+    IdentifyUserIP = 26, // Also AttributeAllowTouristsCAV? AW is reusing this.
+    AttributeAllowBotsCAV = 27,
+    AttributePerCitizenCAV = 28,
 
     PositionNorth = 36,
     PositionHeight = 37,

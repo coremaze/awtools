@@ -183,7 +183,7 @@ pub fn set_attribute(var_id: VarID, value: &str, database: &Database) {
         VarID::AttributeMailFile => Attribute::MailFile,
         VarID::AttributeMailCommand => Attribute::MailCommand,
         VarID::AttributePAVObjectPath => Attribute::PAVObjectPath,
-        VarID::AttributeUnknownUniverseSetting => Attribute::UnknownUniverseSetting,
+        VarID::AttributeTextureAndSeqObjectPath => Attribute::TextureAndSeqObjectPath,
         _ => {
             log::warn!(
                 "Couldn't set attribute because {var_id:?} is not a valid attribute variable"
@@ -192,7 +192,14 @@ pub fn set_attribute(var_id: VarID, value: &str, database: &Database) {
         }
     };
 
-    if let Err(why) = database.attrib_set(id, value) {
-        log::warn!("Couldn't set attribute in database. {why:?}");
+    match id {
+        Attribute::Timestamp | Attribute::UniverseBuild => {
+            // It doesn't make sense to set these.
+        }
+        _ => {
+            if let Err(why) = database.attrib_set(id, value) {
+                log::warn!("Couldn't set attribute in database. {why:?}");
+            }
+        }
     }
 }
