@@ -134,7 +134,13 @@ impl ContactList {
         let mut group = AWPacketGroup::new();
 
         let ordered_ids = {
-            let mut k = self.entries.keys().copied().collect::<Vec<u32>>();
+            let mut k = self
+                .entries
+                .keys()
+                .copied()
+                // Skip 0 for now, we will do it last.
+                .filter(|&id| id != 0)
+                .collect::<Vec<u32>>();
             k.sort();
             k
         };
@@ -169,6 +175,15 @@ impl ContactList {
         let mut p = AWPacket::new(PacketType::ContactList);
         p.add_uint(VarID::ContactListCitizenID, 0);
         p.add_byte(VarID::ContactListMore, if more { 1 } else { 0 });
+        // This is for Options > Settings > Privacy
+        // It controls what checkboxes are checked in that menu
+        p.add_uint(
+            VarID::ContactListOptions,
+            match self.entries.get(&0) {
+                Some(e) => e.options.bits(),
+                None => 0,
+            },
+        );
         if group.push(p).is_err() {
             log::warn!("Failed to add a packet to a contact list group. (2)");
         };
@@ -250,7 +265,9 @@ impl UpdatingContactList {
         let mut current = self.current.clone();
         let mut new_entries = HashMap::<u32, ContactListEntry>::new();
         for (k, v) in current.entries.drain() {
-            if k > starting_id {
+            // 0 is a special case for general privacy settings.
+            // It should be included at the end of every contact list update.
+            if k > starting_id || k == 0 {
                 new_entries.insert(k, v);
             }
         }
@@ -324,6 +341,18 @@ pub fn regenerate_contact_list_and_mutuals(server: &mut UniverseServer, cid: Uni
 pub fn contact_entry(contact: &ContactQuery, server: &UniverseServer) -> ContactListEntry {
     let mut username = "".to_string();
     let mut world: Option<String> = None;
+
+    // This is the entry for one's own privacy settings.
+    // It's not going to be a valid citizen, but it still needs to be included.
+    if contact.contact == 0 {
+        return ContactListEntry {
+            username: "".to_string(),
+            world,
+            state: ContactState::Hidden,
+            citizen_id: contact.contact,
+            options: contact.options,
+        };
+    }
 
     let contact_citizen = match server.database.citizen_by_number(contact.contact) {
         Ok(x) => x,
