@@ -84,6 +84,7 @@ pub enum VarID {
     CitizenNumber = 59,
     CitizenPassword = 60,
     CitizenPrivilegePassword = 61,
+    CitizenRemainingTimeUntilExpiration = 62,
     CitizenTotalTime = 63,
     CitizenURL = 64,
     UserType = 67,
