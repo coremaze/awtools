@@ -1,3 +1,6 @@
+#[cfg(debug_assertions)]
+mod debug_alloc;
+
 use aw_core::*;
 
 mod client;
