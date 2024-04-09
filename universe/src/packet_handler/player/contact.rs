@@ -293,6 +293,8 @@ pub fn contact_change(server: &mut UniverseServer, cid: UniverseConnectionID, pa
 
     let original_options = match server.database.contact_get(self_citizen_id, contact_cit_id) {
         Ok(q) => q.options,
+        // The user may not have an entry for a contact with 0 yet
+        Err(_) if contact_cit_id == 0 => ContactOptions::empty(),
         Err(_) => return,
     };
 

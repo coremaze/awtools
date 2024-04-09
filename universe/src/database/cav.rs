@@ -1,5 +1,4 @@
 use super::Database;
-use mysql::prelude::*;
 
 pub trait CavDB {
     fn init_cav(&self);
@@ -7,39 +6,38 @@ pub trait CavDB {
 
 impl CavDB for Database {
     fn init_cav(&self) {
-        let mut conn = self
-            .pool
-            .get_conn()
-            .expect("Could not get mysql connection.");
+        let auto_increment_not_null = self.auto_increment_not_null();
+        let unsigned = self.unsigned_str();
 
-        conn.query_drop(
-            r"CREATE TABLE IF NOT EXISTS awu_cav ( 
-                Citizen int(11) unsigned NOT NULL default '0', 
-                Template int(11) NOT NULL default '0', 
-                Changed tinyint(4) NOT NULL default '0', 
-                Keyframe1Scale float NOT NULL default '0', 
-                Keyframe2Scale float NOT NULL default '0', 
-                Height float NOT NULL default '0', 
-                SkinColor int(11) NOT NULL default '0', 
-                HairColor int(11) NOT NULL default '0', 
-                PRIMARY KEY  (Citizen,Template) 
-            ) 
-            ENGINE=MyISAM DEFAULT CHARSET=latin1;",
-        )
-        .unwrap();
+        self.exec(
+            format!(
+                r"CREATE TABLE IF NOT EXISTS awu_cav ( 
+            Citizen INTEGER {unsigned} NOT NULL default '0', 
+            Template INTEGER NOT NULL default '0', 
+            Changed tinyint(4) NOT NULL default '0', 
+            Keyframe1Scale float NOT NULL default '0', 
+            Keyframe2Scale float NOT NULL default '0', 
+            Height float NOT NULL default '0', 
+            SkinColor INTEGER NOT NULL default '0', 
+            HairColor INTEGER NOT NULL default '0',
+            PRIMARY KEY (Citizen, Template)
+        );"
+            ),
+            vec![],
+        );
 
-        conn.query_drop(
-            r"CREATE TABLE IF NOT EXISTS awu_cav_template ( 
-                ID int(11) NOT NULL auto_increment, 
+        self.exec(
+            format!(
+                r"CREATE TABLE IF NOT EXISTS awu_cav_template ( 
+                ID INTEGER PRIMARY KEY {auto_increment_not_null}, 
                 Changed tinyint(4) NOT NULL default '0', 
-                Type int(11) NOT NULL default '0', 
-                Rating int(11) NOT NULL default '0', 
+                Type INTEGER NOT NULL default '0', 
+                Rating INTEGER NOT NULL default '0', 
                 Name varchar(255) default '', 
-                Model varchar(255) NOT NULL default '', 
-                PRIMARY KEY  (ID) 
-            ) 
-            ENGINE=MyISAM DEFAULT CHARSET=latin1;",
-        )
-        .unwrap();
+                Model varchar(255) NOT NULL default ''
+            );"
+            ),
+            vec![],
+        );
     }
 }

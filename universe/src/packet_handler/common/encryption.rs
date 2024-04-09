@@ -28,9 +28,12 @@ pub fn stream_key_response(
     let conn = get_conn_mut!(server, cid, "stream_key_response");
     let database = &server.database;
 
+    log::trace!("stream_key_response");
+
     if let Some(encrypted_a4_key) = packet.get_data(VarID::EncryptionKey) {
         if let Ok(a4_key) = conn.rsa.decrypt_private(&encrypted_a4_key) {
             conn.set_recv_key(&a4_key);
+            log::trace!("stream_key_response send_attributes");
             attributes::send_attributes(conn, database);
         }
     }

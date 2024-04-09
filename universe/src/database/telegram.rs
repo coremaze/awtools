@@ -1,8 +1,6 @@
-use super::Database;
-use crate::database;
+use super::{AWRow, Database};
+use crate::aw_params;
 use aw_core::ReasonCode;
-use mysql::prelude::*;
-use mysql::*;
 
 type Result<T, E> = std::result::Result<T, E>;
 
@@ -32,25 +30,20 @@ pub trait TelegramDB {
 
 impl TelegramDB for Database {
     fn init_telegram(&self) {
-        let mut conn = self
-            .pool
-            .get_conn()
-            .expect("Could not get mysql connection.");
-
-        conn.query_drop(
+        let auto_increment_not_null = self.auto_increment_not_null();
+        let unsigned = self.unsigned_str();
+        let statement = format!(
             r"CREATE TABLE IF NOT EXISTS awu_telegram ( 
-                ID int(11) NOT NULL auto_increment, 
-                Citizen int(11) unsigned NOT NULL default '0', 
-                `From` int(11) unsigned NOT NULL default '0', 
-                `Timestamp` int(11) unsigned NOT NULL default '0', 
-                Message text NOT NULL, 
-                Delivered tinyint(1) NOT NULL default '0', 
-                PRIMARY KEY  (ID), 
-                KEY Index1 (Citizen) 
-            ) 
-            ENGINE=MyISAM DEFAULT CHARSET=latin1;",
-        )
-        .unwrap();
+            ID INTEGER PRIMARY KEY {auto_increment_not_null}, 
+            Citizen INTEGER {unsigned} NOT NULL default '0', 
+            `From` INTEGER {unsigned} NOT NULL default '0', 
+            `Timestamp` INTEGER {unsigned} NOT NULL default '0', 
+            Message text NOT NULL, 
+            Delivered tinyint(1) NOT NULL default '0'
+        );"
+        );
+
+        self.exec(statement, vec![]);
     }
 
     fn telegram_add(
@@ -60,39 +53,30 @@ impl TelegramDB for Database {
         timestamp: u32,
         message: &str,
     ) -> Result<(), ReasonCode> {
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
-
-        conn.exec_drop(
+        self.exec(
             r"INSERT INTO awu_telegram (Citizen,`From`,Timestamp,Message,Delivered) 
-            VALUES(:to, :from, :timestamp, :message, 0)",
-            params! {
-                "to" => to,
-                "from" => from,
-                "timestamp" => timestamp,
-                "message" => &message,
+            VALUES(?, ?, ?, ?, 0)",
+            aw_params! {
+                to,
+                from,
+                timestamp,
+                &message
             },
-        )
-        .map_err(|_| ReasonCode::DatabaseError)?;
+        );
 
         Ok(())
     }
 
     fn telegram_get_undelivered(&self, citizen_id: u32) -> Vec<TelegramQuery> {
         let mut telegrams = Vec::<TelegramQuery>::new();
-        let mut conn = match self.conn() {
-            Ok(x) => x,
-            Err(_) => return telegrams,
-        };
 
-        let rows: Vec<Row> = conn
-            .exec(
-                r"SELECT * FROM awu_telegram WHERE Citizen=:id AND Delivered=0 
+        let rows = self.exec(
+            r"SELECT * FROM awu_telegram WHERE Citizen=? AND Delivered=0 
                 ORDER BY Timestamp",
-                params! {
-                    "id" => citizen_id,
-                },
-            )
-            .unwrap_or_default();
+            aw_params! {
+                citizen_id
+            },
+        );
 
         for row in &rows {
             if let Ok(telegram) = fetch_telegram(row) {
@@ -105,20 +89,14 @@ impl TelegramDB for Database {
 
     fn telegram_get_all(&self, citizen_id: u32) -> Vec<TelegramQuery> {
         let mut telegrams = Vec::<TelegramQuery>::new();
-        let mut conn = match self.conn() {
-            Ok(x) => x,
-            Err(_) => return telegrams,
-        };
 
-        let rows: Vec<Row> = conn
-            .exec(
-                r"SELECT * FROM awu_telegram WHERE Citizen=:id  
+        let rows = self.exec(
+            r"SELECT * FROM awu_telegram WHERE Citizen=?  
                 ORDER BY Timestamp",
-                params! {
-                    "id" => citizen_id,
-                },
-            )
-            .unwrap_or_default();
+            aw_params! {
+               citizen_id
+            },
+        );
 
         for row in &rows {
             if let Ok(telegram) = fetch_telegram(row) {
@@ -130,46 +108,49 @@ impl TelegramDB for Database {
     }
 
     fn telegram_mark_delivered(&self, telegram_id: u32) -> Result<(), ReasonCode> {
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
-
-        conn.exec_drop(
+        self.exec(
             r"UPDATE awu_telegram SET Delivered=1 
-            WHERE ID=:telegram_id;",
-            params! {
-                "telegram_id" => telegram_id,
+            WHERE ID=?;",
+            aw_params! {
+                telegram_id
             },
-        )
-        .map_err(|_x| ReasonCode::DatabaseError)?;
+        );
 
         Ok(())
     }
 }
 
-fn fetch_telegram(row: &Row) -> Result<TelegramQuery, ReasonCode> {
-    let id: u32 = database::fetch_int(row, "ID")
+fn fetch_telegram(row: &AWRow) -> Result<TelegramQuery, ReasonCode> {
+    let id: u32 = row
+        .fetch_int("ID")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let citizen: u32 = database::fetch_int(row, "Citizen")
+    let citizen: u32 = row
+        .fetch_int("Citizen")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let from: u32 = database::fetch_int(row, "From")
+    let from: u32 = row
+        .fetch_int("From")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let timestamp: u32 = database::fetch_int(row, "Timestamp")
+    let timestamp: u32 = row
+        .fetch_int("Timestamp")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let message: String =
-        database::fetch_string(row, "Message").ok_or(ReasonCode::DatabaseError)?;
+    let message: String = row
+        .fetch_string("Message")
+        .ok_or(ReasonCode::DatabaseError)?;
 
-    let delivered: u32 = database::fetch_int(row, "Delivered")
+    let delivered: u32 = row
+        .fetch_int("Delivered")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;

@@ -31,7 +31,7 @@ pub struct UniverseServer {
 
 impl UniverseServer {
     pub fn new(config: configuration::Config) -> Result<Self, String> {
-        let database = Database::new(config.mysql, &config.universe)?;
+        let database = Database::new(config.sql, &config.universe)?;
 
         // The Universe server provides a license to incoming clients, which must contain information
         // about the IP address that the client is connecting to. This could be different from the

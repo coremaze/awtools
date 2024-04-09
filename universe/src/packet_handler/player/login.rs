@@ -1,4 +1,7 @@
-use std::net::IpAddr;
+use std::{
+    net::IpAddr,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::{
     client::ClientInfo,
@@ -556,9 +559,33 @@ fn try_immigrate(server: &UniverseServer, params: ImmigrateParams) -> Result<(),
         return Err(ReasonCode::NameAlreadyUsed);
     };
 
-    server
-        .database
-        .citizen_add_next(&params.name, &params.password, &params.email)?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Current time is before the unix epoch.")
+        .as_secs();
+
+    server.database.citizen_add_next(CitizenQuery {
+        id: 0,
+        changed: 0,
+        name: params.name,
+        password: params.password,
+        email: params.email,
+        priv_pass: String::new(),
+        comment: String::new(),
+        url: String::new(),
+        immigration: now as u32,
+        expiration: 0,
+        last_login: 0,
+        last_address: 0,
+        total_time: 0,
+        bot_limit: 0,
+        beta: 0,
+        cav_enabled: 1,
+        cav_template: 0,
+        enabled: 1,
+        privacy: 0,
+        trial: 0,
+    })?;
 
     Ok(())
 }

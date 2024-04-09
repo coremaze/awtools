@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
+use crate::aw_params;
 use crate::configuration::UniverseConfig;
 
-use super::{fetch_int, fetch_string, Database};
+use super::Database;
 use aw_core::ReasonCode;
-use mysql::prelude::*;
-use mysql::*;
+
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
@@ -47,20 +47,14 @@ pub trait AttribDB {
 
 impl AttribDB for Database {
     fn init_attrib(&self, universe_config: &UniverseConfig) {
-        let mut conn = self
-            .pool
-            .get_conn()
-            .expect("Could not get mysql connection.");
-
-        conn.query_drop(
+        self.exec(
             r"CREATE TABLE IF NOT EXISTS awu_attrib ( 
-            ID int(11) NOT NULL default '0', 
+            ID INTEGER PRIMARY KEY NOT NULL default '0', 
             Changed tinyint(1) NOT NULL default '0', 
-            Value varchar(255) NOT NULL default '', 
-            PRIMARY KEY  (ID) 
-        ) ENGINE=MyISAM DEFAULT CHARSET=latin1;",
-        )
-        .unwrap();
+            Value varchar(255) NOT NULL default ''
+        );",
+            vec![],
+        );
 
         // Unimplemented: mail template
         // Unimplemented: mail file
@@ -77,39 +71,28 @@ impl AttribDB for Database {
     }
 
     fn attrib_set(&self, attribute_id: Attribute, value: &str) -> Result<(), ReasonCode> {
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
-
         // Check if attribute is already in the database
-        let rows: Vec<Row> = conn
-            .exec(
-                r"SELECT * FROM awu_attrib WHERE ID=:id",
-                params! {
-                    "id" => attribute_id as u32,
-                },
-            )
-            .map_err(|_| ReasonCode::DatabaseError)?;
+        let rows = self.exec(
+            r"SELECT * FROM awu_attrib WHERE ID=?",
+            aw_params!(attribute_id as u32),
+        );
 
         if rows.is_empty() {
             // Add the attribute if it is not already existent
-            conn.exec_drop(
-                r"INSERT INTO awu_attrib (ID, Value) VALUES(:id, :value);",
-                params! {
-                    "value" => value,
-                    "id" => attribute_id as u32,
-                },
-            )
-            .map_err(|_| ReasonCode::DatabaseError)?;
+            self.exec(
+                r"INSERT INTO awu_attrib (ID, Value) VALUES(?, ?);",
+                aw_params!(attribute_id as u32, value),
+            );
             log::debug!("Set attribute {attribute_id:?} to {value}");
         } else {
             // Try to update the attribute if it is already present
-            conn.exec_drop(
-                r"UPDATE awu_attrib SET Value=:value, Changed=NOT Changed WHERE ID=:id;",
-                params! {
-                    "value" => value,
-                    "id" => attribute_id as u32,
+            self.exec(
+                r"UPDATE awu_attrib SET Value=?, Changed=NOT Changed WHERE ID=?;",
+                aw_params! {
+                    value,
+                    attribute_id as u32
                 },
-            )
-            .map_err(|_| ReasonCode::DatabaseError)?;
+            );
             log::debug!("Updated attribute {attribute_id:?} to {value}");
         }
 
@@ -118,18 +101,21 @@ impl AttribDB for Database {
 
     fn attrib_get(&self) -> Result<HashMap<Attribute, String>, ReasonCode> {
         let mut result = HashMap::<Attribute, String>::new();
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
 
         // Get all attributes from database
-        let rows: Vec<Row> = conn
-            .exec(r"SELECT * FROM awu_attrib;", Params::Empty)
-            .map_err(|_| ReasonCode::DatabaseError)?;
+        log::trace!("getting rows");
+
+        let rows = self.exec(r"SELECT * FROM awu_attrib;", vec![]);
+        log::trace!("rows {rows:?}");
 
         // Add each valid response to the result
         for row in &rows {
-            let id = fetch_int(row, "ID").ok_or(ReasonCode::DatabaseError)?;
+            log::trace!("get id {:?}", row.fetch_int("ID"));
+            let id = row.fetch_int("ID").ok_or(ReasonCode::DatabaseError)?;
 
-            let value = fetch_string(row, "Value").ok_or(ReasonCode::DatabaseError)?;
+            log::trace!("get value {:?}", row.fetch_string("Value"));
+
+            let value = row.fetch_string("Value").ok_or(ReasonCode::DatabaseError)?;
 
             // Convert numeric ID back to Attributes
             if let Some(attribute) = Attribute::from_i64(id) {

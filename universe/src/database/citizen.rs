@@ -1,9 +1,8 @@
-use crate::database;
+use crate::aw_params;
 
-use super::Database;
+use super::{AWRow, Database};
 use aw_core::ReasonCode;
-use mysql::*;
-use mysql::{params, prelude::*};
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 type Result<T, E> = std::result::Result<T, E>;
@@ -37,22 +36,17 @@ pub trait CitizenDB {
     fn citizen_by_name(&self, name: &str) -> Result<CitizenQuery, ReasonCode>;
     fn citizen_by_number(&self, citizen_id: u32) -> Result<CitizenQuery, ReasonCode>;
     fn citizen_add(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode>;
-    fn citizen_add_next(
-        &self,
-        username: &str,
-        password: &str,
-        email: &str,
-    ) -> Result<(), ReasonCode>;
+    fn citizen_add_next(&self, citizen: CitizenQuery) -> Result<(), ReasonCode>;
     fn citizen_change(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode>;
 }
 
 impl CitizenDB for Database {
     fn init_citizen(&self) {
-        let mut conn = self.conn().expect("Could not get mysql connection.");
-
-        conn.query_drop(
-            r"CREATE TABLE IF NOT EXISTS awu_citizen ( 
-            ID int(11) unsigned NOT NULL auto_increment, 
+        let auto_increment_not_null = self.auto_increment_not_null();
+        self.exec(
+            format!(
+                r"CREATE TABLE IF NOT EXISTS awu_citizen ( 
+            ID INTEGER PRIMARY KEY {auto_increment_not_null}, 
             Changed tinyint(1) NOT NULL default '0', 
             Name varchar(255) NOT NULL default '', 
             Password varchar(255) NOT NULL default '', 
@@ -60,25 +54,22 @@ impl CitizenDB for Database {
             PrivPass varchar(255) NOT NULL default '', 
             Comment varchar(255) NOT NULL default '', 
             URL varchar(255) NOT NULL default '', 
-            Immigration int(11) NOT NULL default '0', 
-            Expiration int(11) NOT NULL default '0', 
-            LastLogin int(11) NOT NULL default '0', 
-            LastAddress int(11) NOT NULL default '0', 
-            TotalTime int(11) NOT NULL default '0', 
-            BotLimit int(11) NOT NULL default '0', 
+            Immigration INTEGER NOT NULL default '0', 
+            Expiration INTEGER NOT NULL default '0', 
+            LastLogin INTEGER NOT NULL default '0', 
+            LastAddress INTEGER NOT NULL default '0', 
+            TotalTime INTEGER NOT NULL default '0', 
+            BotLimit INTEGER NOT NULL default '0', 
             Beta tinyint(1) NOT NULL default '0', 
             CAVEnabled tinyint(1) NOT NULL default '0', 
-            CAVTemplate int(11) NOT NULL default '0', 
+            CAVTemplate INTEGER NOT NULL default '0', 
             Enabled tinyint(1) NOT NULL default '1', 
-            Privacy int(11) NOT NULL default '0', 
-            Trial tinyint(1) NOT NULL default '0', 
-            PRIMARY KEY  (ID), 
-            UNIQUE KEY Index1 (Name), 
-            KEY Index2 (Email) 
-        ) 
-        ENGINE=MyISAM DEFAULT CHARSET=latin1;",
-        )
-        .unwrap();
+            Privacy INTEGER NOT NULL default '0', 
+            Trial tinyint(1) NOT NULL default '0'
+        );"
+            ),
+            vec![],
+        );
 
         // Create default Administrator account if one doesn't exist yet
         if self.citizen_by_number(1).is_err() {
@@ -119,16 +110,7 @@ impl CitizenDB for Database {
     }
 
     fn citizen_by_name(&self, name: &str) -> Result<CitizenQuery, ReasonCode> {
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
-
-        let rows: Vec<Row> = conn
-            .exec(
-                r"SELECT * FROM awu_citizen WHERE Name=:name",
-                params! {
-                    "name" => name,
-                },
-            )
-            .map_err(|_| ReasonCode::DatabaseError)?;
+        let rows = self.exec("SELECT * FROM awu_citizen WHERE Name=?", aw_params!(name));
 
         if rows.len() > 1 {
             return Err(ReasonCode::DatabaseError);
@@ -142,16 +124,10 @@ impl CitizenDB for Database {
     }
 
     fn citizen_by_number(&self, citizen_id: u32) -> Result<CitizenQuery, ReasonCode> {
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
-
-        let rows: Vec<Row> = conn
-            .exec(
-                r"SELECT * FROM awu_citizen WHERE ID=:id",
-                params! {
-                    "id" => citizen_id,
-                },
-            )
-            .map_err(|_| ReasonCode::DatabaseError)?;
+        let rows = self.exec(
+            r"SELECT * FROM awu_citizen WHERE ID=?",
+            aw_params!(citizen_id),
+        );
 
         if rows.len() > 1 {
             return Err(ReasonCode::DatabaseError);
@@ -165,248 +141,225 @@ impl CitizenDB for Database {
     }
 
     fn citizen_add(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode> {
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
-
-        conn.exec_drop(
+        self.exec(
             r"INSERT INTO awu_citizen(
                 ID, Immigration, Expiration, LastLogin, LastAddress, TotalTime, 
                 BotLimit, Beta, Enabled, Trial, Privacy, CAVEnabled, CAVTemplate, 
                 Name, Password, Email, PrivPass, Comment, URL) 
-            VALUES(:id, :immigration, :expiration, :last_login, :last_address, :total_time, 
-                :bot_limit, :beta, :enabled, :trial, :privacy, :cav_enabled, :cav_template, 
-                :name, :password, :email, :priv_pass, :comment, :url)",
-            params! {
-                "id" => citizen.id,
-                "immigration" => citizen.immigration,
-                "expiration" => citizen.expiration,
-                "last_login" => citizen.last_login,
-                "last_address" => citizen.last_address,
-                "total_time" => citizen.total_time,
-                "bot_limit" => citizen.bot_limit,
-                "beta" => citizen.beta,
-                "enabled" => citizen.enabled,
-                "trial" => citizen.trial,
-                "privacy" => citizen.privacy,
-                "cav_enabled" => citizen.cav_enabled,
-                "cav_template" => citizen.cav_template,
-                "name" => &citizen.name,
-                "password" => &citizen.password,
-                "email" => &citizen.email,
-                "priv_pass" => &citizen.priv_pass,
-                "comment" => &citizen.comment,
-                "url" => &citizen.url
-            },
-        )
-        .map_err(|_| ReasonCode::DatabaseError)?;
+            VALUES(?, ?, ?, ?, ?, ?, 
+                ?, ?, ?, ?, ?, ?, ?, 
+                ?, ?, ?, ?, ?, ?)",
+            aw_params!(
+                citizen.id,
+                citizen.immigration,
+                citizen.expiration,
+                citizen.last_login,
+                citizen.last_address,
+                citizen.total_time,
+                citizen.bot_limit,
+                citizen.beta,
+                citizen.enabled,
+                citizen.trial,
+                citizen.privacy,
+                citizen.cav_enabled,
+                citizen.cav_template,
+                &citizen.name,
+                &citizen.password,
+                &citizen.email,
+                &citizen.priv_pass,
+                &citizen.comment,
+                &citizen.url
+            ),
+        );
 
         Ok(())
     }
 
-    fn citizen_add_next(
-        &self,
-        username: &str,
-        password: &str,
-        email: &str,
-    ) -> Result<(), ReasonCode> {
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
-
+    fn citizen_add_next(&self, mut citizen: CitizenQuery) -> Result<(), ReasonCode> {
         // Get the next unused ID from the database
-        let next_id: Option<Row> = conn
-            .exec_first("SELECT MAX(ID) + 1 AS ID FROM awu_citizen", ())
-            .map_err(|_| ReasonCode::DatabaseError)?;
+        let rows = self.exec("SELECT MAX(ID) + 1 AS ID FROM awu_citizen", vec![]);
+        let next_id = rows.first();
 
         let id: u32 = match next_id {
-            Some(row) => database::fetch_int(&row, "ID")
+            Some(row) => row
+                .fetch_int("ID")
                 .ok_or(ReasonCode::DatabaseError)?
                 .try_into()
                 .map_err(|_| ReasonCode::DatabaseError)?,
             None => 1,
         };
 
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Current time is before the unix epoch.")
-            .as_secs();
+        citizen.id = id;
 
-        let citizen = CitizenQuery {
-            id,
-            changed: 0,
-            name: username.to_string(),
-            password: password.to_string(),
-            email: email.to_string(),
-            priv_pass: String::new(),
-            comment: String::new(),
-            url: String::new(),
-            immigration: now as u32,
-            expiration: 0,
-            last_login: 0,
-            last_address: 0,
-            total_time: 0,
-            bot_limit: 0,
-            beta: 0,
-            cav_enabled: 1,
-            cav_template: 0,
-            enabled: 1,
-            privacy: 0,
-            trial: 0,
-        };
-
-        conn.exec_drop(
+        self.exec(
             r"INSERT INTO awu_citizen(
                 ID, Immigration, Expiration, LastLogin, LastAddress, TotalTime, 
                 BotLimit, Beta, Enabled, Trial, Privacy, CAVEnabled, CAVTemplate, 
                 Name, Password, Email, PrivPass, Comment, URL) 
-            VALUES(:id, :immigration, :expiration, :last_login, :last_address, :total_time, 
-                :bot_limit, :beta, :enabled, :trial, :privacy, :cav_enabled, :cav_template, 
-                :name, :password, :email, :priv_pass, :comment, :url)",
-            params! {
-                "id" => citizen.id,
-                "immigration" => citizen.immigration,
-                "expiration" => citizen.expiration,
-                "last_login" => citizen.last_login,
-                "last_address" => citizen.last_address,
-                "total_time" => citizen.total_time,
-                "bot_limit" => citizen.bot_limit,
-                "beta" => citizen.beta,
-                "enabled" => citizen.enabled,
-                "trial" => citizen.trial,
-                "privacy" => citizen.privacy,
-                "cav_enabled" => citizen.cav_enabled,
-                "cav_template" => citizen.cav_template,
-                "name" => &citizen.name,
-                "password" => &citizen.password,
-                "email" => &citizen.email,
-                "priv_pass" => &citizen.priv_pass,
-                "comment" => &citizen.comment,
-                "url" => &citizen.url
+            VALUES(?, ?, ?, ?, ?, ?, 
+                ?, ?, ?, ?, ?, ?, ?, 
+                ?, ?, ?, ?, ?, ?)",
+            aw_params! {
+                citizen.id,
+                citizen.immigration,
+                citizen.expiration,
+                citizen.last_login,
+                citizen.last_address,
+                citizen.total_time,
+                citizen.bot_limit,
+                citizen.beta,
+                citizen.enabled,
+                citizen.trial,
+                citizen.privacy,
+                citizen.cav_enabled,
+                citizen.cav_template,
+                &citizen.name,
+                &citizen.password,
+                &citizen.email,
+                &citizen.priv_pass,
+                &citizen.comment,
+                &citizen.url
             },
-        )
-        .map_err(|_| ReasonCode::DatabaseError)?;
+        );
 
         Ok(())
     }
 
     fn citizen_change(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode> {
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
-
-        conn.exec_drop(
+        self.exec(
             r"UPDATE awu_citizen SET Changed=NOT Changed,
-                Immigration=:immigration, Expiration=:expiration, LastLogin=:last_login, 
-                LastAddress=:last_address, TotalTime=:total_time, BotLimit=:bot_limit, 
-                Beta=:beta, Enabled=:enabled, Trial=:trial, Privacy=:privacy, 
-                CAVEnabled=:cav_enabled, CAVTemplate=:cav_template, Name=:name, 
-                Password=:password, Email=:email, PrivPass=:priv_pass, 
-                Comment=:comment, URL=:url
-                WHERE ID=:id;",
-            params! {
-                "id" => citizen.id,
-                "immigration" => citizen.immigration,
-                "expiration" => citizen.expiration,
-                "last_login" => citizen.last_login,
-                "last_address" => citizen.last_address,
-                "total_time" => citizen.total_time,
-                "bot_limit" => citizen.bot_limit,
-                "beta" => citizen.beta,
-                "enabled" => citizen.enabled,
-                "trial" => citizen.trial,
-                "privacy" => citizen.privacy,
-                "cav_enabled" => citizen.cav_enabled,
-                "cav_template" => citizen.cav_template,
-                "name" => &citizen.name,
-                "password" => &citizen.password,
-                "email" => &citizen.email,
-                "priv_pass" => &citizen.priv_pass,
-                "comment" => &citizen.comment,
-                "url" => &citizen.url
+                Immigration=?, Expiration=?, LastLogin=?, 
+                LastAddress=?, TotalTime=?, BotLimit=?, 
+                Beta=?, Enabled=?, Trial=?, Privacy=?, 
+                CAVEnabled=?, CAVTemplate=?, Name=?, 
+                Password=?, Email=?, PrivPass=?, 
+                Comment=?, URL=?
+                WHERE ID=?;",
+            aw_params! {
+                citizen.immigration,
+                citizen.expiration,
+                citizen.last_login,
+                citizen.last_address,
+                citizen.total_time,
+                citizen.bot_limit,
+                citizen.beta,
+                citizen.enabled,
+                citizen.trial,
+                citizen.privacy,
+                citizen.cav_enabled,
+                citizen.cav_template,
+                &citizen.name,
+                &citizen.password,
+                &citizen.email,
+                &citizen.priv_pass,
+                &citizen.comment,
+                &citizen.url,
+                citizen.id
             },
-        )
-        .map_err(|_| ReasonCode::DatabaseError)?;
+        );
 
         Ok(())
     }
 }
 
-fn fetch_citizen(row: &Row) -> Result<CitizenQuery, ReasonCode> {
-    let id: u32 = database::fetch_int(row, "ID")
+fn fetch_citizen(row: &AWRow) -> Result<CitizenQuery, ReasonCode> {
+    let id: u32 = row
+        .fetch_int("ID")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let changed: u32 = database::fetch_int(row, "Changed")
+    let changed: u32 = row
+        .fetch_int("Changed")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let name: String = database::fetch_string(row, "Name").ok_or(ReasonCode::DatabaseError)?;
+    let name: String = row.fetch_string("Name").ok_or(ReasonCode::DatabaseError)?;
 
-    let password: String =
-        database::fetch_string(row, "Password").ok_or(ReasonCode::DatabaseError)?;
+    let password: String = row
+        .fetch_string("Password")
+        .ok_or(ReasonCode::DatabaseError)?;
 
-    let email: String = database::fetch_string(row, "Email").ok_or(ReasonCode::DatabaseError)?;
+    let email: String = row.fetch_string("Email").ok_or(ReasonCode::DatabaseError)?;
 
-    let priv_pass: String =
-        database::fetch_string(row, "PrivPass").ok_or(ReasonCode::DatabaseError)?;
+    let priv_pass: String = row
+        .fetch_string("PrivPass")
+        .ok_or(ReasonCode::DatabaseError)?;
 
-    let comment: String =
-        database::fetch_string(row, "Comment").ok_or(ReasonCode::DatabaseError)?;
+    let comment: String = row
+        .fetch_string("Comment")
+        .ok_or(ReasonCode::DatabaseError)?;
 
-    let url: String = database::fetch_string(row, "URL").ok_or(ReasonCode::DatabaseError)?;
+    let url: String = row.fetch_string("URL").ok_or(ReasonCode::DatabaseError)?;
 
-    let immigration: u32 = database::fetch_int(row, "Immigration")
+    let immigration: u32 = row
+        .fetch_int("Immigration")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let expiration: u32 = database::fetch_int(row, "Expiration")
+    let expiration: u32 = row
+        .fetch_int("Expiration")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let last_login: u32 = database::fetch_int(row, "LastLogin")
+    let last_login: u32 = row
+        .fetch_int("LastLogin")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
     // It is not unexpected for LastAddress to end up in the database as a negative number.
-    let last_address: u32 =
-        database::fetch_int(row, "LastAddress").ok_or(ReasonCode::DatabaseError)? as u32;
+    let last_address: u32 = row
+        .fetch_int("LastAddress")
+        .ok_or(ReasonCode::DatabaseError)? as u32;
 
-    let total_time: u32 = database::fetch_int(row, "TotalTime")
+    let total_time: u32 = row
+        .fetch_int("TotalTime")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let bot_limit: u32 = database::fetch_int(row, "BotLimit")
+    let bot_limit: u32 = row
+        .fetch_int("BotLimit")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let beta: u32 = database::fetch_int(row, "Beta")
+    let beta: u32 = row
+        .fetch_int("Beta")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let cav_enabled: u32 = database::fetch_int(row, "CAVEnabled")
+    let cav_enabled: u32 = row
+        .fetch_int("CAVEnabled")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let cav_template: u32 = database::fetch_int(row, "CAVTemplate")
+    let cav_template: u32 = row
+        .fetch_int("CAVTemplate")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let enabled: u32 = database::fetch_int(row, "Enabled")
+    let enabled: u32 = row
+        .fetch_int("Enabled")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let privacy: u32 = database::fetch_int(row, "Privacy")
+    let privacy: u32 = row
+        .fetch_int("Privacy")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let trial: u32 = database::fetch_int(row, "Trial")
+    let trial: u32 = row
+        .fetch_int("Trial")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;

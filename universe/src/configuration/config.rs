@@ -1,14 +1,36 @@
-use std::net::Ipv4Addr;
+use std::{env, net::Ipv4Addr, path::PathBuf};
 
 use super::configurator::run_configurator;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+/// Internal (sqlite, local, on-disk, self contained) database or external (server) database
+#[derive(Deserialize, Serialize, Debug, Default)]
+pub enum DatabaseType {
+    External,
+    #[default]
+    Internal,
+}
+
+/// Config for sqlite, the local database solution
+#[derive(Deserialize, Serialize, Debug)]
+pub struct SqliteConfig {
+    pub path: String,
+}
+
+/// Configuration for the database, whether external or internal
+#[derive(Deserialize, Serialize, Debug, Default)]
+pub struct DatabaseConfig {
+    pub database_type: DatabaseType,
+    pub mysql_config: MysqlConfig,
+    pub sqlite_config: SqliteConfig,
+}
+
 /// Struct representing all configurations in the config file.
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct Config {
     pub universe: UniverseConfig,
-    pub mysql: MysqlConfig,
+    pub sql: DatabaseConfig,
 }
 
 /// Configuration section for the universe
@@ -86,5 +108,16 @@ impl Default for MysqlConfig {
             password: "password".to_string(),
             database: "aworld_universe".to_string(),
         }
+    }
+}
+
+impl Default for SqliteConfig {
+    fn default() -> Self {
+        // The default path should be "universe.db" in the current directory
+        let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let default_path = current_dir.join("universe.db");
+        let path_str = default_path.to_str().unwrap_or("universe.db").to_string();
+
+        Self { path: path_str }
     }
 }

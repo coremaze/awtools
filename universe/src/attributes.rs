@@ -10,7 +10,9 @@ pub fn send_attributes(conn: &UniverseConnection, database: &Database) {
     packet.set_header_0(0);
     packet.set_header_1(0);
 
+    log::trace!("get attributes");
     let attribs = get_attributes(database);
+    log::trace!("get attributes done");
 
     packet.add_string(
         VarID::AttributeAllowTourists,

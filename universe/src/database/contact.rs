@@ -1,9 +1,7 @@
-use super::Database;
-use crate::database;
+use super::{AWRow, Database};
+use crate::aw_params;
 use aw_core::ReasonCode;
 use bitflags::bitflags;
-use mysql::prelude::*;
-use mysql::*;
 
 type Result<T, E> = std::result::Result<T, E>;
 
@@ -258,23 +256,19 @@ pub trait ContactDB {
 
 impl ContactDB for Database {
     fn init_contact(&self) {
-        let mut conn = self
-            .pool
-            .get_conn()
-            .expect("Could not get mysql connection.");
-
-        conn.query_drop(
-            r"CREATE TABLE IF NOT EXISTS awu_contact ( 
-                Citizen int(11) unsigned NOT NULL default '0', 
-                Contact int(11) unsigned NOT NULL default '0', 
-                Options int(11) unsigned NOT NULL default '0', 
-                Changed tinyint(1) NOT NULL default '0', 
-                PRIMARY KEY  (Citizen,Contact), 
-                KEY Index1 (Contact,Citizen) 
-            ) 
-            ENGINE=MyISAM DEFAULT CHARSET=latin1;",
-        )
-        .unwrap();
+        let unsigned = self.unsigned_str();
+        self.exec(
+            format!(
+                r"CREATE TABLE IF NOT EXISTS awu_contact ( 
+                Citizen INTEGER {unsigned} NOT NULL default '0', 
+                Contact INTEGER {unsigned} NOT NULL default '0', 
+                Options INTEGER {unsigned} NOT NULL default '0', 
+                Changed tinyint(1) NOT NULL default '0',
+                PRIMARY KEY (Citizen, Contact)
+            );"
+            ),
+            vec![],
+        );
     }
 
     fn contact_set(
@@ -283,59 +277,49 @@ impl ContactDB for Database {
         contact_id: u32,
         options: u32,
     ) -> Result<(), ReasonCode> {
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
-
         // Check if contact pair is already in the database
-        let rows: Vec<Row> = conn
-            .exec(
-                r"SELECT * FROM awu_contact WHERE Citizen=:citizen_id AND Contact=:contact_id;",
-                params! {
-                    "citizen_id" => citizen_id,
-                    "contact_id" => contact_id,
-                },
-            )
-            .map_err(|_| ReasonCode::DatabaseError)?;
+        let rows = self.exec(
+            r"SELECT * FROM awu_contact WHERE Citizen=? AND Contact=?;",
+            aw_params! {
+                citizen_id,
+                contact_id
+            },
+        );
 
         if rows.is_empty() {
             // Add the contact pair if it is not already existent
-            conn.exec_drop(
+            self.exec(
                 r"INSERT INTO awu_contact (Citizen,Contact,Options) 
-                VALUES(:citizen_id, :contact_id, :options);",
-                params! {
-                    "citizen_id" => citizen_id,
-                    "contact_id" => contact_id,
-                    "options" => options,
+                VALUES(?, ?, ?);",
+                aw_params! {
+                    citizen_id,
+                    contact_id,
+                    options
                 },
-            )
-            .map_err(|_| ReasonCode::DatabaseError)?;
+            );
         } else {
             // Try to update the contact pair if it is already present
-            conn.exec_drop(
-                r"UPDATE awu_contact SET Options=:options WHERE Citizen=:citizen_id AND Contact=:contact_id;",
-                params! {
-                    "citizen_id" => citizen_id,
-                    "contact_id" => contact_id,
-                    "options" => options,
+            self.exec(
+                r"UPDATE awu_contact SET Options=? WHERE Citizen=? AND Contact=?;",
+                aw_params! {
+                    options,
+                    citizen_id,
+                    contact_id
                 },
-            )
-            .map_err(|_| ReasonCode::DatabaseError)?;
+            );
         }
 
         Ok(())
     }
 
     fn contact_get(&self, citizen_id: u32, contact_id: u32) -> Result<ContactQuery, ReasonCode> {
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
-
-        let rows: Vec<Row> = conn
-            .exec(
-                r"SELECT * FROM awu_contact WHERE Citizen=:citizen_id AND Contact=:contact_id;",
-                params! {
-                    "citizen_id" => citizen_id,
-                    "contact_id" => contact_id,
-                },
-            )
-            .map_err(|_| ReasonCode::DatabaseError)?;
+        let rows = self.exec(
+            r"SELECT * FROM awu_contact WHERE Citizen=? AND Contact=?;",
+            aw_params! {
+                citizen_id,
+                contact_id
+            },
+        );
 
         if let Some(contact) = rows.first() {
             fetch_contact(contact)
@@ -346,20 +330,13 @@ impl ContactDB for Database {
 
     fn contact_get_all(&self, citizen_id: u32) -> Vec<ContactQuery> {
         let mut result = Vec::<ContactQuery>::new();
-        let mut conn = match self.conn() {
-            Ok(x) => x,
-            Err(_) => return result,
-        };
 
-        let rows: Vec<Row> = match conn.exec(
-            r"SELECT * FROM awu_contact WHERE Citizen=:citizen_id;",
-            params! {
-                "citizen_id" => citizen_id,
+        let rows = self.exec(
+            r"SELECT * FROM awu_contact WHERE Citizen=?;",
+            aw_params! {
+                citizen_id
             },
-        ) {
-            Ok(x) => x,
-            Err(_) => return result,
-        };
+        );
 
         for row in rows {
             if let Ok(contact) = fetch_contact(&row) {
@@ -501,34 +478,34 @@ impl ContactDB for Database {
     }
 
     fn contact_delete(&self, citizen_id: u32, contact_id: u32) -> Result<(), ReasonCode> {
-        let mut conn = self.conn().map_err(|_| ReasonCode::DatabaseError)?;
-
         // Add the contact pair if it is not already existent
-        conn.exec_drop(
-            r"DELETE FROM awu_contact WHERE Citizen=:citizen_id  AND Contact=:contact_id;",
-            params! {
-                "citizen_id" => citizen_id,
-                "contact_id" => contact_id,
+        self.exec(
+            r"DELETE FROM awu_contact WHERE Citizen=?  AND Contact=?;",
+            aw_params! {
+                citizen_id,
+                contact_id
             },
-        )
-        .map_err(|_| ReasonCode::DatabaseError)?;
+        );
 
         Ok(())
     }
 }
 
-fn fetch_contact(row: &Row) -> Result<ContactQuery, ReasonCode> {
-    let citizen: u32 = database::fetch_int(row, "Citizen")
+fn fetch_contact(row: &AWRow) -> Result<ContactQuery, ReasonCode> {
+    let citizen: u32 = row
+        .fetch_int("Citizen")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let contact: u32 = database::fetch_int(row, "Contact")
+    let contact: u32 = row
+        .fetch_int("Contact")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
 
-    let options: u32 = database::fetch_int(row, "Options")
+    let options: u32 = row
+        .fetch_int("Options")
         .ok_or(ReasonCode::DatabaseError)?
         .try_into()
         .map_err(|_| ReasonCode::DatabaseError)?;
