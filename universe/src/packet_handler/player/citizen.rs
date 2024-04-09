@@ -382,8 +382,6 @@ pub fn citizen_add(server: &UniverseServer, cid: UniverseConnectionID, packet: &
 
     let conn = get_conn!(server, cid, "citizen_add");
 
-    // TODO: If no number is provided, default to the next available number.
-
     let rc = match try_add_citizen(conn, packet, &server.database) {
         Ok(new_cit) => {
             response.add_uint(VarID::CitizenNumber, new_cit.id);
@@ -466,11 +464,6 @@ fn try_add_citizen(
         return Err(ReasonCode::NameAlreadyUsed);
     }
 
-    // Cannot have ID 0 - TODO: get default next ID
-    if new_info.id == 0 {
-        return Err(ReasonCode::NumberAlreadyUsed);
-    }
-
     // Can't add citizen if someone already has the citzen number
     if database.citizen_by_number(new_info.id).is_ok() {
         return Err(ReasonCode::NumberAlreadyUsed);
@@ -489,12 +482,16 @@ fn try_add_citizen(
         new_info.total_time = packet.get_uint(VarID::CitizenTotalTime).unwrap_or(0);
     }
 
-    database
-        .citizen_add(&new_info)
-        .map_err(|_| ReasonCode::UnableToInsertCitizen)?;
+    let name = new_info.name.clone();
+
+    match new_info.id {
+        0 => database.citizen_add_next(new_info),
+        1.. => database.citizen_add(&new_info),
+    }
+    .map_err(|_| ReasonCode::UnableToInsertCitizen)?;
 
     let result = database
-        .citizen_by_name(&new_info.name)
+        .citizen_by_name(&name)
         .map_err(|_| ReasonCode::UnableToInsertCitizen)?;
 
     Ok(result)
