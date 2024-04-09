@@ -249,7 +249,7 @@ impl AWPacketVar {
         Ok(result)
     }
 
-    pub fn deserialize(data: &[u8]) -> Result<(Self, usize), String> {
+    pub fn deserialize(data: &[u8]) -> Result<(Self, u64), String> {
         let mut reader = Cursor::new(data);
 
         // Header is big endian
@@ -315,7 +315,7 @@ impl AWPacketVar {
             }
         };
 
-        Ok((result, reader.position().try_into().unwrap()))
+        Ok((result, reader.position()))
     }
 
     pub fn serialize_len(&self) -> usize {

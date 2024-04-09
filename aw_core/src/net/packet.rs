@@ -231,6 +231,9 @@ impl AWPacket {
     pub fn deserialize(mut data: &[u8]) -> Result<(Self, usize), String> {
         let mut total_consumed: usize = 0;
         let (header, consumed) = TagHeader::deserialize(data)?;
+        let consumed: usize = consumed.try_into().map_err(|why| {
+            format!("TagHeader::deserialize consumed too many bytes: {consumed} - {why:?}")
+        })?;
         data = &data[consumed..];
         total_consumed += consumed;
 
@@ -238,6 +241,9 @@ impl AWPacket {
 
         for _ in 0..header.var_count {
             let (var, consumed) = AWPacketVar::deserialize(data)?;
+            let consumed: usize = consumed.try_into().map_err(|why| {
+                format!("AWPacketVar::deserialize consumed too many bytes: {consumed} - {why:?}")
+            })?;
             data = &data[consumed..];
             total_consumed += consumed;
 
@@ -359,7 +365,7 @@ impl TagHeader {
         result
     }
 
-    pub fn deserialize(data: &[u8]) -> Result<(Self, usize), String> {
+    pub fn deserialize(data: &[u8]) -> Result<(Self, u64), String> {
         if data.len() < TagHeader::length() {
             return Err("Not enough data to deserialize TagHeader.".to_string());
         }
@@ -390,7 +396,7 @@ impl TagHeader {
                 header_1,
                 var_count,
             },
-            reader.position().try_into().unwrap(),
+            reader.position(),
         ))
     }
 
