@@ -1,8 +1,8 @@
 use std::thread::sleep;
 use std::time::Duration;
 
+use aw_core::encoding::latin1_to_string;
 use mysql::prelude::Queryable;
-use mysql::{Pool, PooledConn, Value};
 use rusqlite::params_from_iter;
 
 use crate::configuration::{DatabaseConfig, DatabaseType, UniverseConfig};
@@ -38,7 +38,7 @@ impl Database {
                 let database_name = &config.mysql_config.database;
                 let uri =
                     format!("mysql://{username}:{password}@{hostname}:{port}/{database_name}");
-                let pool = Pool::new(uri.as_str())
+                let pool = mysql::Pool::new(uri.as_str())
                     .map_err(|err| format!("Could not create database connection pool: {err}"))?;
 
                 Self::External { pool }
@@ -85,7 +85,7 @@ impl Database {
     }
 }
 
-fn mysql_get_conn(pool: &Pool) -> PooledConn {
+fn mysql_get_conn(pool: &mysql::Pool) -> mysql::PooledConn {
     loop {
         match pool.get_conn() {
             Ok(c) => {
@@ -244,77 +244,37 @@ pub enum SqliteValue {
 impl AWRow {
     pub fn fetch_int(&self, name: &str) -> Option<i64> {
         match &self {
-            AWRow::MysqlRow(row) => {
-                for column in row.columns_ref() {
-                    let column_value = &row[column.name_str().as_ref()];
-                    let column_name = column.name_str();
-                    if column_name == name {
-                        match column_value {
-                            Value::Int(x) => {
-                                return Some(*x);
-                            }
-                            _ => {
-                                return None;
-                            }
-                        }
-                    }
-                }
-                None
-            }
-            AWRow::SqliteRow { column_names, row } => {
-                for (column_num, column_name) in column_names.iter().enumerate() {
-                    if column_name == name {
-                        let column_value = &row[column_num];
-                        match column_value {
-                            SqliteValue::Int(x) => {
-                                return Some(*x);
-                            }
-                            _ => {
-                                return None;
-                            }
-                        }
-                    }
-                }
-                None
-            }
+            AWRow::MysqlRow(row) => match row.get::<mysql::Value, _>(name) {
+                Some(mysql::Value::Int(x)) => Some(x),
+                _ => None,
+            },
+            AWRow::SqliteRow { column_names, row } => match column_names
+                .iter()
+                .enumerate()
+                .find(|(_, cname)| *cname == name)
+                .and_then(|(i, _)| row.get(i))
+            {
+                Some(SqliteValue::Int(x)) => Some(*x),
+                _ => None,
+            },
         }
     }
 
     pub fn fetch_string(&self, name: &str) -> Option<String> {
         match &self {
-            AWRow::MysqlRow(row) => {
-                for column in row.columns_ref() {
-                    let column_value = &row[column.name_str().as_ref()];
-                    let column_name = column.name_str();
-                    if column_name == name {
-                        match column_value {
-                            Value::Bytes(x) => {
-                                return Some(aw_core::encoding::latin1_to_string(x));
-                            }
-                            _ => {
-                                return None;
-                            }
-                        }
-                    }
-                }
-                None
-            }
-            AWRow::SqliteRow { column_names, row } => {
-                for (column_num, column_name) in column_names.iter().enumerate() {
-                    if column_name == name {
-                        let column_value = &row[column_num];
-                        match column_value {
-                            SqliteValue::String(x) => {
-                                return Some(x.clone());
-                            }
-                            _ => {
-                                return None;
-                            }
-                        }
-                    }
-                }
-                None
-            }
+            AWRow::MysqlRow(row) => match row.get::<mysql::Value, _>(name) {
+                Some(mysql::Value::Bytes(x)) => Some(latin1_to_string(&x)),
+                _ => None,
+            },
+            AWRow::SqliteRow { column_names, row } => match column_names
+                .iter()
+                .enumerate()
+                .find(|(_, cname)| *cname == name)
+                .and_then(|(i, _)| row.get(i))
+            {
+                Some(SqliteValue::String(x)) => Some(x.clone()),
+                _ => None,
+            },
         }
     }
 }

@@ -123,13 +123,14 @@ pub fn try_telegram_get(
 
     let telegrams = database.telegram_get_undelivered(citizen_id);
 
+    let telegram = telegrams.first();
     let more_remain = telegrams.len() >= 2;
 
-    if !telegrams.is_empty() {
-        let telegram = telegrams[0].clone();
-        database.telegram_mark_delivered(telegram.id).ok();
-        Ok((telegrams[0].clone(), more_remain))
-    } else {
-        Err(ReasonCode::UnableToGetTelegram)
+    match telegram {
+        Some(telegram) => {
+            database.telegram_mark_delivered(telegram.id);
+            Ok((telegram.clone(), more_remain))
+        }
+        None => Err(ReasonCode::UnableToGetTelegram),
     }
 }

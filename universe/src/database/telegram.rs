@@ -25,7 +25,7 @@ pub trait TelegramDB {
     ) -> Result<(), ReasonCode>;
     fn telegram_get_undelivered(&self, citizen_id: u32) -> Vec<TelegramQuery>;
     fn telegram_get_all(&self, citizen_id: u32) -> Vec<TelegramQuery>;
-    fn telegram_mark_delivered(&self, telegram_id: u32) -> Result<(), ReasonCode>;
+    fn telegram_mark_delivered(&self, telegram_id: u32);
 }
 
 impl TelegramDB for Database {
@@ -107,7 +107,7 @@ impl TelegramDB for Database {
         telegrams
     }
 
-    fn telegram_mark_delivered(&self, telegram_id: u32) -> Result<(), ReasonCode> {
+    fn telegram_mark_delivered(&self, telegram_id: u32) {
         self.exec(
             r"UPDATE awu_telegram SET Delivered=1 
             WHERE ID=?;",
@@ -115,8 +115,6 @@ impl TelegramDB for Database {
                 telegram_id
             },
         );
-
-        Ok(())
     }
 }
 

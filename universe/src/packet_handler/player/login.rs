@@ -490,7 +490,11 @@ fn check_valid_name(mut name: &str, is_tourist: bool) -> Result<(), ReasonCode> 
         }
 
         // Strip quotes to continue check
-        name = &name[1..name.len() - 1];
+        let name_start = 1;
+        let name_end = name.len().checked_sub(1).ok_or(ReasonCode::NameTooShort)?;
+        name = name
+            .get(name_start..name_end)
+            .ok_or(ReasonCode::NameTooShort)?;
     }
 
     if name.len() < 2 {
