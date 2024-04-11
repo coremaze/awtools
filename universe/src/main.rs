@@ -47,22 +47,14 @@ fn main() {
     init_logging(args.log_level);
 
     match configuration::Config::get_interactive(&args.config_file) {
-        Ok(config) => {
-            start_universe(config);
-        }
-        Err(err) => {
-            log::error!("Could not get universe configuration: {err}");
-        }
+        Ok(config) => start_universe(config),
+        Err(err) => log::error!("Could not get universe configuration: {err}"),
     }
 }
 
 fn start_universe(config: configuration::Config) {
     match UniverseServer::new(config) {
-        Ok(mut universe) => {
-            universe.run();
-        }
-        Err(err) => {
-            log::error!("Could not create universe: {err}");
-        }
+        Ok(mut universe) => universe.run(),
+        Err(err) => log::error!("Could not create universe: {err}"),
     }
 }

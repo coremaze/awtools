@@ -22,13 +22,24 @@ pub mod eject;
 pub mod license;
 pub mod telegram;
 
+#[derive(thiserror::Error, Debug)]
+pub enum DatabaseOpenError {
+    #[error("Couldn't create the MySQL conneciton pool: {0}")]
+    ConnectionPoolFailure(#[from] mysql::Error),
+    #[error("Couldn't open the Sqlite database: {0}")]
+    SqliteOpenFailure(#[from] rusqlite::Error),
+}
+
 pub enum Database {
     External { pool: mysql::Pool },
     Internal { conn: rusqlite::Connection },
 }
 
 impl Database {
-    pub fn new(config: DatabaseConfig, universe_config: &UniverseConfig) -> Result<Self, String> {
+    pub fn new(
+        config: DatabaseConfig,
+        universe_config: &UniverseConfig,
+    ) -> Result<Self, DatabaseOpenError> {
         let db = match config.database_type {
             DatabaseType::External => {
                 let username = &config.mysql_config.username;
@@ -38,13 +49,13 @@ impl Database {
                 let database_name = &config.mysql_config.database;
                 let uri =
                     format!("mysql://{username}:{password}@{hostname}:{port}/{database_name}");
-                let pool = mysql::Pool::new(uri.as_str())
-                    .map_err(|err| format!("Could not create database connection pool: {err}"))?;
 
-                Self::External { pool }
+                Self::External {
+                    pool: mysql::Pool::new(uri.as_str())?,
+                }
             }
             DatabaseType::Internal => Self::Internal {
-                conn: rusqlite::Connection::open(config.sqlite_config.path).unwrap(),
+                conn: rusqlite::Connection::open(config.sqlite_config.path)?,
             },
         };
 
@@ -206,7 +217,7 @@ fn sqlite_exec(
     };
 
     let mut rows_vec = Vec::<AWRow>::new();
-    while let Some(row) = rows.next().unwrap() {
+    while let Ok(Some(row)) = rows.next() {
         let mut row_vec = Vec::<SqliteValue>::new();
         for i in 0..column_names.len() {
             if let Ok(num) = row.get::<usize, i64>(i) {

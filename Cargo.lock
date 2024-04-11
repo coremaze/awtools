@@ -1558,6 +1558,7 @@ dependencies = [
  "rand",
  "rusqlite",
  "serde",
+ "thiserror",
  "toml",
 ]
 

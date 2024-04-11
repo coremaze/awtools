@@ -154,12 +154,14 @@ pub fn citizen_lookup_by_number(
 }
 
 pub fn citizen_change(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
-    let changed_info = citizen_from_packet(packet);
-    if changed_info.is_err() {
-        log::trace!("Could not change citizen: {:?}", changed_info);
-        return;
-    }
-    let changed_info = changed_info.unwrap();
+    let changed_info = match citizen_from_packet(packet) {
+        Ok(changed_info) => changed_info,
+        Err(why) => {
+            log::trace!("Could not change citizen: {:?}", why);
+            return;
+        }
+    };
+
     let mut rc = ReasonCode::Success;
 
     let conn = get_conn!(server, cid, "citizen_change");

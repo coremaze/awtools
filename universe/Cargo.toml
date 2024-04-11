@@ -21,6 +21,7 @@ md5 = "0.7.0"
 byteorder = "1.5.0"
 ctrlc = "3.4.2"
 rusqlite = "0.31.0"
+thiserror = "1.0.58"
 
 [target.'cfg(windows)'.dependencies]
 rusqlite = { version = "0.31.0", features = ["bundled"] }

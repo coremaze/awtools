@@ -220,10 +220,14 @@ impl AWProtocol {
         }
 
         // If there are bytes on the socket, they need to be handled
-        self.stream.set_nonblocking(true).unwrap();
+        if self.stream.set_nonblocking(true).is_err() {
+            return false;
+        }
         let mut buf = [0u8; 1];
         let peek = self.stream.peek(&mut buf);
-        self.stream.set_nonblocking(false).unwrap();
+        if self.stream.set_nonblocking(false).is_err() {
+            return false;
+        }
 
         // If the peek operation would block, that means it does not have data
         match peek {

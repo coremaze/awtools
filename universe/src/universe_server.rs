@@ -3,7 +3,7 @@ use aw_core::*;
 use crate::{
     client::ClientInfo,
     configuration,
-    database::Database,
+    database::{Database, DatabaseOpenError},
     get_conn, packet_handler,
     tabs::{regenerate_contact_list, regenerate_player_list, regenerate_world_list},
     universe_connection::{UniverseConnectionID, UniverseConnections},
@@ -29,8 +29,16 @@ pub struct UniverseServer {
     listener: TcpListener,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum UniverseStartError {
+    #[error("The Universe failed to open its database: {0}")]
+    DatabaseOpenError(#[from] DatabaseOpenError),
+    #[error("The Universe failed to initialize networking: {0}")]
+    IoError(#[from] std::io::Error),
+}
+
 impl UniverseServer {
-    pub fn new(config: configuration::Config) -> Result<Self, String> {
+    pub fn new(config: configuration::Config) -> Result<Self, UniverseStartError> {
         let database = Database::new(config.sql, &config.universe)?;
 
         // The Universe server provides a license to incoming clients, which must contain information
@@ -41,8 +49,8 @@ impl UniverseServer {
         let license_socket_addr =
             SocketAddrV4::new(config.universe.license_ip, config.universe.port);
 
-        let listener = TcpListener::bind(bind_socket).unwrap();
-        listener.set_nonblocking(true).unwrap();
+        let listener = TcpListener::bind(bind_socket)?;
+        listener.set_nonblocking(true)?;
 
         Ok(Self {
             config: config.universe,
@@ -65,10 +73,12 @@ impl UniverseServer {
         let running = Arc::new(AtomicBool::new(true));
 
         let r = running.clone();
-        ctrlc::set_handler(move || {
+        if let Err(why) = ctrlc::set_handler(move || {
             r.store(false, Ordering::SeqCst);
-        })
-        .expect("Error setting Ctrl-C handler");
+        }) {
+            log::error!("Could not set up Ctrl-C handler: {why}");
+            log::error!("The server will still work, but it may not shut down properly.");
+        }
 
         while running.load(Ordering::SeqCst) {
             self.accept_new_clients();
