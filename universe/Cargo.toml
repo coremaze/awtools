@@ -22,9 +22,6 @@ byteorder = "1.5.0"
 ctrlc = "3.4.2"
 thiserror = "1.0.58"
 
-[target.'cfg(windows)'.dependencies]
-rusqlite = { version = "0.31.0", features = ["bundled"] }
-
 [features]
 protocol_v4 = ["aw_core/stream_cipher_rc4"]
 protocol_v6 = ["aw_core/stream_cipher_aes"]
