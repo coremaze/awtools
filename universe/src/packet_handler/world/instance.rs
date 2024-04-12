@@ -1,10 +1,9 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use crate::{
     client::ClientInfo,
     database::{attrib::Attribute, license::LicenseQuery, AttribDB, LicenseDB},
     get_conn, get_conn_mut,
     tabs::regenerate_world_list,
+    timestamp::unix_epoch_timestamp_u32,
     universe_connection::UniverseConnectionID,
     world::{World, WorldRating},
     UniverseServer,
@@ -194,13 +193,10 @@ fn validate_world(
         return Err(ReasonCode::InvalidPassword);
     }
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Current time is before the unix epoch.")
-        .as_secs();
+    let now = unix_epoch_timestamp_u32();
 
     // Check if world is expired
-    if world_lic.expiration != 0 && (world_lic.expiration as u64) < now {
+    if world_lic.expiration != 0 && world_lic.expiration < now {
         return Err(ReasonCode::WorldExpired);
     }
 

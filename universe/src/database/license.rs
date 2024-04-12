@@ -1,6 +1,6 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use aw_db::{aw_params, DatabaseResult, Row};
+
+use crate::timestamp::unix_epoch_timestamp_u32;
 
 use super::UniverseDatabase;
 
@@ -97,10 +97,7 @@ impl LicenseDB for UniverseDatabase {
     }
 
     fn license_add(&self, lic: &LicenseQuery) -> DatabaseResult<()> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Current time is before the unix epoch.")
-            .as_secs();
+        let now = unix_epoch_timestamp_u32();
 
         let r = self.db.exec(
             r"INSERT INTO awu_license(Creation, Expiration, LastStart, LastAddress, Hidden,

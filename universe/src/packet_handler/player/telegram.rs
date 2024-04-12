@@ -1,10 +1,9 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use crate::{
     client::ClientInfo,
     database::{telegram::TelegramQuery, CitizenDB, ContactDB, TelegramDB, UniverseDatabase},
     get_conn,
     telegram::send_telegram_update_available,
+    timestamp::unix_epoch_timestamp_u32,
     universe_connection::UniverseConnectionID,
     UniverseConnection, UniverseServer,
 };
@@ -78,10 +77,7 @@ fn try_send_telegram_from_packet(
         return Err(ReasonCode::TelegramBlocked);
     }
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Current time is before the unix epoch.")
-        .as_secs() as u32;
+    let now = unix_epoch_timestamp_u32();
 
     match database.telegram_add(target_citizen.id, citizen_id, now, &message) {
         DatabaseResult::Ok(_) => Ok(target_citizen.id),
@@ -100,10 +96,8 @@ pub fn telegram_get(server: &UniverseServer, cid: UniverseConnectionID, packet: 
                     Some(cit) => cit.name,
                     None => "<unknown>".to_string(),
                 };
-                let now = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("Current time is before the unix epoch.")
-                    .as_secs() as u32;
+                let now = unix_epoch_timestamp_u32();
+
                 response.add_string(VarID::TelegramCitizenName, from_name);
                 response.add_uint(VarID::TelegramAge, now.saturating_sub(telegram.timestamp));
                 response.add_string(VarID::TelegramMessage, telegram.message);

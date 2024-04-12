@@ -1,7 +1,4 @@
-use std::{
-    net::IpAddr,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::net::IpAddr;
 
 use crate::{
     client::ClientInfo,
@@ -10,6 +7,7 @@ use crate::{
     player::{Bot, Citizen, GenericPlayer, Player},
     tabs::{regenerate_contact_list_and_mutuals, regenerate_player_list, regenerate_world_list},
     telegram::send_telegram_update_available,
+    timestamp::unix_epoch_timestamp_u32,
     universe_connection::UniverseConnectionID,
     UniverseServer,
 };
@@ -569,10 +567,7 @@ fn try_immigrate(server: &UniverseServer, params: ImmigrateParams) -> Result<(),
         DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
     }
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Current time is before the unix epoch.")
-        .as_secs();
+    let now = unix_epoch_timestamp_u32();
 
     let r = server.database.citizen_add_next(CitizenQuery {
         id: 0,
@@ -583,7 +578,7 @@ fn try_immigrate(server: &UniverseServer, params: ImmigrateParams) -> Result<(),
         priv_pass: String::new(),
         comment: String::new(),
         url: String::new(),
-        immigration: now as u32,
+        immigration: now,
         expiration: 0,
         last_login: 0,
         last_address: 0,

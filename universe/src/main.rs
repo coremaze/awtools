@@ -17,6 +17,7 @@ pub mod universe_connection;
 pub mod world;
 pub use universe_connection::UniverseConnection;
 pub mod player;
+pub mod timestamp;
 
 mod configuration;
 

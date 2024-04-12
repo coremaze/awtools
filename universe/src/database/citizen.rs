@@ -1,6 +1,6 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use aw_db::{aw_params, DatabaseResult, Row};
+
+use crate::timestamp::unix_epoch_timestamp_u32;
 
 use super::UniverseDatabase;
 
@@ -77,10 +77,7 @@ impl CitizenDB for UniverseDatabase {
             DatabaseResult::Ok(Some(_)) => { /* Administrator exists, no work to be done */ }
             DatabaseResult::Ok(None) => {
                 // Administrator does not exist yet - create it
-                let now = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("Current time is before the unix epoch.")
-                    .as_secs();
+                let now = unix_epoch_timestamp_u32();
 
                 let admin = CitizenQuery {
                     id: 1,
@@ -92,7 +89,7 @@ impl CitizenDB for UniverseDatabase {
                     priv_pass: Default::default(),
                     comment: Default::default(),
                     url: Default::default(),
-                    immigration: now as u32,
+                    immigration: now,
                     expiration: 0,
                     last_login: 0,
                     last_address: 0,

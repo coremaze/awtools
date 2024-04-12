@@ -1,14 +1,11 @@
-use std::{
-    collections::HashMap,
-    net::IpAddr,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{collections::HashMap, net::IpAddr};
 
 use aw_core::{AWPacket, AWPacketGroup, PacketType, VarID};
 
 use crate::{
-    client::ClientInfo, get_conn_mut, universe_connection::UniverseConnectionID,
-    world::WorldRating, UniverseConnection, UniverseServer,
+    client::ClientInfo, get_conn_mut, timestamp::unix_epoch_timestamp_u32,
+    universe_connection::UniverseConnectionID, world::WorldRating, UniverseConnection,
+    UniverseServer,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -76,10 +73,7 @@ impl WorldList {
     }
 
     pub fn make_packet_groups(&self) -> Vec<AWPacketGroup> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Current time is before the unix epoch.")
-            .as_secs();
+        let now = unix_epoch_timestamp_u32();
 
         let world_packets = self
             .entries
@@ -99,7 +93,7 @@ impl WorldList {
                 let mut more = AWPacket::new(PacketType::WorldListResult);
                 // Yes, expect another WorldList packet from the server
                 more.add_byte(VarID::WorldListMore, 1);
-                more.add_uint(VarID::WorldList3DayUnknown, now as u32);
+                more.add_uint(VarID::WorldList3DayUnknown, now);
                 group.push(more).ok();
                 group.push(p).ok();
             }
@@ -108,7 +102,7 @@ impl WorldList {
         // Send packet indicating that the server is done
         let mut p = AWPacket::new(PacketType::WorldListResult);
         p.add_byte(VarID::WorldListMore, 0);
-        p.add_uint(VarID::WorldList3DayUnknown, now as u32);
+        p.add_uint(VarID::WorldList3DayUnknown, now);
 
         if let Err(p) = group.push(p) {
             groups.push(group);

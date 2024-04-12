@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use aw_db::DatabaseResult;
 
 use crate::database::attrib::{AttribDB, Attribute};
 use crate::database::UniverseDatabase;
+use crate::timestamp::unix_epoch_timestamp_str;
 use crate::{AWPacket, PacketType, UniverseConnection, VarID};
 
 pub fn send_attributes(conn: &UniverseConnection, database: &UniverseDatabase) {
@@ -152,12 +152,7 @@ pub fn get_attributes(database: &UniverseDatabase) -> HashMap<Attribute, String>
     // Not sure if the client actually cares about what build we use here
     result.insert(Attribute::UniverseBuild, "120".to_string());
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Current time is before the unix epoch.")
-        .as_secs();
-
-    result.insert(Attribute::Timestamp, now.to_string());
+    result.insert(Attribute::Timestamp, unix_epoch_timestamp_str());
 
     result
 }

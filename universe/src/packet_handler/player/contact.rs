@@ -1,11 +1,10 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use crate::{
     client::ClientInfo,
     database::{contact::ContactOptions, CitizenDB, ContactDB, TelegramDB, UniverseDatabase},
     get_conn, get_conn_mut,
     tabs::{regenerate_contact_list, regenerate_contact_list_and_mutuals},
     telegram,
+    timestamp::unix_epoch_timestamp_u32,
     universe_connection::UniverseConnectionID,
     UniverseConnection, UniverseServer,
 };
@@ -38,10 +37,7 @@ pub fn contact_add(server: &mut UniverseServer, cid: UniverseConnectionID, packe
 }
 
 fn alert_friend_request(from: u32, to: u32, server: &UniverseServer) {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Current time is before the unix epoch.")
-        .as_secs() as u32;
+    let now = unix_epoch_timestamp_u32();
 
     let citizen = match server.database.citizen_by_number(from) {
         DatabaseResult::Ok(Some(citizen)) => citizen,
