@@ -1,8 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::aw_params;
+use aw_db::{aw_params, DatabaseResult, Row};
 
-use super::{AWRow, Database, DatabaseResult};
+use super::UniverseDatabase;
 
 #[derive(Debug)]
 pub struct LicenseQuery {
@@ -33,11 +33,11 @@ pub trait LicenseDB {
     fn license_change(&self, lic: &LicenseQuery) -> DatabaseResult<()>;
 }
 
-impl LicenseDB for Database {
+impl LicenseDB for UniverseDatabase {
     fn init_license(&self) -> DatabaseResult<()> {
-        let auto_increment_not_null = self.auto_increment_not_null();
+        let auto_increment_not_null = self.db.auto_increment_not_null();
         // "Range" has been changed to "WorldSize" because range is now a keyword.
-        let r = self.exec(
+        let r = self.db.exec(
             format!(
                 r"CREATE TABLE IF NOT EXISTS awu_license ( 
                 ID INTEGER PRIMARY KEY {auto_increment_not_null}, 
@@ -68,7 +68,7 @@ impl LicenseDB for Database {
     }
 
     fn license_by_name(&self, name: &str) -> DatabaseResult<Option<LicenseQuery>> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"SELECT * FROM awu_license WHERE Name=?",
             aw_params! {
                 name
@@ -102,7 +102,7 @@ impl LicenseDB for Database {
             .expect("Current time is before the unix epoch.")
             .as_secs();
 
-        let r = self.exec(
+        let r = self.db.exec(
             r"INSERT INTO awu_license(Creation, Expiration, LastStart, LastAddress, Hidden,
                 Tourists, Users, WorldSize, Voip, Plugins, Name, Password, Email, Comment) 
                 VALUES(?, ?, ?, ?, ?, ?,
@@ -132,7 +132,7 @@ impl LicenseDB for Database {
     }
 
     fn license_next(&self, name: &str) -> DatabaseResult<Option<LicenseQuery>> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"SELECT * FROM awu_license WHERE Name>? ORDER BY Name LIMIT 1",
             aw_params! {
                 name
@@ -159,7 +159,7 @@ impl LicenseDB for Database {
     }
 
     fn license_prev(&self, name: &str) -> DatabaseResult<Option<LicenseQuery>> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"SELECT * FROM awu_license WHERE Name<? ORDER BY Name DESC LIMIT 1",
             aw_params! {
                 name
@@ -186,7 +186,7 @@ impl LicenseDB for Database {
     }
 
     fn license_change(&self, lic: &LicenseQuery) -> DatabaseResult<()> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"UPDATE awu_license
             SET Changed=NOT Changed, Creation=?, Expiration=?, LastStart=?, 
             LastAddress=?, Hidden=?, Tourists=?, Users=?,
@@ -218,7 +218,7 @@ impl LicenseDB for Database {
     }
 }
 
-fn fetch_license(row: &AWRow) -> DatabaseResult<LicenseQuery> {
+fn fetch_license(row: &Row) -> DatabaseResult<LicenseQuery> {
     let id = match row.fetch_int("ID").map(u32::try_from) {
         Some(Ok(x)) => x,
         _ => return DatabaseResult::DatabaseError,

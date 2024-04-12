@@ -1,12 +1,13 @@
 use crate::{
     client::ClientInfo,
-    database::{citizen::CitizenQuery, CitizenDB, Database, DatabaseResult},
+    database::{citizen::CitizenQuery, CitizenDB, UniverseDatabase},
     get_conn,
     player::Player,
     universe_connection::UniverseConnectionID,
     UniverseConnection, UniverseServer,
 };
 use aw_core::*;
+use aw_db::DatabaseResult;
 
 pub fn citizen_next(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let mut response = AWPacket::new(PacketType::CitizenInfo);
@@ -209,7 +210,7 @@ pub fn citizen_change(server: &UniverseServer, cid: UniverseConnectionID, packet
 fn modify_citizen(
     original: &CitizenQuery,
     changed: &CitizenQuery,
-    database: &Database,
+    database: &UniverseDatabase,
     admin: bool,
 ) -> Result<(), ReasonCode> {
     // Find any citizens with the same name as the new name
@@ -416,7 +417,7 @@ pub fn citizen_add(server: &UniverseServer, cid: UniverseConnectionID, packet: &
 fn try_add_citizen(
     conn: &UniverseConnection,
     packet: &AWPacket,
-    database: &Database,
+    database: &UniverseDatabase,
 ) -> Result<CitizenQuery, ReasonCode> {
     let id = packet
         .get_uint(VarID::CitizenNumber)

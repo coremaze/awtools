@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use aw_core::{AWPacket, AWPacketGroup, PacketType, VarID};
+use aw_db::DatabaseResult;
 
 use crate::{
     client::ClientInfo,
     database::{
         contact::{ContactOptions, ContactQuery},
-        CitizenDB, ContactDB, DatabaseResult,
+        CitizenDB, ContactDB,
     },
     get_conn_mut,
     universe_connection::UniverseConnectionID,

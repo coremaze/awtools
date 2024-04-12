@@ -1,5 +1,6 @@
-use super::{AWRow, Database, DatabaseResult};
-use crate::aw_params;
+use aw_db::{aw_params, DatabaseResult, Row};
+
+use super::UniverseDatabase;
 
 #[derive(Debug, Clone)]
 pub struct TelegramQuery {
@@ -20,10 +21,10 @@ pub trait TelegramDB {
     fn telegram_mark_delivered(&self, telegram_id: u32) -> DatabaseResult<()>;
 }
 
-impl TelegramDB for Database {
+impl TelegramDB for UniverseDatabase {
     fn init_telegram(&self) -> DatabaseResult<()> {
-        let auto_increment_not_null = self.auto_increment_not_null();
-        let unsigned = self.unsigned_str();
+        let auto_increment_not_null = self.db.auto_increment_not_null();
+        let unsigned = self.db.unsigned_str();
         let statement = format!(
             r"CREATE TABLE IF NOT EXISTS awu_telegram ( 
             ID INTEGER PRIMARY KEY {auto_increment_not_null}, 
@@ -35,7 +36,7 @@ impl TelegramDB for Database {
         );"
         );
 
-        let r = self.exec(statement, vec![]);
+        let r = self.db.exec(statement, vec![]);
 
         match r {
             DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
@@ -50,7 +51,7 @@ impl TelegramDB for Database {
         timestamp: u32,
         message: &str,
     ) -> DatabaseResult<()> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"INSERT INTO awu_telegram (Citizen,`From`,Timestamp,Message,Delivered) 
             VALUES(?, ?, ?, ?, 0)",
             aw_params! {
@@ -68,7 +69,7 @@ impl TelegramDB for Database {
     }
 
     fn telegram_get_undelivered(&self, citizen_id: u32) -> DatabaseResult<Vec<TelegramQuery>> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"SELECT * FROM awu_telegram WHERE Citizen=? AND Delivered=0 
             ORDER BY Timestamp",
             aw_params! {
@@ -93,7 +94,7 @@ impl TelegramDB for Database {
     }
 
     fn telegram_get_all(&self, citizen_id: u32) -> DatabaseResult<Vec<TelegramQuery>> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"SELECT * FROM awu_telegram WHERE Citizen=?  
                 ORDER BY Timestamp",
             aw_params! {
@@ -118,7 +119,7 @@ impl TelegramDB for Database {
     }
 
     fn telegram_mark_delivered(&self, telegram_id: u32) -> DatabaseResult<()> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"UPDATE awu_telegram SET Delivered=1 
             WHERE ID=?;",
             aw_params! {
@@ -133,7 +134,7 @@ impl TelegramDB for Database {
     }
 }
 
-fn fetch_telegram(row: &AWRow) -> DatabaseResult<TelegramQuery> {
+fn fetch_telegram(row: &Row) -> DatabaseResult<TelegramQuery> {
     let id = match row.fetch_int("ID").map(u32::try_from) {
         Some(Ok(x)) => x,
         _ => return DatabaseResult::DatabaseError,

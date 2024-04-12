@@ -1,6 +1,8 @@
 use std::net::Ipv4Addr;
 
-use super::{config::SqliteConfig, Config, DatabaseType, MysqlConfig};
+use aw_db::{DatabaseType, MysqlConfig, SqliteConfig};
+
+use super::Config;
 
 /// Interactive configurator to set up the Universe's toml file
 pub fn run_configurator() -> Config {

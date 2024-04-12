@@ -1,12 +1,9 @@
 use aw_core::{AWPacket, PacketType};
+use aw_db::DatabaseResult;
 
 use crate::{
-    client::ClientInfo,
-    database::{DatabaseResult, TelegramDB},
-    get_conn,
-    player::Player,
-    universe_connection::UniverseConnectionID,
-    UniverseServer,
+    client::ClientInfo, database::TelegramDB, get_conn, player::Player,
+    universe_connection::UniverseConnectionID, UniverseServer,
 };
 
 pub fn send_telegram_update_available(server: &UniverseServer, cid: UniverseConnectionID) {

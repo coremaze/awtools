@@ -1,15 +1,17 @@
-use super::{Database, DatabaseResult};
+use aw_db::DatabaseResult;
+
+use super::UniverseDatabase;
 
 pub trait CavDB {
     fn init_cav(&self) -> DatabaseResult<()>;
 }
 
-impl CavDB for Database {
+impl CavDB for UniverseDatabase {
     fn init_cav(&self) -> DatabaseResult<()> {
-        let auto_increment_not_null = self.auto_increment_not_null();
-        let unsigned = self.unsigned_str();
+        let auto_increment_not_null = self.db.auto_increment_not_null();
+        let unsigned = self.db.unsigned_str();
 
-        let r = self.exec(
+        let r = self.db.exec(
             format!(
                 r"CREATE TABLE IF NOT EXISTS awu_cav ( 
             Citizen INTEGER {unsigned} NOT NULL default '0', 
@@ -30,7 +32,7 @@ impl CavDB for Database {
             return DatabaseResult::DatabaseError;
         }
 
-        let r = self.exec(
+        let r = self.db.exec(
             format!(
                 r"CREATE TABLE IF NOT EXISTS awu_cav_template ( 
                 ID INTEGER PRIMARY KEY {auto_increment_not_null}, 

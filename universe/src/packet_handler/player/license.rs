@@ -1,10 +1,11 @@
 use crate::{
-    database::{license::LicenseQuery, Database, DatabaseResult, LicenseDB},
+    database::{license::LicenseQuery, LicenseDB, UniverseDatabase},
     get_conn,
     universe_connection::UniverseConnectionID,
     UniverseConnection, UniverseServer,
 };
 use aw_core::*;
+use aw_db::DatabaseResult;
 
 pub fn license_add(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let mut p = AWPacket::new(PacketType::LicenseChangeResult);
@@ -111,7 +112,7 @@ pub fn license_prev(server: &UniverseServer, cid: UniverseConnectionID, packet: 
 fn send_license_lookup(
     conn: &UniverseConnection,
     packet: &AWPacket,
-    database: &Database,
+    database: &UniverseDatabase,
     method: WorldLicenseLookupMethod,
 ) {
     let mut p = AWPacket::new(PacketType::LicenseResult);

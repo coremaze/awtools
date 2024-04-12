@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     client::ClientInfo,
-    database::{attrib::Attribute, license::LicenseQuery, AttribDB, DatabaseResult, LicenseDB},
+    database::{attrib::Attribute, license::LicenseQuery, AttribDB, LicenseDB},
     get_conn, get_conn_mut,
     tabs::regenerate_world_list,
     universe_connection::UniverseConnectionID,
@@ -10,6 +10,7 @@ use crate::{
     UniverseServer,
 };
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
+use aw_db::DatabaseResult;
 use num_traits::FromPrimitive;
 
 pub fn world_start(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {

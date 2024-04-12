@@ -1,6 +1,7 @@
-use super::{AWRow, Database, DatabaseResult};
-use crate::aw_params;
+use aw_db::{aw_params, DatabaseResult, Row};
 use bitflags::bitflags;
+
+use super::UniverseDatabase;
 
 bitflags! {
     #[derive(Default)]
@@ -259,10 +260,10 @@ pub trait ContactDB {
     fn contact_delete(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<()>;
 }
 
-impl ContactDB for Database {
+impl ContactDB for UniverseDatabase {
     fn init_contact(&self) -> DatabaseResult<()> {
-        let unsigned = self.unsigned_str();
-        let r = self.exec(
+        let unsigned = self.db.unsigned_str();
+        let r = self.db.exec(
             format!(
                 r"CREATE TABLE IF NOT EXISTS awu_contact ( 
                 Citizen INTEGER {unsigned} NOT NULL default '0', 
@@ -283,7 +284,7 @@ impl ContactDB for Database {
 
     fn contact_set(&self, citizen_id: u32, contact_id: u32, options: u32) -> DatabaseResult<()> {
         // Check if contact pair is already in the database
-        let r = self.exec(
+        let r = self.db.exec(
             r"SELECT * FROM awu_contact WHERE Citizen=? AND Contact=?;",
             aw_params! {
                 citizen_id,
@@ -298,7 +299,7 @@ impl ContactDB for Database {
 
         let r = if rows.is_empty() {
             // Add the contact pair if it is not already existent
-            self.exec(
+            self.db.exec(
                 r"INSERT INTO awu_contact (Citizen,Contact,Options) 
                 VALUES(?, ?, ?);",
                 aw_params! {
@@ -309,7 +310,7 @@ impl ContactDB for Database {
             )
         } else {
             // Try to update the contact pair if it is already present
-            self.exec(
+            self.db.exec(
                 r"UPDATE awu_contact SET Options=? WHERE Citizen=? AND Contact=?;",
                 aw_params! {
                     options,
@@ -330,7 +331,7 @@ impl ContactDB for Database {
         citizen_id: u32,
         contact_id: u32,
     ) -> DatabaseResult<Option<ContactQuery>> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"SELECT * FROM awu_contact WHERE Citizen=? AND Contact=?;",
             aw_params! {
                 citizen_id,
@@ -355,7 +356,7 @@ impl ContactDB for Database {
     }
 
     fn contact_get_all(&self, citizen_id: u32) -> DatabaseResult<Vec<ContactQuery>> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"SELECT * FROM awu_contact WHERE Citizen=?;",
             aw_params! {
                 citizen_id
@@ -555,7 +556,7 @@ impl ContactDB for Database {
     }
 
     fn contact_delete(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<()> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"DELETE FROM awu_contact WHERE Citizen=?  AND Contact=?;",
             aw_params! {
                 citizen_id,
@@ -570,7 +571,7 @@ impl ContactDB for Database {
     }
 }
 
-fn fetch_contact(row: &AWRow) -> DatabaseResult<ContactQuery> {
+fn fetch_contact(row: &Row) -> DatabaseResult<ContactQuery> {
     let citizen = match row.fetch_int("Citizen").map(u32::try_from) {
         Some(Ok(x)) => x,
         _ => return DatabaseResult::DatabaseError,

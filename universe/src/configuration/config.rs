@@ -1,33 +1,12 @@
 use std::{env, net::Ipv4Addr, path::PathBuf};
 
 use super::configurator::run_configurator;
+use aw_db::{DatabaseConfig, DatabaseType, MysqlConfig, SqliteConfig};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-/// Internal (sqlite, local, on-disk, self contained) database or external (server) database
-#[derive(Deserialize, Serialize, Debug, Default)]
-pub enum DatabaseType {
-    External,
-    #[default]
-    Internal,
-}
-
-/// Config for sqlite, the local database solution
-#[derive(Deserialize, Serialize, Debug)]
-pub struct SqliteConfig {
-    pub path: String,
-}
-
-/// Configuration for the database, whether external or internal
-#[derive(Deserialize, Serialize, Debug, Default)]
-pub struct DatabaseConfig {
-    pub database_type: DatabaseType,
-    pub mysql_config: MysqlConfig,
-    pub sqlite_config: SqliteConfig,
-}
-
 /// Struct representing all configurations in the config file.
-#[derive(Deserialize, Serialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
     pub universe: UniverseConfig,
     pub sql: DatabaseConfig,
@@ -42,16 +21,6 @@ pub struct UniverseConfig {
     pub user_list: bool,
     pub allow_citizen_changes: bool,
     pub allow_immigration: bool,
-}
-
-/// Configuation section for the mysql connection
-#[derive(Deserialize, Serialize, Debug)]
-pub struct MysqlConfig {
-    pub hostname: String,
-    pub port: u16,
-    pub username: String,
-    pub password: String,
-    pub database: String,
 }
 
 impl Config {
@@ -99,25 +68,36 @@ impl Default for UniverseConfig {
     }
 }
 
-impl Default for MysqlConfig {
+impl Default for Config {
     fn default() -> Self {
         Self {
-            hostname: "127.0.0.1".to_string(),
-            port: 3306,
-            username: "root".to_string(),
-            password: "password".to_string(),
-            database: "aworld_universe".to_string(),
+            universe: UniverseConfig {
+                license_ip: Ipv4Addr::new(127, 0, 0, 1),
+                bind_ip: Ipv4Addr::new(0, 0, 0, 0),
+                port: 6670,
+                user_list: true,
+                allow_citizen_changes: true,
+                allow_immigration: true,
+            },
+            sql: DatabaseConfig {
+                database_type: DatabaseType::Internal,
+                mysql_config: MysqlConfig {
+                    hostname: "127.0.0.1".to_string(),
+                    port: 3306,
+                    username: "root".to_string(),
+                    password: "password".to_string(),
+                    database: "aworld_universe".to_string(),
+                },
+                sqlite_config: SqliteConfig {
+                    path: {
+                        // The default path should be "universe.db" in the current directory
+                        let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                        let default_path = current_dir.join("universe.db");
+                        let path_str = default_path.to_str().unwrap_or("universe.db").to_string();
+                        path_str
+                    },
+                },
+            },
         }
-    }
-}
-
-impl Default for SqliteConfig {
-    fn default() -> Self {
-        // The default path should be "universe.db" in the current directory
-        let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let default_path = current_dir.join("universe.db");
-        let path_str = default_path.to_str().unwrap_or("universe.db").to_string();
-
-        Self { path: path_str }
     }
 }

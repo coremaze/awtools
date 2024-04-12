@@ -1,12 +1,9 @@
 use crate::{
-    client::ClientInfo,
-    database::{ContactDB, DatabaseResult},
-    get_conn,
-    player::Player,
-    universe_connection::UniverseConnectionID,
-    UniverseServer,
+    client::ClientInfo, database::ContactDB, get_conn, player::Player,
+    universe_connection::UniverseConnectionID, UniverseServer,
 };
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
+use aw_db::DatabaseResult;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 

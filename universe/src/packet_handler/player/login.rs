@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     client::ClientInfo,
-    database::{citizen::CitizenQuery, CitizenDB, DatabaseResult},
+    database::{citizen::CitizenQuery, CitizenDB},
     get_conn, get_conn_mut,
     player::{Bot, Citizen, GenericPlayer, Player},
     tabs::{regenerate_contact_list_and_mutuals, regenerate_player_list, regenerate_world_list},
@@ -14,6 +14,7 @@ use crate::{
     UniverseServer,
 };
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
+use aw_db::DatabaseResult;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 

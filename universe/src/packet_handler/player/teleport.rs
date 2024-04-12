@@ -1,12 +1,9 @@
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
+use aw_db::DatabaseResult;
 
 use crate::{
-    client::ClientInfo,
-    database::{ContactDB, DatabaseResult},
-    get_conn,
-    player::Player,
-    universe_connection::UniverseConnectionID,
-    UniverseServer,
+    client::ClientInfo, database::ContactDB, get_conn, player::Player,
+    universe_connection::UniverseConnectionID, UniverseServer,
 };
 
 pub fn join(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {

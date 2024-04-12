@@ -1,9 +1,10 @@
 use aw_core::*;
+use aw_db::DatabaseOpenError;
 
 use crate::{
     client::ClientInfo,
     configuration,
-    database::{Database, DatabaseOpenError},
+    database::UniverseDatabase,
     get_conn, packet_handler,
     tabs::{regenerate_contact_list, regenerate_player_list, regenerate_world_list},
     universe_connection::{UniverseConnectionID, UniverseConnections},
@@ -25,7 +26,7 @@ pub struct UniverseServer {
     pub config: configuration::UniverseConfig,
     pub license_generator: LicenseGenerator,
     pub connections: UniverseConnections,
-    pub database: Database,
+    pub database: UniverseDatabase,
     listener: TcpListener,
 }
 
@@ -39,7 +40,7 @@ pub enum UniverseStartError {
 
 impl UniverseServer {
     pub fn new(config: configuration::Config) -> Result<Self, UniverseStartError> {
-        let database = Database::new(config.sql, &config.universe)?;
+        let database = UniverseDatabase::new(config.sql, &config.universe)?;
 
         // The Universe server provides a license to incoming clients, which must contain information
         // about the IP address that the client is connecting to. This could be different from the

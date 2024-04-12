@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use aw_db::DatabaseResult;
+
 use crate::database::attrib::{AttribDB, Attribute};
-use crate::database::{Database, DatabaseResult};
+use crate::database::UniverseDatabase;
 use crate::{AWPacket, PacketType, UniverseConnection, VarID};
 
-pub fn send_attributes(conn: &UniverseConnection, database: &Database) {
+pub fn send_attributes(conn: &UniverseConnection, database: &UniverseDatabase) {
     let mut packet = AWPacket::new(PacketType::Attributes);
     packet.set_header_0(0);
     packet.set_header_1(0);
@@ -138,7 +140,7 @@ pub fn send_attributes(conn: &UniverseConnection, database: &Database) {
     conn.send(packet);
 }
 
-pub fn get_attributes(database: &Database) -> HashMap<Attribute, String> {
+pub fn get_attributes(database: &UniverseDatabase) -> HashMap<Attribute, String> {
     let mut result = match database.attrib_get() {
         DatabaseResult::Ok(attribs) => attribs,
         DatabaseResult::DatabaseError => {
@@ -160,7 +162,7 @@ pub fn get_attributes(database: &Database) -> HashMap<Attribute, String> {
     result
 }
 
-pub fn set_attribute(var_id: VarID, value: &str, database: &Database) {
+pub fn set_attribute(var_id: VarID, value: &str, database: &UniverseDatabase) {
     let id = match var_id {
         VarID::AttributeAllowTourists => Attribute::AllowTourists,
         VarID::AttributeUnknownBilling1 => Attribute::UnknownBilling1,

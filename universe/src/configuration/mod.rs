@@ -1,4 +1,4 @@
 mod config;
-pub use config::{Config, DatabaseConfig, DatabaseType, MysqlConfig, UniverseConfig};
+pub use config::{Config, UniverseConfig};
 
 mod configurator;

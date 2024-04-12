@@ -1,0 +1,17 @@
+[package]
+name = "aw_db"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+aw_core = { path = "../aw_core" }
+mysql = { version = "23.0.1", default-features = false, features = ["rustls-tls"] }
+thiserror = "1.0.58"
+rusqlite = "0.31.0"
+log = "0.4.17"
+serde = "1.0.138"
+
+[target.'cfg(windows)'.dependencies]
+rusqlite = { version = "0.31.0", features = ["bundled"] }

@@ -93,6 +93,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "aw_db"
+version = "0.1.0"
+dependencies = [
+ "aw_core",
+ "log",
+ "mysql",
+ "rusqlite",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1545,6 +1557,7 @@ name = "universe"
 version = "0.1.0"
 dependencies = [
  "aw_core",
+ "aw_db",
  "bitflags 1.3.2",
  "byteorder",
  "clap",
@@ -1552,7 +1565,6 @@ dependencies = [
  "env_logger",
  "log",
  "md5",
- "mysql",
  "num-derive",
  "num-traits",
  "rand",

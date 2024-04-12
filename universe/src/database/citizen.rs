@@ -1,8 +1,8 @@
-use crate::aw_params;
-
-use super::{AWRow, Database, DatabaseResult};
-
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use aw_db::{aw_params, DatabaseResult, Row};
+
+use super::UniverseDatabase;
 
 #[derive(Debug)]
 pub struct CitizenQuery {
@@ -37,10 +37,10 @@ pub trait CitizenDB {
     fn citizen_change(&self, citizen: &CitizenQuery) -> DatabaseResult<()>;
 }
 
-impl CitizenDB for Database {
+impl CitizenDB for UniverseDatabase {
     fn init_citizen(&self) -> DatabaseResult<()> {
-        let auto_increment_not_null = self.auto_increment_not_null();
-        let r = self.exec(
+        let auto_increment_not_null = self.db.auto_increment_not_null();
+        let r = self.db.exec(
             format!(
                 r"CREATE TABLE IF NOT EXISTS awu_citizen ( 
             ID INTEGER PRIMARY KEY {auto_increment_not_null}, 
@@ -119,7 +119,10 @@ impl CitizenDB for Database {
     }
 
     fn citizen_by_name(&self, name: &str) -> DatabaseResult<Option<CitizenQuery>> {
-        let rows = match self.exec("SELECT * FROM awu_citizen WHERE Name=?", aw_params!(name)) {
+        let rows = match self
+            .db
+            .exec("SELECT * FROM awu_citizen WHERE Name=?", aw_params!(name))
+        {
             DatabaseResult::Ok(rows) => rows,
             DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
         };
@@ -142,7 +145,7 @@ impl CitizenDB for Database {
     }
 
     fn citizen_by_number(&self, citizen_id: u32) -> DatabaseResult<Option<CitizenQuery>> {
-        let rows = match self.exec(
+        let rows = match self.db.exec(
             r"SELECT * FROM awu_citizen WHERE ID=?",
             aw_params!(citizen_id),
         ) {
@@ -168,7 +171,7 @@ impl CitizenDB for Database {
     }
 
     fn citizen_add(&self, citizen: &CitizenQuery) -> DatabaseResult<()> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"INSERT INTO awu_citizen(
                 ID, Immigration, Expiration, LastLogin, LastAddress, TotalTime, 
                 BotLimit, Beta, Enabled, Trial, Privacy, CAVEnabled, CAVTemplate, 
@@ -207,7 +210,10 @@ impl CitizenDB for Database {
 
     fn citizen_add_next(&self, mut citizen: CitizenQuery) -> DatabaseResult<()> {
         // Get the next unused ID from the database
-        let rows = match self.exec("SELECT MAX(ID) + 1 AS ID FROM awu_citizen", vec![]) {
+        let rows = match self
+            .db
+            .exec("SELECT MAX(ID) + 1 AS ID FROM awu_citizen", vec![])
+        {
             DatabaseResult::Ok(rows) => rows,
             DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
         };
@@ -223,7 +229,7 @@ impl CitizenDB for Database {
 
         citizen.id = id;
 
-        let r = self.exec(
+        let r = self.db.exec(
             r"INSERT INTO awu_citizen(
                 ID, Immigration, Expiration, LastLogin, LastAddress, TotalTime, 
                 BotLimit, Beta, Enabled, Trial, Privacy, CAVEnabled, CAVTemplate, 
@@ -261,7 +267,7 @@ impl CitizenDB for Database {
     }
 
     fn citizen_change(&self, citizen: &CitizenQuery) -> DatabaseResult<()> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"UPDATE awu_citizen SET Changed=NOT Changed,
                 Immigration=?, Expiration=?, LastLogin=?, 
                 LastAddress=?, TotalTime=?, BotLimit=?, 
@@ -300,7 +306,7 @@ impl CitizenDB for Database {
     }
 }
 
-fn fetch_citizen(row: &AWRow) -> DatabaseResult<CitizenQuery> {
+fn fetch_citizen(row: &Row) -> DatabaseResult<CitizenQuery> {
     let id = match row.fetch_int("ID").map(u32::try_from) {
         Some(Ok(x)) => x,
         _ => return DatabaseResult::DatabaseError,

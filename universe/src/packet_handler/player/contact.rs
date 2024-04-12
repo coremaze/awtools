@@ -2,9 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     client::ClientInfo,
-    database::{
-        contact::ContactOptions, CitizenDB, ContactDB, Database, DatabaseResult, TelegramDB,
-    },
+    database::{contact::ContactOptions, CitizenDB, ContactDB, TelegramDB, UniverseDatabase},
     get_conn, get_conn_mut,
     tabs::{regenerate_contact_list, regenerate_contact_list_and_mutuals},
     telegram,
@@ -12,6 +10,7 @@ use crate::{
     UniverseConnection, UniverseServer,
 };
 use aw_core::*;
+use aw_db::DatabaseResult;
 
 pub fn contact_add(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let mut response = AWPacket::new(PacketType::ContactAdd);
@@ -72,7 +71,7 @@ fn alert_friend_request(from: u32, to: u32, server: &UniverseServer) {
 fn try_add_contact(
     conn: &UniverseConnection,
     packet: &AWPacket,
-    database: &Database,
+    database: &UniverseDatabase,
 ) -> Result<(u32, u32), ReasonCode> {
     // Must be a player logged in as a citizen
     let client = conn.client.as_ref().ok_or(ReasonCode::NotLoggedIn)?;
@@ -176,7 +175,7 @@ pub fn contact_confirm(server: &mut UniverseServer, cid: UniverseConnectionID, p
 fn try_contact_confirm(
     conn: &UniverseConnection,
     packet: &AWPacket,
-    database: &Database,
+    database: &UniverseDatabase,
 ) -> Result<(), ReasonCode> {
     // Must be a player logged in as a citizen
     let client = conn.client.as_ref().ok_or(ReasonCode::NotLoggedIn)?;

@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use crate::aw_params;
 use crate::configuration::UniverseConfig;
 
-use super::{Database, DatabaseResult};
-
+use aw_db::{aw_params, DatabaseResult};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
+
+use super::UniverseDatabase;
 
 #[derive(Clone, Copy, Debug, FromPrimitive, Eq, Hash, PartialEq)]
 pub enum Attribute {
@@ -42,9 +42,9 @@ pub trait AttribDB {
     fn attrib_get(&self) -> DatabaseResult<HashMap<Attribute, String>>;
 }
 
-impl AttribDB for Database {
+impl AttribDB for UniverseDatabase {
     fn init_attrib(&self, universe_config: &UniverseConfig) -> DatabaseResult<()> {
-        let r = self.exec(
+        let r = self.db.exec(
             r"CREATE TABLE IF NOT EXISTS awu_attrib ( 
             ID INTEGER PRIMARY KEY NOT NULL default '0', 
             Changed tinyint(1) NOT NULL default '0', 
@@ -83,7 +83,7 @@ impl AttribDB for Database {
 
     fn attrib_set(&self, attribute_id: Attribute, value: &str) -> DatabaseResult<()> {
         // Check if attribute is already in the database
-        let rows = match self.exec(
+        let rows = match self.db.exec(
             r"SELECT * FROM awu_attrib WHERE ID=?",
             aw_params!(attribute_id as u32),
         ) {
@@ -93,7 +93,7 @@ impl AttribDB for Database {
 
         if rows.is_empty() {
             // Add the attribute if it is not already existent
-            let r = self.exec(
+            let r = self.db.exec(
                 r"INSERT INTO awu_attrib (ID, Value) VALUES(?, ?);",
                 aw_params!(attribute_id as u32, value),
             );
@@ -105,7 +105,7 @@ impl AttribDB for Database {
             log::debug!("Set attribute {attribute_id:?} to {value}");
         } else {
             // Try to update the attribute if it is already present
-            let r = self.exec(
+            let r = self.db.exec(
                 r"UPDATE awu_attrib SET Value=?, Changed=NOT Changed WHERE ID=?;",
                 aw_params! {
                     value,
@@ -130,7 +130,7 @@ impl AttribDB for Database {
         // Get all attributes from database
         log::trace!("getting rows");
 
-        let rows = match self.exec(r"SELECT * FROM awu_attrib;", vec![]) {
+        let rows = match self.db.exec(r"SELECT * FROM awu_attrib;", vec![]) {
             DatabaseResult::Ok(rows) => rows,
             DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
         };

@@ -2,15 +2,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     client::ClientInfo,
-    database::{
-        telegram::TelegramQuery, CitizenDB, ContactDB, Database, DatabaseResult, TelegramDB,
-    },
+    database::{telegram::TelegramQuery, CitizenDB, ContactDB, TelegramDB, UniverseDatabase},
     get_conn,
     telegram::send_telegram_update_available,
     universe_connection::UniverseConnectionID,
     UniverseConnection, UniverseServer,
 };
 use aw_core::*;
+use aw_db::DatabaseResult;
 
 pub fn telegram_send(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let conn = get_conn!(server, cid, "telegram_send");
@@ -35,7 +34,7 @@ pub fn telegram_send(server: &UniverseServer, cid: UniverseConnectionID, packet:
 fn try_send_telegram_from_packet(
     conn: &UniverseConnection,
     packet: &AWPacket,
-    database: &Database,
+    database: &UniverseDatabase,
 ) -> Result<u32, ReasonCode> {
     // Must be a player
     let Some(ClientInfo::Player(player)) = &conn.client else {
@@ -125,7 +124,7 @@ pub fn telegram_get(server: &UniverseServer, cid: UniverseConnectionID, packet: 
 pub fn try_telegram_get(
     conn: &UniverseConnection,
     _packet: &AWPacket,
-    database: &Database,
+    database: &UniverseDatabase,
 ) -> Result<(TelegramQuery, bool), ReasonCode> {
     // Must be a player
     let Some(ClientInfo::Player(player)) = &conn.client else {
