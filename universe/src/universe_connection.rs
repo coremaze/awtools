@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{collections::HashMap, net::SocketAddr, time::Instant};
 
 use aw_core::{AWConnection, AWCryptRSA, AWPacket, AWPacketGroup, PacketType, ProtocolMessage};
 
@@ -17,22 +13,17 @@ use crate::{
 pub struct UniverseConnection {
     connection: AWConnection,
     pub rsa: AWCryptRSA,
-    last_heartbeat: u64,
+    last_heartbeat: Instant,
     /// A connection may not have one of these yet if they just connected.
     pub client: Option<ClientInfo>,
 }
 
 impl UniverseConnection {
     pub fn new(connection: AWConnection) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Current time is before the unix epoch.")
-            .as_secs();
-
         Self {
             connection,
             rsa: AWCryptRSA::new(),
-            last_heartbeat: now,
+            last_heartbeat: Instant::now(),
             client: None,
         }
     }
@@ -242,15 +233,11 @@ impl UniverseConnections {
 
     pub fn send_heartbeats(&mut self) {
         for conn in self.connections.values_mut() {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Current time is before the unix epoch.")
-                .as_secs();
+            let now = Instant::now();
+            let time_since_heartbeat = now.duration_since(conn.last_heartbeat);
 
             // 30 seconds between each heartbeat
-            let next_heartbeat = conn.last_heartbeat.wrapping_add(30);
-
-            if next_heartbeat <= now {
+            if time_since_heartbeat.as_secs() >= 30 {
                 log::debug!("Sending heartbeat to {}", conn.connection.addr().ip());
                 let packet = AWPacket::new(PacketType::Heartbeat);
                 conn.connection.send(packet);
