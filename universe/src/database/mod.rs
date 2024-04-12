@@ -1,6 +1,3 @@
-use std::thread::sleep;
-use std::time::Duration;
-
 use aw_core::encoding::latin1_to_string;
 use mysql::prelude::Queryable;
 use rusqlite::params_from_iter;
@@ -28,6 +25,29 @@ pub enum DatabaseOpenError {
     ConnectionPoolFailure(#[from] mysql::Error),
     #[error("Couldn't open the Sqlite database: {0}")]
     SqliteOpenFailure(#[from] rusqlite::Error),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum DatabaseExecError {
+    #[error("Encountered mysql error {0}")]
+    MysqlError(#[from] mysql::Error),
+    #[error("Encountered sqlite error {0}")]
+    SqliteError(#[from] rusqlite::Error),
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum DatabaseResult<T> {
+    Ok(T),
+    DatabaseError,
+}
+
+impl<T> DatabaseResult<T> {
+    pub fn is_err(&self) -> bool {
+        match self {
+            DatabaseResult::Ok(_) => false,
+            DatabaseResult::DatabaseError => true,
+        }
+    }
 }
 
 pub enum Database {
@@ -74,10 +94,28 @@ impl Database {
         self.init_eject();
     }
 
-    fn exec(&self, statement: impl AsRef<str>, parameters: Vec<String>) -> Vec<AWRow> {
-        match &self {
-            Database::External { pool } => mysql_exec(pool, statement, parameters),
-            Database::Internal { conn } => sqlite_exec(conn, statement, parameters),
+    #[must_use]
+    fn exec(
+        &self,
+        statement: impl AsRef<str>,
+        parameters: Vec<String>,
+    ) -> DatabaseResult<Vec<AWRow>> {
+        let res = match &self {
+            Database::External { pool } => mysql_exec(pool, statement.as_ref(), parameters.clone()),
+            Database::Internal { conn } => {
+                sqlite_exec(conn, statement.as_ref(), parameters.clone())
+            }
+        };
+
+        match res {
+            Ok(rows) => DatabaseResult::Ok(rows),
+            Err(why) => {
+                log::error!("A database execution failed: {why:?}");
+                log::error!("Statement: {:?}", statement.as_ref());
+                log::error!("Parameters: {parameters:?}");
+
+                DatabaseResult::DatabaseError
+            }
         }
     }
 
@@ -96,125 +134,34 @@ impl Database {
     }
 }
 
-fn mysql_get_conn(pool: &mysql::Pool) -> mysql::PooledConn {
-    loop {
-        match pool.get_conn() {
-            Ok(c) => {
-                return c;
-            }
-            Err(why) => match why {
-                mysql::Error::IoError(_)
-                | mysql::Error::CodecError(_)
-                | mysql::Error::DriverError(_)
-                | mysql::Error::TlsError(_) => {
-                    log::error!("Failed to get database connection. Will retry. {why:?}");
-                    sleep(Duration::from_secs(1));
-                }
-                mysql::Error::UrlError(_)
-                | mysql::Error::MySqlError(_)
-                | mysql::Error::FromValueError(_)
-                | mysql::Error::FromRowError(_) => {
-                    log::error!("Failed to get database connection. {why:?}");
-                    panic!("Database logic issue in mysql_get_conn");
-                }
-            },
-        }
-    }
-}
-
 fn mysql_exec(
     pool: &mysql::Pool,
     statement: impl AsRef<str>,
     parameters: Vec<String>,
-) -> Vec<AWRow> {
-    let statement = statement.as_ref();
-    loop {
-        let mut conn = mysql_get_conn(pool);
-        let r: mysql::Result<Vec<mysql::Row>> = conn.exec(statement, parameters.clone());
-        match r {
-            Ok(rows) => {
-                return rows
-                    .iter()
-                    .map(|r| AWRow::MysqlRow(r.clone()))
-                    .collect::<Vec<AWRow>>();
-            }
-            Err(why) => match why {
-                mysql::Error::IoError(_)
-                | mysql::Error::CodecError(_)
-                | mysql::Error::DriverError(_)
-                | mysql::Error::TlsError(_) => {
-                    log::error!("Failed to execute query. statement: {statement:?}; parameters: {parameters:?}. Will retry. {why:?}");
-                    sleep(Duration::from_secs(1));
-                }
-                mysql::Error::UrlError(_)
-                | mysql::Error::MySqlError(_)
-                | mysql::Error::FromValueError(_)
-                | mysql::Error::FromRowError(_) => {
-                    log::error!("Failed to execute query. statement: {statement:?}; parameters: {parameters:?}. {why:?}");
-                    panic!("Database logic issue in mysql_exec");
-                }
-            },
-        }
-    }
+) -> Result<Vec<AWRow>, DatabaseExecError> {
+    let mut conn = pool.get_conn()?;
+    let r: mysql::Result<Vec<mysql::Row>> = conn.exec(statement.as_ref(), parameters.clone());
+
+    Ok(r?
+        .iter()
+        .map(|r| AWRow::MysqlRow(r.clone()))
+        .collect::<Vec<AWRow>>())
 }
 
 fn sqlite_exec(
     conn: &rusqlite::Connection,
     statement: impl AsRef<str>,
     parameters: Vec<String>,
-) -> Vec<AWRow> {
-    let statement = statement.as_ref();
-    let mut stmt = match conn.prepare(statement) {
-        Ok(stmt) => stmt,
-        Err(why) => {
-            log::error!("Failed to prepare statement: {statement:?}. {why:?}");
-            panic!("Database logic issue in sqlite_exec");
-        }
-    };
+) -> Result<Vec<AWRow>, DatabaseExecError> {
+    let mut stmt = conn.prepare(statement.as_ref())?;
+
     let column_names = stmt
         .column_names()
         .iter()
         .map(|c| c.to_string())
         .collect::<Vec<String>>();
 
-    let mut rows = loop {
-        match stmt.query(params_from_iter(parameters.iter())) {
-            Ok(rows) => break rows,
-            Err(why) => match why {
-                rusqlite::Error::SqliteFailure(_, _) => {
-                    log::error!("Failed to execute query. statement: {statement:?}; parameters: {parameters:?}. Will retry. {why:?}");
-                    sleep(Duration::from_secs(1));
-                }
-
-                rusqlite::Error::SqliteSingleThreadedMode
-                | rusqlite::Error::StatementChangedRows(_)
-                | rusqlite::Error::QueryReturnedNoRows
-                | rusqlite::Error::FromSqlConversionFailure(_, _, _)
-                | rusqlite::Error::IntegralValueOutOfRange(_, _)
-                | rusqlite::Error::Utf8Error(_)
-                | rusqlite::Error::NulError(_)
-                | rusqlite::Error::InvalidParameterName(_)
-                | rusqlite::Error::InvalidPath(_)
-                | rusqlite::Error::ExecuteReturnedResults
-                | rusqlite::Error::InvalidColumnIndex(_)
-                | rusqlite::Error::InvalidColumnName(_)
-                | rusqlite::Error::InvalidColumnType(_, _, _)
-                | rusqlite::Error::ToSqlConversionFailure(_)
-                | rusqlite::Error::InvalidQuery
-                | rusqlite::Error::MultipleStatement
-                | rusqlite::Error::InvalidParameterCount(_, _) => {
-                    log::error!("Failed to execute query. statement: {statement:?}; parameters: {parameters:?}. {why:?}");
-                    panic!("Database logic issue in sqlite_exec");
-                }
-                _ => {
-                    log::error!(
-                        "Failed to execute query. statement: {statement:?}; parameters: {parameters:?}. Unknown error: {why:?}"
-                    );
-                    panic!("Database logic issue in sqlite_exec");
-                }
-            },
-        }
-    };
+    let mut rows = stmt.query(params_from_iter(parameters.iter()))?;
 
     let mut rows_vec = Vec::<AWRow>::new();
     while let Ok(Some(row)) = rows.next() {
@@ -233,7 +180,7 @@ fn sqlite_exec(
             row: row_vec,
         });
     }
-    rows_vec
+    Ok(rows_vec)
 }
 
 #[derive(Debug)]

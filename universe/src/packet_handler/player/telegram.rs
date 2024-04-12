@@ -2,7 +2,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     client::ClientInfo,
-    database::{telegram::TelegramQuery, CitizenDB, ContactDB, Database, TelegramDB},
+    database::{
+        telegram::TelegramQuery, CitizenDB, ContactDB, Database, DatabaseResult, TelegramDB,
+    },
     get_conn,
     telegram::send_telegram_update_available,
     universe_connection::UniverseConnectionID,
@@ -55,13 +57,25 @@ fn try_send_telegram_from_packet(
         .get_string(VarID::TelegramMessage)
         .ok_or(ReasonCode::UnableToSendTelegram)?;
 
-    let target_citizen = database
-        .citizen_by_name(&username_to)
-        .map_err(|_| ReasonCode::NoSuchCitizen)?;
+    let target_citizen = match database.citizen_by_name(&username_to) {
+        DatabaseResult::Ok(Some(target)) => target,
+        DatabaseResult::Ok(None) => return Err(ReasonCode::NoSuchCitizen),
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    };
 
-    if !database.contact_telegrams_allowed(citizen_id, target_citizen.id)
-        || !database.contact_telegrams_allowed(target_citizen.id, citizen_id)
-    {
+    let you_allow_telegrams =
+        match database.contact_telegrams_allowed(citizen_id, target_citizen.id) {
+            DatabaseResult::Ok(allowed) => allowed,
+            DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+        };
+
+    let they_allow_telegrams =
+        match database.contact_telegrams_allowed(target_citizen.id, citizen_id) {
+            DatabaseResult::Ok(allowed) => allowed,
+            DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+        };
+
+    if !you_allow_telegrams || !they_allow_telegrams {
         return Err(ReasonCode::TelegramBlocked);
     }
 
@@ -70,11 +84,10 @@ fn try_send_telegram_from_packet(
         .expect("Current time is before the unix epoch.")
         .as_secs() as u32;
 
-    database
-        .telegram_add(target_citizen.id, citizen_id, now, &message)
-        .map_err(|_| ReasonCode::UnableToSendTelegram)?;
-
-    Ok(target_citizen.id)
+    match database.telegram_add(target_citizen.id, citizen_id, now, &message) {
+        DatabaseResult::Ok(_) => Ok(target_citizen.id),
+        DatabaseResult::DatabaseError => Err(ReasonCode::UnableToSendTelegram),
+    }
 }
 
 pub fn telegram_get(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
@@ -82,22 +95,25 @@ pub fn telegram_get(server: &UniverseServer, cid: UniverseConnectionID, packet: 
     let conn = get_conn!(server, cid, "telegram_get");
 
     let rc = match try_telegram_get(conn, packet, &server.database) {
-        Ok((telegram, more_remain)) => {
-            let from_name = match server.database.citizen_by_number(telegram.from) {
-                Ok(cit) => cit.name,
-                Err(_) => "<unknown>".to_string(),
-            };
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Current time is before the unix epoch.")
-                .as_secs() as u32;
-            response.add_string(VarID::TelegramCitizenName, from_name);
-            response.add_uint(VarID::TelegramAge, now.saturating_sub(telegram.timestamp));
-            response.add_string(VarID::TelegramMessage, telegram.message);
-            response.add_byte(VarID::TelegramsMoreRemain, more_remain as u8);
+        Ok((telegram, more_remain)) => match server.database.citizen_by_number(telegram.from) {
+            DatabaseResult::Ok(cit) => {
+                let from_name = match cit {
+                    Some(cit) => cit.name,
+                    None => "<unknown>".to_string(),
+                };
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Current time is before the unix epoch.")
+                    .as_secs() as u32;
+                response.add_string(VarID::TelegramCitizenName, from_name);
+                response.add_uint(VarID::TelegramAge, now.saturating_sub(telegram.timestamp));
+                response.add_string(VarID::TelegramMessage, telegram.message);
+                response.add_byte(VarID::TelegramsMoreRemain, more_remain as u8);
 
-            ReasonCode::Success
-        }
+                ReasonCode::Success
+            }
+            DatabaseResult::DatabaseError => ReasonCode::DatabaseError,
+        },
         Err(x) => x,
     };
 
@@ -121,7 +137,10 @@ pub fn try_telegram_get(
         return Err(ReasonCode::UnableToGetTelegram);
     };
 
-    let telegrams = database.telegram_get_undelivered(citizen_id);
+    let telegrams = match database.telegram_get_undelivered(citizen_id) {
+        DatabaseResult::Ok(telegrams) => telegrams,
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    };
 
     let telegram = telegrams.first();
     let more_remain = telegrams.len() >= 2;

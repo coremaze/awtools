@@ -3,13 +3,10 @@ use std::collections::HashMap;
 use crate::aw_params;
 use crate::configuration::UniverseConfig;
 
-use super::Database;
-use aw_core::ReasonCode;
+use super::{Database, DatabaseResult};
 
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-
-type Result<T, E> = std::result::Result<T, E>;
 
 #[derive(Clone, Copy, Debug, FromPrimitive, Eq, Hash, PartialEq)]
 pub enum Attribute {
@@ -40,14 +37,14 @@ pub enum Attribute {
 }
 
 pub trait AttribDB {
-    fn init_attrib(&self, universe_config: &UniverseConfig);
-    fn attrib_set(&self, attribute_id: Attribute, value: &str) -> Result<(), ReasonCode>;
-    fn attrib_get(&self) -> Result<HashMap<Attribute, String>, ReasonCode>;
+    fn init_attrib(&self, universe_config: &UniverseConfig) -> DatabaseResult<()>;
+    fn attrib_set(&self, attribute_id: Attribute, value: &str) -> DatabaseResult<()>;
+    fn attrib_get(&self) -> DatabaseResult<HashMap<Attribute, String>>;
 }
 
 impl AttribDB for Database {
-    fn init_attrib(&self, universe_config: &UniverseConfig) {
-        self.exec(
+    fn init_attrib(&self, universe_config: &UniverseConfig) -> DatabaseResult<()> {
+        let r = self.exec(
             r"CREATE TABLE IF NOT EXISTS awu_attrib ( 
             ID INTEGER PRIMARY KEY NOT NULL default '0', 
             Changed tinyint(1) NOT NULL default '0', 
@@ -56,66 +53,104 @@ impl AttribDB for Database {
             vec![],
         );
 
+        if r.is_err() {
+            return DatabaseResult::DatabaseError;
+        }
+
         // Unimplemented: mail template
         // Unimplemented: mail file
         // Unimplemented: mail command
 
-        self.attrib_set(Attribute::Userlist, bool_attrib(universe_config.user_list))
-            .expect("Failed to set userlist attribute.");
+        if self
+            .attrib_set(Attribute::Userlist, bool_attrib(universe_config.user_list))
+            .is_err()
+        {
+            return DatabaseResult::DatabaseError;
+        }
 
-        self.attrib_set(
-            Attribute::CitizenChanges,
-            bool_attrib(universe_config.allow_citizen_changes),
-        )
-        .expect("Failed to set citizenchanges attribute.");
+        if self
+            .attrib_set(
+                Attribute::CitizenChanges,
+                bool_attrib(universe_config.allow_citizen_changes),
+            )
+            .is_err()
+        {
+            return DatabaseResult::DatabaseError;
+        }
+
+        DatabaseResult::Ok(())
     }
 
-    fn attrib_set(&self, attribute_id: Attribute, value: &str) -> Result<(), ReasonCode> {
+    fn attrib_set(&self, attribute_id: Attribute, value: &str) -> DatabaseResult<()> {
         // Check if attribute is already in the database
-        let rows = self.exec(
+        let rows = match self.exec(
             r"SELECT * FROM awu_attrib WHERE ID=?",
             aw_params!(attribute_id as u32),
-        );
+        ) {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
 
         if rows.is_empty() {
             // Add the attribute if it is not already existent
-            self.exec(
+            let r = self.exec(
                 r"INSERT INTO awu_attrib (ID, Value) VALUES(?, ?);",
                 aw_params!(attribute_id as u32, value),
             );
+
+            match r {
+                DatabaseResult::Ok(_) => {}
+                DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+            }
             log::debug!("Set attribute {attribute_id:?} to {value}");
         } else {
             // Try to update the attribute if it is already present
-            self.exec(
+            let r = self.exec(
                 r"UPDATE awu_attrib SET Value=?, Changed=NOT Changed WHERE ID=?;",
                 aw_params! {
                     value,
                     attribute_id as u32
                 },
             );
+
+            match r {
+                DatabaseResult::Ok(_) => {}
+                DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+            }
+
             log::debug!("Updated attribute {attribute_id:?} to {value}");
         }
 
-        Ok(())
+        DatabaseResult::Ok(())
     }
 
-    fn attrib_get(&self) -> Result<HashMap<Attribute, String>, ReasonCode> {
+    fn attrib_get(&self) -> DatabaseResult<HashMap<Attribute, String>> {
         let mut result = HashMap::<Attribute, String>::new();
 
         // Get all attributes from database
         log::trace!("getting rows");
 
-        let rows = self.exec(r"SELECT * FROM awu_attrib;", vec![]);
+        let rows = match self.exec(r"SELECT * FROM awu_attrib;", vec![]) {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
         log::trace!("rows {rows:?}");
 
         // Add each valid response to the result
         for row in &rows {
             log::trace!("get id {:?}", row.fetch_int("ID"));
-            let id = row.fetch_int("ID").ok_or(ReasonCode::DatabaseError)?;
+
+            let id = match row.fetch_int("ID") {
+                Some(value) => value,
+                None => return DatabaseResult::DatabaseError,
+            };
 
             log::trace!("get value {:?}", row.fetch_string("Value"));
 
-            let value = row.fetch_string("Value").ok_or(ReasonCode::DatabaseError)?;
+            let value = match row.fetch_string("Value") {
+                Some(value) => value,
+                None => return DatabaseResult::DatabaseError,
+            };
 
             // Convert numeric ID back to Attributes
             if let Some(attribute) = Attribute::from_i64(id) {
@@ -123,7 +158,7 @@ impl AttribDB for Database {
             }
         }
 
-        Ok(result)
+        DatabaseResult::Ok(result)
     }
 }
 

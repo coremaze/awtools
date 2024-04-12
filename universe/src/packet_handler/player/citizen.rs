@@ -1,6 +1,6 @@
 use crate::{
     client::ClientInfo,
-    database::{citizen::CitizenQuery, CitizenDB, Database},
+    database::{citizen::CitizenQuery, CitizenDB, Database, DatabaseResult},
     get_conn,
     player::Player,
     universe_connection::UniverseConnectionID,
@@ -55,18 +55,20 @@ fn try_citizen_next_or_prev(
         citizen_id.saturating_sub(1)
     };
 
-    let Ok(citizen) = server.database.citizen_by_number(next_citizen_id) else {
-        return ReasonCode::NoSuchCitizen;
-    };
+    match server.database.citizen_by_number(next_citizen_id) {
+        DatabaseResult::Ok(Some(citizen)) => {
+            let same_citizen_id = citizen.id == player_citizen.cit_id;
+            let is_admin = conn.has_admin_permissions();
+            let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
+            for v in vars {
+                response.add_var(v);
+            }
 
-    let same_citizen_id = citizen.id == player_citizen.cit_id;
-    let is_admin = conn.has_admin_permissions();
-    let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
-    for v in vars {
-        response.add_var(v);
+            ReasonCode::Success
+        }
+        DatabaseResult::Ok(None) => ReasonCode::NoSuchCitizen,
+        DatabaseResult::DatabaseError => ReasonCode::DatabaseError,
     }
-
-    ReasonCode::Success
 }
 
 pub fn citizen_lookup_by_name(
@@ -88,7 +90,7 @@ pub fn citizen_lookup_by_name(
     } else if let Some(player_citizen) = conn.client.as_ref().and_then(|x| x.citizen()) {
         match packet.get_string(VarID::CitizenName) {
             Some(citizen_name) => match server.database.citizen_by_name(&citizen_name) {
-                Ok(citizen) => {
+                DatabaseResult::Ok(Some(citizen)) => {
                     let same_citizen_id = citizen.id == player_citizen.cit_id;
                     let is_admin = conn.has_admin_permissions();
                     let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
@@ -96,8 +98,11 @@ pub fn citizen_lookup_by_name(
                         response.add_var(v);
                     }
                 }
-                Err(_) => {
+                DatabaseResult::Ok(None) => {
                     rc = ReasonCode::NoSuchCitizen;
+                }
+                DatabaseResult::DatabaseError => {
+                    rc = ReasonCode::DatabaseError;
                 }
             },
             None => {
@@ -130,7 +135,7 @@ pub fn citizen_lookup_by_number(
     } else if let Some(player_citizen) = conn.client.as_ref().and_then(|x| x.citizen()) {
         match packet.get_uint(VarID::CitizenNumber) {
             Some(citizen_id) => match server.database.citizen_by_number(citizen_id) {
-                Ok(citizen) => {
+                DatabaseResult::Ok(Some(citizen)) => {
                     let same_citizen_id = citizen.id == player_citizen.cit_id;
                     let is_admin = conn.has_admin_permissions();
                     let vars = citizen_info_vars(&citizen, same_citizen_id, is_admin);
@@ -138,8 +143,10 @@ pub fn citizen_lookup_by_number(
                         response.add_var(v);
                     }
                 }
-                Err(_) => {
-                    rc = ReasonCode::NoSuchCitizen;
+                DatabaseResult::Ok(None) => rc = ReasonCode::NoSuchCitizen,
+                DatabaseResult::DatabaseError => {
+                    log::error!("Could not complete login due to database error");
+                    return;
                 }
             },
             None => {
@@ -172,7 +179,7 @@ pub fn citizen_change(server: &UniverseServer, cid: UniverseConnectionID, packet
             rc = ReasonCode::Unauthorized;
         } else {
             match server.database.citizen_by_number(changed_info.id) {
-                Ok(original_info) => {
+                DatabaseResult::Ok(Some(original_info)) => {
                     if let Err(x) = modify_citizen(
                         &original_info,
                         &changed_info,
@@ -182,8 +189,11 @@ pub fn citizen_change(server: &UniverseServer, cid: UniverseConnectionID, packet
                         rc = x;
                     }
                 }
-                Err(_) => {
+                DatabaseResult::Ok(None) => {
                     rc = ReasonCode::NoSuchCitizen;
+                }
+                DatabaseResult::DatabaseError => {
+                    rc = ReasonCode::DatabaseError;
                 }
             }
         }
@@ -203,12 +213,16 @@ fn modify_citizen(
     admin: bool,
 ) -> Result<(), ReasonCode> {
     // Find any citizens with the same name as the new name
-    if let Ok(matching_cit) = database.citizen_by_name(&changed.name) {
-        // If someone already has the name, it needs to be the same user
-        if matching_cit.id != original.id {
-            return Err(ReasonCode::NameAlreadyUsed);
+    match database.citizen_by_name(&changed.name) {
+        DatabaseResult::Ok(Some(matching_cit)) => {
+            // If someone already has the name, it needs to be the same user
+            if matching_cit.id != original.id {
+                return Err(ReasonCode::NameAlreadyUsed);
+            }
         }
-    }
+        DatabaseResult::Ok(None) => { /* No one else with same name */ }
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    };
 
     let cit_query = CitizenQuery {
         id: original.id,
@@ -253,11 +267,10 @@ fn modify_citizen(
         trial: if admin { changed.trial } else { original.trial },
     };
 
-    database
-        .citizen_change(&cit_query)
-        .map_err(|_| ReasonCode::UnableToChangeCitizen)?;
-
-    Ok(())
+    match database.citizen_change(&cit_query) {
+        DatabaseResult::Ok(_) => Ok(()),
+        DatabaseResult::DatabaseError => Err(ReasonCode::UnableToChangeCitizen),
+    }
 }
 
 fn citizen_info_vars(
@@ -462,13 +475,17 @@ fn try_add_citizen(
     }
 
     // Can't add citizen if another citizen already has the name
-    if database.citizen_by_name(&new_info.name).is_ok() {
-        return Err(ReasonCode::NameAlreadyUsed);
+    match database.citizen_by_name(&new_info.name) {
+        DatabaseResult::Ok(Some(_)) => return Err(ReasonCode::NameAlreadyUsed),
+        DatabaseResult::Ok(None) => {}
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
     }
 
     // Can't add citizen if someone already has the citzen number
-    if database.citizen_by_number(new_info.id).is_ok() {
-        return Err(ReasonCode::NumberAlreadyUsed);
+    match database.citizen_by_number(new_info.id) {
+        DatabaseResult::Ok(Some(_)) => return Err(ReasonCode::NumberAlreadyUsed),
+        DatabaseResult::Ok(None) => {}
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
     }
 
     // Can't add citizen if the id is too large
@@ -486,15 +503,18 @@ fn try_add_citizen(
 
     let name = new_info.name.clone();
 
-    match new_info.id {
+    let r = match new_info.id {
         0 => database.citizen_add_next(new_info),
         1.. => database.citizen_add(&new_info),
+    };
+
+    if r.is_err() {
+        return Err(ReasonCode::UnableToInsertCitizen);
     }
-    .map_err(|_| ReasonCode::UnableToInsertCitizen)?;
 
-    let result = database
-        .citizen_by_name(&name)
-        .map_err(|_| ReasonCode::UnableToInsertCitizen)?;
-
-    Ok(result)
+    match database.citizen_by_name(&name) {
+        DatabaseResult::Ok(Some(result)) => Ok(result),
+        DatabaseResult::Ok(None) => Err(ReasonCode::UnableToInsertCitizen),
+        DatabaseResult::DatabaseError => Err(ReasonCode::DatabaseError),
+    }
 }

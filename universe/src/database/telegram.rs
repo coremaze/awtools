@@ -1,8 +1,5 @@
-use super::{AWRow, Database};
+use super::{AWRow, Database, DatabaseResult};
 use crate::aw_params;
-use aw_core::ReasonCode;
-
-type Result<T, E> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone)]
 pub struct TelegramQuery {
@@ -15,21 +12,16 @@ pub struct TelegramQuery {
 }
 
 pub trait TelegramDB {
-    fn init_telegram(&self);
-    fn telegram_add(
-        &self,
-        to: u32,
-        from: u32,
-        timestamp: u32,
-        message: &str,
-    ) -> Result<(), ReasonCode>;
-    fn telegram_get_undelivered(&self, citizen_id: u32) -> Vec<TelegramQuery>;
-    fn telegram_get_all(&self, citizen_id: u32) -> Vec<TelegramQuery>;
-    fn telegram_mark_delivered(&self, telegram_id: u32);
+    fn init_telegram(&self) -> DatabaseResult<()>;
+    fn telegram_add(&self, to: u32, from: u32, timestamp: u32, message: &str)
+        -> DatabaseResult<()>;
+    fn telegram_get_undelivered(&self, citizen_id: u32) -> DatabaseResult<Vec<TelegramQuery>>;
+    fn telegram_get_all(&self, citizen_id: u32) -> DatabaseResult<Vec<TelegramQuery>>;
+    fn telegram_mark_delivered(&self, telegram_id: u32) -> DatabaseResult<()>;
 }
 
 impl TelegramDB for Database {
-    fn init_telegram(&self) {
+    fn init_telegram(&self) -> DatabaseResult<()> {
         let auto_increment_not_null = self.auto_increment_not_null();
         let unsigned = self.unsigned_str();
         let statement = format!(
@@ -43,7 +35,12 @@ impl TelegramDB for Database {
         );"
         );
 
-        self.exec(statement, vec![]);
+        let r = self.exec(statement, vec![]);
+
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 
     fn telegram_add(
@@ -52,8 +49,8 @@ impl TelegramDB for Database {
         from: u32,
         timestamp: u32,
         message: &str,
-    ) -> Result<(), ReasonCode> {
-        self.exec(
+    ) -> DatabaseResult<()> {
+        let r = self.exec(
             r"INSERT INTO awu_telegram (Citizen,`From`,Timestamp,Message,Delivered) 
             VALUES(?, ?, ?, ?, 0)",
             aw_params! {
@@ -64,33 +61,39 @@ impl TelegramDB for Database {
             },
         );
 
-        Ok(())
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 
-    fn telegram_get_undelivered(&self, citizen_id: u32) -> Vec<TelegramQuery> {
-        let mut telegrams = Vec::<TelegramQuery>::new();
-
-        let rows = self.exec(
+    fn telegram_get_undelivered(&self, citizen_id: u32) -> DatabaseResult<Vec<TelegramQuery>> {
+        let r = self.exec(
             r"SELECT * FROM awu_telegram WHERE Citizen=? AND Delivered=0 
-                ORDER BY Timestamp",
+            ORDER BY Timestamp",
             aw_params! {
                 citizen_id
             },
         );
 
+        let rows = match r {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
+
+        let mut telegrams = Vec::<TelegramQuery>::new();
         for row in &rows {
-            if let Ok(telegram) = fetch_telegram(row) {
-                telegrams.push(telegram);
+            match fetch_telegram(row) {
+                DatabaseResult::Ok(telegram) => telegrams.push(telegram),
+                DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
             }
         }
 
-        telegrams
+        DatabaseResult::Ok(telegrams)
     }
 
-    fn telegram_get_all(&self, citizen_id: u32) -> Vec<TelegramQuery> {
-        let mut telegrams = Vec::<TelegramQuery>::new();
-
-        let rows = self.exec(
+    fn telegram_get_all(&self, citizen_id: u32) -> DatabaseResult<Vec<TelegramQuery>> {
+        let r = self.exec(
             r"SELECT * FROM awu_telegram WHERE Citizen=?  
                 ORDER BY Timestamp",
             aw_params! {
@@ -98,62 +101,70 @@ impl TelegramDB for Database {
             },
         );
 
+        let rows = match r {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
+
+        let mut telegrams = Vec::<TelegramQuery>::new();
         for row in &rows {
-            if let Ok(telegram) = fetch_telegram(row) {
-                telegrams.push(telegram);
+            match fetch_telegram(row) {
+                DatabaseResult::Ok(telegram) => telegrams.push(telegram),
+                DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
             }
         }
 
-        telegrams
+        DatabaseResult::Ok(telegrams)
     }
 
-    fn telegram_mark_delivered(&self, telegram_id: u32) {
-        self.exec(
+    fn telegram_mark_delivered(&self, telegram_id: u32) -> DatabaseResult<()> {
+        let r = self.exec(
             r"UPDATE awu_telegram SET Delivered=1 
             WHERE ID=?;",
             aw_params! {
                 telegram_id
             },
         );
+
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 }
 
-fn fetch_telegram(row: &AWRow) -> Result<TelegramQuery, ReasonCode> {
-    let id: u32 = row
-        .fetch_int("ID")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+fn fetch_telegram(row: &AWRow) -> DatabaseResult<TelegramQuery> {
+    let id = match row.fetch_int("ID").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let citizen: u32 = row
-        .fetch_int("Citizen")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let citizen = match row.fetch_int("Citizen").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let from: u32 = row
-        .fetch_int("From")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let from = match row.fetch_int("From").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let timestamp: u32 = row
-        .fetch_int("Timestamp")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let timestamp = match row.fetch_int("Timestamp").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let message: String = row
-        .fetch_string("Message")
-        .ok_or(ReasonCode::DatabaseError)?;
+    let message = match row.fetch_string("Message") {
+        Some(x) => x,
+        None => return DatabaseResult::DatabaseError,
+    };
 
-    let delivered: u32 = row
-        .fetch_int("Delivered")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let delivered = match row.fetch_int("Delivered").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    Ok(TelegramQuery {
+    DatabaseResult::Ok(TelegramQuery {
         id,
         citizen,
         from,

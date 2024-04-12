@@ -1,5 +1,5 @@
 use crate::{
-    database::{license::LicenseQuery, Database, LicenseDB},
+    database::{license::LicenseQuery, Database, DatabaseResult, LicenseDB},
     get_conn,
     universe_connection::UniverseConnectionID,
     UniverseConnection, UniverseServer,
@@ -42,10 +42,18 @@ pub fn license_add(server: &UniverseServer, cid: UniverseConnectionID, packet: &
         }
     };
 
-    if server.database.license_by_name(&lic.name).is_ok() {
-        p.add_int(VarID::ReasonCode, ReasonCode::WorldAlreadyExists as i32);
-        conn.send(p);
-        return;
+    match server.database.license_by_name(&lic.name) {
+        DatabaseResult::Ok(Some(_)) => {
+            p.add_int(VarID::ReasonCode, ReasonCode::WorldAlreadyExists.into());
+            conn.send(p);
+            return;
+        }
+        DatabaseResult::Ok(_) => {}
+        DatabaseResult::DatabaseError => {
+            p.add_int(VarID::ReasonCode, ReasonCode::DatabaseError.into());
+            conn.send(p);
+            return;
+        }
     }
 
     if let Err(e) = check_valid_world_name(&lic.name) {
@@ -129,20 +137,19 @@ fn send_license_lookup(
     };
 
     let rc = match license_result {
-        Ok(lic) => {
+        DatabaseResult::Ok(Some(lic)) => {
             // Attach world license info to packet
             let vars = license_to_vars(&lic, conn.has_admin_permissions());
-
             for v in vars {
                 p.add_var(v);
             }
-
             ReasonCode::Success
         }
-        Err(_) => {
+        DatabaseResult::Ok(None) => {
             // No world license was found before/same/after the given name
             ReasonCode::NoSuchLicense
         }
+        DatabaseResult::DatabaseError => ReasonCode::DatabaseError,
     };
 
     p.add_int(VarID::ReasonCode, rc as i32);
@@ -176,9 +183,14 @@ pub fn license_change(server: &UniverseServer, cid: UniverseConnectionID, packet
 
     // Get the license to be changed
     let original_lic = match server.database.license_by_name(&changed_lic.name) {
-        Ok(lic) => lic,
-        Err(_) => {
-            p.add_int(VarID::ReasonCode, ReasonCode::NoSuchLicense as i32);
+        DatabaseResult::Ok(Some(lic)) => lic,
+        DatabaseResult::Ok(None) => {
+            p.add_int(VarID::ReasonCode, ReasonCode::NoSuchLicense.into());
+            conn.send(p);
+            return;
+        }
+        DatabaseResult::DatabaseError => {
+            p.add_int(VarID::ReasonCode, ReasonCode::DatabaseError.into());
             conn.send(p);
             return;
         }
@@ -209,16 +221,23 @@ pub fn license_change(server: &UniverseServer, cid: UniverseConnectionID, packet
         return;
     }
 
-    if let Ok(lic) = server.database.license_by_name(&changed_lic.name) {
-        let vars = license_to_vars(&lic, conn.has_admin_permissions());
-
-        for v in vars {
-            p.add_var(v);
+    match server.database.license_by_name(&changed_lic.name) {
+        DatabaseResult::Ok(Some(lic)) => {
+            let vars = license_to_vars(&lic, conn.has_admin_permissions());
+            for v in vars {
+                p.add_var(v);
+            }
+        }
+        DatabaseResult::Ok(None) => {}
+        DatabaseResult::DatabaseError => {
+            p.add_int(VarID::ReasonCode, ReasonCode::DatabaseError.into());
+            conn.send(p);
+            return;
         }
     }
 
     // TODO: Kill existing world if it is now invalid/expired
-    p.add_int(VarID::ReasonCode, ReasonCode::Success as i32);
+    p.add_int(VarID::ReasonCode, ReasonCode::Success.into());
     conn.send(p);
 }
 

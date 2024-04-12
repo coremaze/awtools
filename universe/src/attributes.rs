@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::database::attrib::{AttribDB, Attribute};
-use crate::database::Database;
+use crate::database::{Database, DatabaseResult};
 use crate::{AWPacket, PacketType, UniverseConnection, VarID};
 
 pub fn send_attributes(conn: &UniverseConnection, database: &Database) {
@@ -140,8 +140,8 @@ pub fn send_attributes(conn: &UniverseConnection, database: &Database) {
 
 pub fn get_attributes(database: &Database) -> HashMap<Attribute, String> {
     let mut result = match database.attrib_get() {
-        Ok(attribs) => attribs,
-        Err(_) => {
+        DatabaseResult::Ok(attribs) => attribs,
+        DatabaseResult::DatabaseError => {
             log::warn!("Unable to get universe attributes from database, but we are continuing since we can still provide time and universe build");
             HashMap::<Attribute, String>::new()
         }
@@ -198,10 +198,11 @@ pub fn set_attribute(var_id: VarID, value: &str, database: &Database) {
         Attribute::Timestamp | Attribute::UniverseBuild => {
             // It doesn't make sense to set these.
         }
-        _ => {
-            if let Err(why) = database.attrib_set(id, value) {
-                log::warn!("Couldn't set attribute in database. {why:?}");
+        _ => match database.attrib_set(id, value) {
+            DatabaseResult::Ok(_) => {}
+            DatabaseResult::DatabaseError => {
+                log::warn!("Couldn't set attribute in database.")
             }
-        }
+        },
     }
 }

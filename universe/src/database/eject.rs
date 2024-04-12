@@ -1,14 +1,14 @@
-use super::Database;
+use super::{Database, DatabaseResult};
 
 pub trait EjectDB {
-    fn init_eject(&self);
+    fn init_eject(&self) -> DatabaseResult<()>;
 }
 
 impl EjectDB for Database {
-    fn init_eject(&self) {
+    fn init_eject(&self) -> DatabaseResult<()> {
         let unsigned = self.unsigned_str();
         let auto_increment_not_null = self.auto_increment_not_null();
-        self.exec(
+        let r = self.exec(
             format!(
                 r"CREATE TABLE IF NOT EXISTS awu_eject ( 
                 ID INTEGER PRIMARY KEY {auto_increment_not_null}, 
@@ -21,5 +21,10 @@ impl EjectDB for Database {
             ),
             vec![],
         );
+
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 }

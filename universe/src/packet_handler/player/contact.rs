@@ -2,7 +2,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     client::ClientInfo,
-    database::{contact::ContactOptions, CitizenDB, ContactDB, Database, TelegramDB},
+    database::{
+        contact::ContactOptions, CitizenDB, ContactDB, Database, DatabaseResult, TelegramDB,
+    },
     get_conn, get_conn_mut,
     tabs::{regenerate_contact_list, regenerate_contact_list_and_mutuals},
     telegram,
@@ -43,8 +45,12 @@ fn alert_friend_request(from: u32, to: u32, server: &UniverseServer) {
         .as_secs() as u32;
 
     let citizen = match server.database.citizen_by_number(from) {
-        Ok(x) => x,
-        _ => return,
+        DatabaseResult::Ok(Some(citizen)) => citizen,
+        DatabaseResult::Ok(None) => return,
+        DatabaseResult::DatabaseError => {
+            log::error!("Could not complete alert_friend_request due to database error.");
+            return;
+        }
     };
 
     // Create a telegram to alert user of friend request
@@ -82,19 +88,33 @@ fn try_add_contact(
         .get_uint(VarID::ContactListOptions)
         .ok_or(ReasonCode::NoSuchCitizen)?;
 
-    let contact_citizen = database
-        .citizen_by_name(&contact_name)
-        .map_err(|_| ReasonCode::NoSuchCitizen)?;
+    let contact_citizen = match database.citizen_by_name(&contact_name) {
+        DatabaseResult::Ok(Some(cit)) => cit,
+        DatabaseResult::Ok(None) => return Err(ReasonCode::NoSuchCitizen),
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    };
 
     let mut options = ContactOptions::from_bits_truncate(contact_options);
-    let other_has_blocked_you = database.contact_blocked(contact_citizen.id, citizen_id);
+    let other_has_blocked_you = match database.contact_blocked(contact_citizen.id, citizen_id) {
+        DatabaseResult::Ok(blocked) => blocked,
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    };
+
     if other_has_blocked_you && !options.contains(ContactOptions::ALL_BLOCKED) {
         return Err(ReasonCode::ContactAddBlocked);
     }
 
-    let source_has_contact = database.contact_get(citizen_id, contact_citizen.id).is_ok();
+    let source_has_contact = match database.contact_get(citizen_id, contact_citizen.id) {
+        DatabaseResult::Ok(Some(_)) => true,
+        DatabaseResult::Ok(None) => false,
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    };
 
-    let target_has_contact = database.contact_get(contact_citizen.id, citizen_id).is_ok();
+    let target_has_contact = match database.contact_get(contact_citizen.id, citizen_id) {
+        DatabaseResult::Ok(Some(_)) => true,
+        DatabaseResult::Ok(None) => false,
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    };
 
     // Stop people from adding each other when they are already friends
     if source_has_contact && target_has_contact {
@@ -105,11 +125,10 @@ fn try_add_contact(
     options.remove(ContactOptions::FRIEND_REQUEST_ALLOWED);
     options.insert(ContactOptions::FRIEND_REQUEST_BLOCKED);
 
-    database
-        .contact_set(citizen_id, contact_citizen.id, options.bits())
-        .map_err(|_| ReasonCode::UnableToSetContact)?;
-
-    Ok((citizen_id, contact_citizen.id))
+    match database.contact_set(citizen_id, contact_citizen.id, options.bits()) {
+        DatabaseResult::Ok(_) => Ok((citizen_id, contact_citizen.id)),
+        DatabaseResult::DatabaseError => Err(ReasonCode::DatabaseError),
+    }
 }
 
 pub fn set_afk(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
@@ -179,9 +198,10 @@ fn try_contact_confirm(
         .ok_or(ReasonCode::NoSuchCitizen)?;
 
     let target_options = match database.contact_get(contact_id, citizen_id) {
-        Ok(x) => x.options,
+        DatabaseResult::Ok(Some(target)) => target.options,
         // Fail if the target has no contact for this citizen (i.e. this contact was not requested)
-        _ => return Err(ReasonCode::UnableToSetContact),
+        DatabaseResult::Ok(None) => return Err(ReasonCode::UnableToSetContact),
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
     };
 
     if !target_options.is_friend_request_allowed() {
@@ -243,21 +263,22 @@ pub fn contact_delete(server: &mut UniverseServer, cid: UniverseConnectionID, pa
         return;
     };
 
-    let blocked_by_other_person = server.database.contact_blocked(other_cit_id, self_cit_id);
-
     let mut rc = ReasonCode::Success;
-    match server.database.contact_delete(self_cit_id, other_cit_id) {
-        Ok(()) => {
+    match server.database.contact_blocked(other_cit_id, self_cit_id) {
+        DatabaseResult::Ok(blocked_by_other_person) => {
+            match server.database.contact_delete(self_cit_id, other_cit_id) {
+                DatabaseResult::Ok(_) => {}
+                DatabaseResult::DatabaseError => rc = ReasonCode::UnableToSetContact,
+            }
+
             if !blocked_by_other_person {
-                if let Err(why) = server.database.contact_delete(other_cit_id, self_cit_id) {
-                    log::warn!("Unable to delete contact (1) {other_cit_id} {self_cit_id} {why:?}");
+                match server.database.contact_delete(other_cit_id, self_cit_id) {
+                    DatabaseResult::Ok(_) => {}
+                    DatabaseResult::DatabaseError => rc = ReasonCode::DatabaseError,
                 }
             }
         }
-        Err(why) => {
-            log::warn!("Unable to delete contact (2) {self_cit_id} {other_cit_id} {why:?}");
-            rc = ReasonCode::UnableToSetContact;
-        }
+        DatabaseResult::DatabaseError => rc = ReasonCode::DatabaseError,
     }
 
     let mut response = AWPacket::new(PacketType::ContactDelete);
@@ -292,30 +313,39 @@ pub fn contact_change(server: &mut UniverseServer, cid: UniverseConnectionID, pa
     };
 
     let original_options = match server.database.contact_get(self_citizen_id, contact_cit_id) {
-        Ok(q) => q.options,
+        DatabaseResult::Ok(Some(q)) => q.options,
         // The user may not have an entry for a contact with 0 yet
-        Err(_) if contact_cit_id == 0 => ContactOptions::empty(),
-        Err(_) => return,
+        DatabaseResult::Ok(None) if contact_cit_id == 0 => ContactOptions::empty(),
+        DatabaseResult::Ok(None) => return,
+        DatabaseResult::DatabaseError => {
+            log::error!("Could not complete contact_change due to database error.");
+            return;
+        }
     };
 
     let new_options = original_options.apply_changes(option_changes);
 
-    server
+    match server
         .database
         .contact_set(self_citizen_id, contact_cit_id, new_options.bits())
-        .ok();
-
-    if option_changes.contains(ContactOptions::ALL_BLOCKED) {
-        server
-            .database
-            .contact_delete(contact_cit_id, self_citizen_id)
-            .ok();
+    {
+        DatabaseResult::Ok(_) => {}
+        DatabaseResult::DatabaseError => {
+            log::error!("Could not complete contact_change due to database error.");
+            return;
+        }
     }
 
-    if contact_cit_id == 0 {
-        if let Ok(mut cit_q) = server.database.citizen_by_number(self_citizen_id) {
-            cit_q.privacy = new_options.bits();
-            server.database.citizen_change(&cit_q).ok();
+    if option_changes.contains(ContactOptions::ALL_BLOCKED) {
+        match server
+            .database
+            .contact_delete(contact_cit_id, self_citizen_id)
+        {
+            DatabaseResult::Ok(_) => {}
+            DatabaseResult::DatabaseError => {
+                log::error!("Could not complete contact_change due to database error.");
+                return;
+            }
         }
     }
 

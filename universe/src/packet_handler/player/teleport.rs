@@ -1,8 +1,12 @@
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
 
 use crate::{
-    client::ClientInfo, database::ContactDB, get_conn, player::Player,
-    universe_connection::UniverseConnectionID, UniverseServer,
+    client::ClientInfo,
+    database::{ContactDB, DatabaseResult},
+    get_conn,
+    player::Player,
+    universe_connection::UniverseConnectionID,
+    UniverseServer,
 };
 
 pub fn join(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
@@ -27,14 +31,30 @@ pub fn join(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacke
 
     // It seems like it is supposed to refuse if the world is hidden?
 
-    if server
+    let they_allow_joins = match server
         .database
         .contact_joins_allowed(target_id, source_citizen_id)
     {
-        if server
-            .database
-            .contact_status_allowed(target_id, source_citizen_id)
-        {
+        DatabaseResult::Ok(allowed) => allowed,
+        DatabaseResult::DatabaseError => {
+            send_join_reply_err(server, cid, ReasonCode::DatabaseError);
+            return;
+        }
+    };
+
+    let they_allow_status = match server
+        .database
+        .contact_status_allowed(target_id, source_citizen_id)
+    {
+        DatabaseResult::Ok(allowed) => allowed,
+        DatabaseResult::DatabaseError => {
+            send_join_reply_err(server, cid, ReasonCode::DatabaseError);
+            return;
+        }
+    };
+
+    if they_allow_joins {
+        if they_allow_status {
             send_join_request(server, target_cid, cid);
         } else {
             send_join_reply_err(server, cid, ReasonCode::NotLoggedIn);

@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     client::ClientInfo,
-    database::{citizen::CitizenQuery, CitizenDB},
+    database::{citizen::CitizenQuery, CitizenDB, DatabaseResult},
     get_conn, get_conn_mut,
     player::{Bot, Citizen, GenericPlayer, Player},
     tabs::{regenerate_contact_list_and_mutuals, regenerate_player_list, regenerate_world_list},
@@ -229,10 +229,11 @@ fn validate_bot(
 
     // Normally also sends an AttributeCitizenChanges
 
-    let cit_query = server
-        .database
-        .citizen_by_number(login_id)
-        .map_err(|_| ReasonCode::NoSuchCitizen)?;
+    let cit_query = match server.database.citizen_by_number(login_id) {
+        DatabaseResult::Ok(Some(cit_query)) => cit_query,
+        DatabaseResult::Ok(None) => return Err(ReasonCode::NoSuchCitizen),
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    };
 
     if privilege_password != cit_query.priv_pass {
         return Err(ReasonCode::InvalidPassword);
@@ -298,10 +299,11 @@ fn check_citizen_v4(
     check_citizen_privilege(server, priv_id, priv_pass)?;
 
     // Get login citizen
-    let database_citizen = server
-        .database
-        .citizen_by_name(username)
-        .or(Err(ReasonCode::NoSuchCitizen))?;
+    let database_citizen = match server.database.citizen_by_name(username) {
+        DatabaseResult::Ok(Some(cit)) => cit,
+        DatabaseResult::Ok(None) => return Err(ReasonCode::NoSuchCitizen),
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    };
 
     // Is login password correct?
     check_password(password, &database_citizen)?;
@@ -361,10 +363,11 @@ fn check_citizen_privilege(
     // Checks if acquiring a privilege
     if let Some(priv_id) = priv_id.filter(|x| *x != 0) {
         // Get acting citizen
-        let priv_citizen = server
-            .database
-            .citizen_by_number(priv_id)
-            .map_err(|_| ReasonCode::NoSuchActingCitizen)?;
+        let priv_citizen = match server.database.citizen_by_number(priv_id) {
+            DatabaseResult::Ok(Some(cit)) => cit,
+            DatabaseResult::Ok(None) => return Err(ReasonCode::NoSuchActingCitizen),
+            DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+        };
 
         // Is it enabled?
         if priv_citizen.enabled == 0 && priv_citizen.id != 1 {
@@ -559,16 +562,18 @@ fn try_immigrate(server: &UniverseServer, params: ImmigrateParams) -> Result<(),
     check_valid_password(&params.password)?;
     // Normally, email is also validated, but I don't care about having valid emails.
 
-    if server.database.citizen_by_name(&params.name).is_ok() {
-        return Err(ReasonCode::NameAlreadyUsed);
-    };
+    match server.database.citizen_by_name(&params.name) {
+        DatabaseResult::Ok(Some(_)) => return Err(ReasonCode::NameAlreadyUsed),
+        DatabaseResult::Ok(None) => {}
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    }
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Current time is before the unix epoch.")
         .as_secs();
 
-    server.database.citizen_add_next(CitizenQuery {
+    let r = server.database.citizen_add_next(CitizenQuery {
         id: 0,
         changed: 0,
         name: params.name,
@@ -589,9 +594,12 @@ fn try_immigrate(server: &UniverseServer, params: ImmigrateParams) -> Result<(),
         enabled: 1,
         privacy: 0,
         trial: 0,
-    })?;
+    });
 
-    Ok(())
+    match r {
+        DatabaseResult::Ok(_) => Ok(()),
+        DatabaseResult::DatabaseError => Err(ReasonCode::DatabaseError),
+    }
 }
 
 fn check_valid_password(password: impl AsRef<str>) -> Result<(), ReasonCode> {

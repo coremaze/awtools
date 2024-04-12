@@ -1,11 +1,8 @@
 use crate::aw_params;
 
-use super::{AWRow, Database};
-use aw_core::ReasonCode;
+use super::{AWRow, Database, DatabaseResult};
 
 use std::time::{SystemTime, UNIX_EPOCH};
-
-type Result<T, E> = std::result::Result<T, E>;
 
 #[derive(Debug)]
 pub struct CitizenQuery {
@@ -32,18 +29,18 @@ pub struct CitizenQuery {
 }
 
 pub trait CitizenDB {
-    fn init_citizen(&self);
-    fn citizen_by_name(&self, name: &str) -> Result<CitizenQuery, ReasonCode>;
-    fn citizen_by_number(&self, citizen_id: u32) -> Result<CitizenQuery, ReasonCode>;
-    fn citizen_add(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode>;
-    fn citizen_add_next(&self, citizen: CitizenQuery) -> Result<(), ReasonCode>;
-    fn citizen_change(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode>;
+    fn init_citizen(&self) -> DatabaseResult<()>;
+    fn citizen_by_name(&self, name: &str) -> DatabaseResult<Option<CitizenQuery>>;
+    fn citizen_by_number(&self, citizen_id: u32) -> DatabaseResult<Option<CitizenQuery>>;
+    fn citizen_add(&self, citizen: &CitizenQuery) -> DatabaseResult<()>;
+    fn citizen_add_next(&self, citizen: CitizenQuery) -> DatabaseResult<()>;
+    fn citizen_change(&self, citizen: &CitizenQuery) -> DatabaseResult<()>;
 }
 
 impl CitizenDB for Database {
-    fn init_citizen(&self) {
+    fn init_citizen(&self) -> DatabaseResult<()> {
         let auto_increment_not_null = self.auto_increment_not_null();
-        self.exec(
+        let r = self.exec(
             format!(
                 r"CREATE TABLE IF NOT EXISTS awu_citizen ( 
             ID INTEGER PRIMARY KEY {auto_increment_not_null}, 
@@ -71,77 +68,107 @@ impl CitizenDB for Database {
             vec![],
         );
 
-        // Create default Administrator account if one doesn't exist yet
-        if self.citizen_by_number(1).is_err() {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Current time is before the unix epoch.")
-                .as_secs();
-
-            let admin = CitizenQuery {
-                id: 1,
-                changed: 0,
-                name: "Administrator".to_string(),
-                password: "welcome".to_string(),
-                //email: "support@activeworlds.com".to_string(),
-                email: Default::default(),
-                priv_pass: Default::default(),
-                comment: Default::default(),
-                url: Default::default(),
-                immigration: now as u32,
-                expiration: 0,
-                last_login: 0,
-                last_address: 0,
-                total_time: 0,
-                bot_limit: 3,
-                beta: 0,
-                cav_enabled: 0,
-                cav_template: 0,
-                enabled: 1,
-                privacy: 0,
-                trial: 0,
-            };
-
-            match self.citizen_add(&admin) {
-                Ok(_) => println!("Citizen #1 created as {} / {}", admin.name, admin.password),
-                Err(_) => eprintln!("Failed to create citizen #1"),
-            };
+        if r.is_err() {
+            return DatabaseResult::DatabaseError;
         }
+
+        // Create default Administrator account if one doesn't exist yet
+        match self.citizen_by_number(1) {
+            DatabaseResult::Ok(Some(_)) => { /* Administrator exists, no work to be done */ }
+            DatabaseResult::Ok(None) => {
+                // Administrator does not exist yet - create it
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Current time is before the unix epoch.")
+                    .as_secs();
+
+                let admin = CitizenQuery {
+                    id: 1,
+                    changed: 0,
+                    name: "Administrator".to_string(),
+                    password: "welcome".to_string(),
+                    //email: "support@activeworlds.com".to_string(),
+                    email: Default::default(),
+                    priv_pass: Default::default(),
+                    comment: Default::default(),
+                    url: Default::default(),
+                    immigration: now as u32,
+                    expiration: 0,
+                    last_login: 0,
+                    last_address: 0,
+                    total_time: 0,
+                    bot_limit: 3,
+                    beta: 0,
+                    cav_enabled: 0,
+                    cav_template: 0,
+                    enabled: 1,
+                    privacy: 0,
+                    trial: 0,
+                };
+
+                if self.citizen_add(&admin).is_err() {
+                    eprintln!("Failed to create citizen #1");
+                    return DatabaseResult::DatabaseError;
+                }
+                println!("Citizen #1 created as {} / {}", admin.name, admin.password);
+            }
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        }
+
+        DatabaseResult::Ok(())
     }
 
-    fn citizen_by_name(&self, name: &str) -> Result<CitizenQuery, ReasonCode> {
-        let rows = self.exec("SELECT * FROM awu_citizen WHERE Name=?", aw_params!(name));
+    fn citizen_by_name(&self, name: &str) -> DatabaseResult<Option<CitizenQuery>> {
+        let rows = match self.exec("SELECT * FROM awu_citizen WHERE Name=?", aw_params!(name)) {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
 
         if rows.len() > 1 {
-            return Err(ReasonCode::DatabaseError);
+            log::error!("There exist multiple users with the name {name:?}");
+            log::error!("{rows:?}");
+            return DatabaseResult::DatabaseError;
         }
 
-        if let Some(user) = rows.first() {
-            fetch_citizen(user)
-        } else {
-            Err(ReasonCode::DatabaseError)
+        let Some(user) = rows.first() else {
+            // There were no users by this name
+            return DatabaseResult::Ok(None);
+        };
+
+        match fetch_citizen(user) {
+            DatabaseResult::Ok(user) => DatabaseResult::Ok(Some(user)),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
         }
     }
 
-    fn citizen_by_number(&self, citizen_id: u32) -> Result<CitizenQuery, ReasonCode> {
-        let rows = self.exec(
+    fn citizen_by_number(&self, citizen_id: u32) -> DatabaseResult<Option<CitizenQuery>> {
+        let rows = match self.exec(
             r"SELECT * FROM awu_citizen WHERE ID=?",
             aw_params!(citizen_id),
-        );
+        ) {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
 
         if rows.len() > 1 {
-            return Err(ReasonCode::DatabaseError);
+            log::error!("There exist multiple users with the citizen id {citizen_id:?}");
+            log::error!("{rows:?}");
+            return DatabaseResult::DatabaseError;
         }
 
-        if let Some(user) = rows.first() {
-            fetch_citizen(user)
-        } else {
-            Err(ReasonCode::DatabaseError)
+        let Some(user) = rows.first() else {
+            // There were no users by this number
+            return DatabaseResult::Ok(None);
+        };
+
+        match fetch_citizen(user) {
+            DatabaseResult::Ok(user) => DatabaseResult::Ok(Some(user)),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
         }
     }
 
-    fn citizen_add(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode> {
-        self.exec(
+    fn citizen_add(&self, citizen: &CitizenQuery) -> DatabaseResult<()> {
+        let r = self.exec(
             r"INSERT INTO awu_citizen(
                 ID, Immigration, Expiration, LastLogin, LastAddress, TotalTime, 
                 BotLimit, Beta, Enabled, Trial, Privacy, CAVEnabled, CAVTemplate, 
@@ -172,26 +199,31 @@ impl CitizenDB for Database {
             ),
         );
 
-        Ok(())
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 
-    fn citizen_add_next(&self, mut citizen: CitizenQuery) -> Result<(), ReasonCode> {
+    fn citizen_add_next(&self, mut citizen: CitizenQuery) -> DatabaseResult<()> {
         // Get the next unused ID from the database
-        let rows = self.exec("SELECT MAX(ID) + 1 AS ID FROM awu_citizen", vec![]);
+        let rows = match self.exec("SELECT MAX(ID) + 1 AS ID FROM awu_citizen", vec![]) {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
         let next_id = rows.first();
 
         let id: u32 = match next_id {
-            Some(row) => row
-                .fetch_int("ID")
-                .ok_or(ReasonCode::DatabaseError)?
-                .try_into()
-                .map_err(|_| ReasonCode::DatabaseError)?,
+            Some(row) => match row.fetch_int("ID").map(u32::try_from) {
+                Some(Ok(x)) => x,
+                _ => return DatabaseResult::DatabaseError,
+            },
             None => 1,
         };
 
         citizen.id = id;
 
-        self.exec(
+        let r = self.exec(
             r"INSERT INTO awu_citizen(
                 ID, Immigration, Expiration, LastLogin, LastAddress, TotalTime, 
                 BotLimit, Beta, Enabled, Trial, Privacy, CAVEnabled, CAVTemplate, 
@@ -222,11 +254,14 @@ impl CitizenDB for Database {
             },
         );
 
-        Ok(())
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 
-    fn citizen_change(&self, citizen: &CitizenQuery) -> Result<(), ReasonCode> {
-        self.exec(
+    fn citizen_change(&self, citizen: &CitizenQuery) -> DatabaseResult<()> {
+        let r = self.exec(
             r"UPDATE awu_citizen SET Changed=NOT Changed,
                 Immigration=?, Expiration=?, LastLogin=?, 
                 LastAddress=?, TotalTime=?, BotLimit=?, 
@@ -258,113 +293,116 @@ impl CitizenDB for Database {
             },
         );
 
-        Ok(())
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 }
 
-fn fetch_citizen(row: &AWRow) -> Result<CitizenQuery, ReasonCode> {
-    let id: u32 = row
-        .fetch_int("ID")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+fn fetch_citizen(row: &AWRow) -> DatabaseResult<CitizenQuery> {
+    let id = match row.fetch_int("ID").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let changed: u32 = row
-        .fetch_int("Changed")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let changed = match row.fetch_int("Changed").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let name: String = row.fetch_string("Name").ok_or(ReasonCode::DatabaseError)?;
+    let name = match row.fetch_string("Name") {
+        Some(x) => x,
+        None => return DatabaseResult::DatabaseError,
+    };
 
-    let password: String = row
-        .fetch_string("Password")
-        .ok_or(ReasonCode::DatabaseError)?;
+    let password = match row.fetch_string("Password") {
+        Some(x) => x,
+        None => return DatabaseResult::DatabaseError,
+    };
 
-    let email: String = row.fetch_string("Email").ok_or(ReasonCode::DatabaseError)?;
+    let email = match row.fetch_string("Email") {
+        Some(x) => x,
+        None => return DatabaseResult::DatabaseError,
+    };
 
-    let priv_pass: String = row
-        .fetch_string("PrivPass")
-        .ok_or(ReasonCode::DatabaseError)?;
+    let priv_pass = match row.fetch_string("PrivPass") {
+        Some(x) => x,
+        None => return DatabaseResult::DatabaseError,
+    };
 
-    let comment: String = row
-        .fetch_string("Comment")
-        .ok_or(ReasonCode::DatabaseError)?;
+    let comment = match row.fetch_string("Comment") {
+        Some(x) => x,
+        None => return DatabaseResult::DatabaseError,
+    };
 
-    let url: String = row.fetch_string("URL").ok_or(ReasonCode::DatabaseError)?;
+    let url = match row.fetch_string("URL") {
+        Some(x) => x,
+        None => return DatabaseResult::DatabaseError,
+    };
 
-    let immigration: u32 = row
-        .fetch_int("Immigration")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let immigration = match row.fetch_int("Immigration").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let expiration: u32 = row
-        .fetch_int("Expiration")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let expiration = match row.fetch_int("Expiration").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let last_login: u32 = row
-        .fetch_int("LastLogin")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let last_login = match row.fetch_int("LastLogin").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
     // It is not unexpected for LastAddress to end up in the database as a negative number.
-    let last_address: u32 = row
-        .fetch_int("LastAddress")
-        .ok_or(ReasonCode::DatabaseError)? as u32;
+    let last_address = match row.fetch_int("LastAddress").map(|x| x as u32) {
+        Some(x) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let total_time: u32 = row
-        .fetch_int("TotalTime")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let total_time = match row.fetch_int("TotalTime").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let bot_limit: u32 = row
-        .fetch_int("BotLimit")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let bot_limit = match row.fetch_int("BotLimit").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let beta: u32 = row
-        .fetch_int("Beta")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let beta = match row.fetch_int("Beta").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let cav_enabled: u32 = row
-        .fetch_int("CAVEnabled")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let cav_enabled = match row.fetch_int("CAVEnabled").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let cav_template: u32 = row
-        .fetch_int("CAVTemplate")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let cav_template = match row.fetch_int("CAVTemplate").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let enabled: u32 = row
-        .fetch_int("Enabled")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let enabled = match row.fetch_int("Enabled").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let privacy: u32 = row
-        .fetch_int("Privacy")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let privacy = match row.fetch_int("Privacy").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let trial: u32 = row
-        .fetch_int("Trial")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let trial = match row.fetch_int("Trial").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    Ok(CitizenQuery {
+    DatabaseResult::Ok(CitizenQuery {
         id,
         changed,
         name,

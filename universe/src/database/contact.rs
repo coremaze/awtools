@@ -1,9 +1,6 @@
-use super::{AWRow, Database};
+use super::{AWRow, Database, DatabaseResult};
 use crate::aw_params;
-use aw_core::ReasonCode;
 use bitflags::bitflags;
-
-type Result<T, E> = std::result::Result<T, E>;
 
 bitflags! {
     #[derive(Default)]
@@ -237,27 +234,35 @@ pub struct ContactQuery {
 }
 
 pub trait ContactDB {
-    fn init_contact(&self);
-    fn contact_set(&self, citizen_id: u32, contact_id: u32, options: u32)
-        -> Result<(), ReasonCode>;
-    fn contact_get(&self, citizen_id: u32, contact_id: u32) -> Result<ContactQuery, ReasonCode>;
-    fn contact_get_all(&self, citizen_id: u32) -> Vec<ContactQuery>;
-    fn contact_blocked(&self, citizen_id: u32, contact_id: u32) -> bool;
-    fn contact_confirm_add(&self, citizen_id: u32, contact_id: u32) -> bool;
-    fn contact_default(&self, citizen_id: u32) -> ContactQuery;
-    fn contact_file_transfers_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
-    fn contact_telegrams_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
-    fn contact_friend_requests_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
-    fn contact_status_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
-    fn contact_joins_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
-    fn contact_invites_allowed(&self, citizen_id: u32, contact_id: u32) -> bool;
-    fn contact_delete(&self, citizen_id: u32, contact_id: u32) -> Result<(), ReasonCode>;
+    fn init_contact(&self) -> DatabaseResult<()>;
+    fn contact_set(&self, citizen_id: u32, contact_id: u32, options: u32) -> DatabaseResult<()>;
+    fn contact_get(&self, citizen_id: u32, contact_id: u32)
+        -> DatabaseResult<Option<ContactQuery>>;
+    fn contact_get_all(&self, citizen_id: u32) -> DatabaseResult<Vec<ContactQuery>>;
+    fn contact_blocked(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool>;
+    fn contact_confirm_add(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool>;
+    fn contact_default(&self, citizen_id: u32) -> DatabaseResult<ContactQuery>;
+    fn contact_file_transfers_allowed(
+        &self,
+        citizen_id: u32,
+        contact_id: u32,
+    ) -> DatabaseResult<bool>;
+    fn contact_telegrams_allowed(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool>;
+    fn contact_friend_requests_allowed(
+        &self,
+        citizen_id: u32,
+        contact_id: u32,
+    ) -> DatabaseResult<bool>;
+    fn contact_status_allowed(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool>;
+    fn contact_joins_allowed(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool>;
+    fn contact_invites_allowed(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool>;
+    fn contact_delete(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<()>;
 }
 
 impl ContactDB for Database {
-    fn init_contact(&self) {
+    fn init_contact(&self) -> DatabaseResult<()> {
         let unsigned = self.unsigned_str();
-        self.exec(
+        let r = self.exec(
             format!(
                 r"CREATE TABLE IF NOT EXISTS awu_contact ( 
                 Citizen INTEGER {unsigned} NOT NULL default '0', 
@@ -269,16 +274,16 @@ impl ContactDB for Database {
             ),
             vec![],
         );
+
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 
-    fn contact_set(
-        &self,
-        citizen_id: u32,
-        contact_id: u32,
-        options: u32,
-    ) -> Result<(), ReasonCode> {
+    fn contact_set(&self, citizen_id: u32, contact_id: u32, options: u32) -> DatabaseResult<()> {
         // Check if contact pair is already in the database
-        let rows = self.exec(
+        let r = self.exec(
             r"SELECT * FROM awu_contact WHERE Citizen=? AND Contact=?;",
             aw_params! {
                 citizen_id,
@@ -286,7 +291,12 @@ impl ContactDB for Database {
             },
         );
 
-        if rows.is_empty() {
+        let rows = match r {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
+
+        let r = if rows.is_empty() {
             // Add the contact pair if it is not already existent
             self.exec(
                 r"INSERT INTO awu_contact (Citizen,Contact,Options) 
@@ -296,7 +306,7 @@ impl ContactDB for Database {
                     contact_id,
                     options
                 },
-            );
+            )
         } else {
             // Try to update the contact pair if it is already present
             self.exec(
@@ -306,14 +316,21 @@ impl ContactDB for Database {
                     citizen_id,
                     contact_id
                 },
-            );
-        }
+            )
+        };
 
-        Ok(())
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 
-    fn contact_get(&self, citizen_id: u32, contact_id: u32) -> Result<ContactQuery, ReasonCode> {
-        let rows = self.exec(
+    fn contact_get(
+        &self,
+        citizen_id: u32,
+        contact_id: u32,
+    ) -> DatabaseResult<Option<ContactQuery>> {
+        let r = self.exec(
             r"SELECT * FROM awu_contact WHERE Citizen=? AND Contact=?;",
             aw_params! {
                 citizen_id,
@@ -321,165 +338,224 @@ impl ContactDB for Database {
             },
         );
 
-        if let Some(contact) = rows.first() {
-            fetch_contact(contact)
-        } else {
-            Err(ReasonCode::DatabaseError)
+        let rows = match r {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
+
+        let Some(contact) = rows.first() else {
+            // No such contact
+            return DatabaseResult::Ok(None);
+        };
+
+        match fetch_contact(contact) {
+            DatabaseResult::Ok(contact) => DatabaseResult::Ok(Some(contact)),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
         }
     }
 
-    fn contact_get_all(&self, citizen_id: u32) -> Vec<ContactQuery> {
-        let mut result = Vec::<ContactQuery>::new();
-
-        let rows = self.exec(
+    fn contact_get_all(&self, citizen_id: u32) -> DatabaseResult<Vec<ContactQuery>> {
+        let r = self.exec(
             r"SELECT * FROM awu_contact WHERE Citizen=?;",
             aw_params! {
                 citizen_id
             },
         );
 
+        let rows = match r {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
+
+        let mut result = Vec::<ContactQuery>::new();
         for row in rows {
-            if let Ok(contact) = fetch_contact(&row) {
-                result.push(contact);
+            match fetch_contact(&row) {
+                DatabaseResult::Ok(contact) => result.push(contact),
+                DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
             }
         }
 
-        result
+        DatabaseResult::Ok(result)
     }
 
-    fn contact_blocked(&self, citizen_id: u32, contact_id: u32) -> bool {
+    fn contact_blocked(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool> {
+        match self.contact_get(citizen_id, contact_id) {
+            DatabaseResult::Ok(Some(contact)) => {
+                DatabaseResult::Ok(contact.options.contains(ContactOptions::ALL_BLOCKED))
+            }
+            DatabaseResult::Ok(None) => DatabaseResult::Ok(false),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
+    }
+
+    fn contact_confirm_add(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool> {
         let contact = match self.contact_get(citizen_id, contact_id) {
-            Ok(x) => x,
-            Err(_) => return false,
+            DatabaseResult::Ok(contact) => contact,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
         };
 
-        contact.options.contains(ContactOptions::ALL_BLOCKED)
-    }
-
-    fn contact_confirm_add(&self, citizen_id: u32, contact_id: u32) -> bool {
-        let contact = match self.contact_get(citizen_id, contact_id) {
-            Ok(x) => x,
-            Err(_) => return false,
+        let Some(contact) = contact else {
+            return DatabaseResult::Ok(false);
         };
 
         if contact.options.contains(ContactOptions::ALL_BLOCKED) {
-            return true;
+            return DatabaseResult::Ok(true);
         }
 
         if contact
             .options
             .contains(ContactOptions::FRIEND_REQUEST_BLOCKED)
         {
-            return true;
+            return DatabaseResult::Ok(true);
         }
 
-        false
+        DatabaseResult::Ok(false)
     }
 
-    fn contact_default(&self, citizen_id: u32) -> ContactQuery {
-        match self.contact_get(citizen_id, 0) {
-            Ok(contact) => contact,
-            Err(_) => ContactQuery {
+    fn contact_default(&self, citizen_id: u32) -> DatabaseResult<ContactQuery> {
+        let contact = match self.contact_get(citizen_id, 0) {
+            DatabaseResult::Ok(contact) => contact,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
+
+        let default_contact = match contact {
+            Some(contact) => contact,
+            None => ContactQuery {
                 citizen: citizen_id,
                 contact: 0,
                 options: ContactOptions::default(),
             },
-        }
+        };
+
+        DatabaseResult::Ok(default_contact)
     }
 
-    fn contact_file_transfers_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
-        let contact = self
-            .contact_get(citizen_id, contact_id)
-            .unwrap_or_else(|_| self.contact_default(citizen_id));
+    fn contact_file_transfers_allowed(
+        &self,
+        citizen_id: u32,
+        contact_id: u32,
+    ) -> DatabaseResult<bool> {
+        let contact = match self.contact_get(citizen_id, contact_id) {
+            DatabaseResult::Ok(Some(contact)) => contact,
+            DatabaseResult::Ok(None) => match self.contact_default(citizen_id) {
+                DatabaseResult::Ok(default_contact) => default_contact,
+                DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+            },
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
 
         if contact.options.contains(ContactOptions::ALL_BLOCKED) {
-            return false;
+            return DatabaseResult::Ok(false);
         }
 
         if contact
             .options
             .contains(ContactOptions::FILE_TRANSFER_BLOCKED)
         {
-            return false;
+            return DatabaseResult::Ok(false);
         }
 
-        true
+        DatabaseResult::Ok(true)
     }
 
-    fn contact_telegrams_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
-        let contact = self
-            .contact_get(citizen_id, contact_id)
-            .unwrap_or_else(|_| self.contact_default(citizen_id));
-
-        if contact.options.contains(ContactOptions::ALL_BLOCKED) {
-            return false;
-        }
-
-        if contact.options.contains(ContactOptions::TELEGRAMS_BLOCKED) {
-            return false;
-        }
-
-        true
-    }
-
-    fn contact_friend_requests_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+    fn contact_telegrams_allowed(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool> {
         let contact = match self.contact_get(citizen_id, contact_id) {
-            Ok(x) => x,
-            _ => return true,
+            DatabaseResult::Ok(Some(contact)) => contact,
+            DatabaseResult::Ok(None) => match self.contact_default(citizen_id) {
+                DatabaseResult::Ok(default_contact) => default_contact,
+                DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+            },
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
         };
 
         if contact.options.contains(ContactOptions::ALL_BLOCKED) {
-            return false;
+            return DatabaseResult::Ok(false);
+        }
+
+        if contact.options.contains(ContactOptions::TELEGRAMS_BLOCKED) {
+            return DatabaseResult::Ok(false);
+        }
+
+        DatabaseResult::Ok(true)
+    }
+
+    fn contact_friend_requests_allowed(
+        &self,
+        citizen_id: u32,
+        contact_id: u32,
+    ) -> DatabaseResult<bool> {
+        let contact = match self.contact_get(citizen_id, contact_id) {
+            DatabaseResult::Ok(Some(contact)) => contact,
+            DatabaseResult::Ok(None) => match self.contact_default(citizen_id) {
+                DatabaseResult::Ok(default_contact) => default_contact,
+                DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+            },
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
+
+        if contact.options.contains(ContactOptions::ALL_BLOCKED) {
+            return DatabaseResult::Ok(false);
         }
 
         if contact
             .options
             .contains(ContactOptions::FRIEND_REQUEST_BLOCKED)
         {
-            return false;
+            return DatabaseResult::Ok(false);
         }
 
-        true
+        DatabaseResult::Ok(true)
     }
 
-    fn contact_status_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+    fn contact_status_allowed(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool> {
         let contact = match self.contact_get(citizen_id, contact_id) {
-            Ok(x) => x,
-            _ => return true,
+            DatabaseResult::Ok(Some(contact)) => contact,
+            DatabaseResult::Ok(None) => match self.contact_default(citizen_id) {
+                DatabaseResult::Ok(default_contact) => default_contact,
+                DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+            },
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
         };
 
         if contact.options.contains(ContactOptions::ALL_BLOCKED) {
-            return false;
+            return DatabaseResult::Ok(false);
         }
 
         if contact.options.contains(ContactOptions::STATUS_BLOCKED) {
-            return false;
+            return DatabaseResult::Ok(false);
         }
 
-        true
+        DatabaseResult::Ok(true)
     }
 
-    fn contact_joins_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+    fn contact_joins_allowed(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool> {
         let contact = match self.contact_get(citizen_id, contact_id) {
-            Ok(x) => x,
-            _ => return true,
+            DatabaseResult::Ok(Some(contact)) => contact,
+            DatabaseResult::Ok(None) => match self.contact_default(citizen_id) {
+                DatabaseResult::Ok(default_contact) => default_contact,
+                DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+            },
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
         };
 
-        contact.options.is_join_allowed()
+        DatabaseResult::Ok(contact.options.is_join_allowed())
     }
 
-    fn contact_invites_allowed(&self, citizen_id: u32, contact_id: u32) -> bool {
+    fn contact_invites_allowed(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<bool> {
         let contact = match self.contact_get(citizen_id, contact_id) {
-            Ok(x) => x,
-            _ => return true,
+            DatabaseResult::Ok(Some(contact)) => contact,
+            DatabaseResult::Ok(None) => match self.contact_default(citizen_id) {
+                DatabaseResult::Ok(default_contact) => default_contact,
+                DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+            },
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
         };
 
-        contact.options.is_invite_allowed()
+        DatabaseResult::Ok(contact.options.is_invite_allowed())
     }
 
-    fn contact_delete(&self, citizen_id: u32, contact_id: u32) -> Result<(), ReasonCode> {
-        // Add the contact pair if it is not already existent
-        self.exec(
+    fn contact_delete(&self, citizen_id: u32, contact_id: u32) -> DatabaseResult<()> {
+        let r = self.exec(
             r"DELETE FROM awu_contact WHERE Citizen=?  AND Contact=?;",
             aw_params! {
                 citizen_id,
@@ -487,30 +563,30 @@ impl ContactDB for Database {
             },
         );
 
-        Ok(())
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 }
 
-fn fetch_contact(row: &AWRow) -> Result<ContactQuery, ReasonCode> {
-    let citizen: u32 = row
-        .fetch_int("Citizen")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+fn fetch_contact(row: &AWRow) -> DatabaseResult<ContactQuery> {
+    let citizen = match row.fetch_int("Citizen").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let contact: u32 = row
-        .fetch_int("Contact")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let contact = match row.fetch_int("Contact").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let options: u32 = row
-        .fetch_int("Options")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let options = match row.fetch_int("Options").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    Ok(ContactQuery {
+    DatabaseResult::Ok(ContactQuery {
         citizen,
         contact,
         options: ContactOptions::from_bits_truncate(options),

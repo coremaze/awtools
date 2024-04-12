@@ -1,6 +1,10 @@
 use crate::{
-    client::ClientInfo, database::ContactDB, get_conn, player::Player,
-    universe_connection::UniverseConnectionID, UniverseServer,
+    client::ClientInfo,
+    database::{ContactDB, DatabaseResult},
+    get_conn,
+    player::Player,
+    universe_connection::UniverseConnectionID,
+    UniverseServer,
 };
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
 use num_derive::FromPrimitive;
@@ -52,10 +56,15 @@ fn invite(server: &UniverseServer, cid: UniverseConnectionID, params: BotgramPar
 
     let target_citizen_id = params.citizen_number;
 
-    if !server
+    let DatabaseResult::Ok(invites_allowed) = server
         .database
         .contact_invites_allowed(target_citizen_id, effective_source_id.unwrap_or(0))
-    {
+    else {
+        log::error!("Could not complete invite due to database error");
+        return;
+    };
+
+    if !invites_allowed {
         send_botgram_response_rc(server, cid, ReasonCode::JoinRefused);
         return;
     }
@@ -113,10 +122,15 @@ fn bot_botgram(server: &UniverseServer, cid: UniverseConnectionID, params: Botgr
         return;
     };
 
-    if !server
+    let DatabaseResult::Ok(telegrams_allowed) = server
         .database
         .contact_telegrams_allowed(params.citizen_number, effective_source_id.unwrap_or(0))
-    {
+    else {
+        log::error!("Could not complete bot_botgram due to database error");
+        return;
+    };
+
+    if !telegrams_allowed {
         send_botgram_response_rc(server, cid, ReasonCode::TelegramBlocked);
         return;
     }

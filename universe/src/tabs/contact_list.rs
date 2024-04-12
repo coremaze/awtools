@@ -6,7 +6,7 @@ use crate::{
     client::ClientInfo,
     database::{
         contact::{ContactOptions, ContactQuery},
-        CitizenDB, ContactDB,
+        CitizenDB, ContactDB, DatabaseResult,
     },
     get_conn_mut,
     universe_connection::UniverseConnectionID,
@@ -299,7 +299,10 @@ pub fn regenerate_contact_list(server: &mut UniverseServer, cid: UniverseConnect
     let Some(citizen_id) = player.citizen_id() else {
         return;
     };
-    let contacts = server.database.contact_get_all(citizen_id);
+    let contacts = match server.database.contact_get_all(citizen_id) {
+        DatabaseResult::Ok(contacts) => contacts,
+        DatabaseResult::DatabaseError => return,
+    };
     let mut entries = Vec::<ContactListEntry>::new();
     for contact in &contacts {
         entries.push(contact_entry(contact, server));
@@ -324,8 +327,10 @@ pub fn regenerate_contact_list_and_mutuals(server: &mut UniverseServer, cid: Uni
     let Some(citizen_id) = player.citizen_id() else {
         return;
     };
-    let contacts = server.database.contact_get_all(citizen_id);
-
+    let contacts = match server.database.contact_get_all(citizen_id) {
+        DatabaseResult::Ok(contacts) => contacts,
+        DatabaseResult::DatabaseError => return,
+    };
     let mut cids_to_regen = vec![cid];
     for contact in contacts {
         if let Some(contact_id) = server.connections.get_by_citizen_id(contact.contact) {
@@ -355,8 +360,8 @@ pub fn contact_entry(contact: &ContactQuery, server: &UniverseServer) -> Contact
     }
 
     let contact_citizen = match server.database.citizen_by_number(contact.contact) {
-        Ok(x) => x,
-        Err(_) => {
+        DatabaseResult::Ok(Some(x)) => x,
+        DatabaseResult::DatabaseError | DatabaseResult::Ok(None) => {
             return ContactListEntry {
                 username,
                 world,
@@ -395,11 +400,19 @@ pub fn contact_entry(contact: &ContactQuery, server: &UniverseServer) -> Contact
         None => ContactState::Offline,
     };
 
-    let status_is_allowed_for_you = server
+    let status_is_allowed_for_you = match server
         .database
-        .contact_status_allowed(contact.contact, contact.citizen);
+        .contact_status_allowed(contact.contact, contact.citizen)
+    {
+        DatabaseResult::Ok(allowed) => allowed,
+        DatabaseResult::DatabaseError => false,
+    };
 
-    let status_is_allowed_for_all = server.database.contact_status_allowed(contact.contact, 0);
+    let status_is_allowed_for_all = match server.database.contact_status_allowed(contact.contact, 0)
+    {
+        DatabaseResult::Ok(allowed) => allowed,
+        DatabaseResult::DatabaseError => false,
+    };
 
     if !status_is_allowed_for_you || !status_is_allowed_for_all {
         status = ContactState::Unknown;

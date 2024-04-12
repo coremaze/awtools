@@ -2,10 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::aw_params;
 
-use super::{AWRow, Database};
-use aw_core::ReasonCode;
-
-type Result<T, E> = std::result::Result<T, E>;
+use super::{AWRow, Database, DatabaseResult};
 
 #[derive(Debug)]
 pub struct LicenseQuery {
@@ -28,19 +25,19 @@ pub struct LicenseQuery {
 }
 
 pub trait LicenseDB {
-    fn init_license(&self);
-    fn license_by_name(&self, name: &str) -> Result<LicenseQuery, ReasonCode>;
-    fn license_add(&self, lic: &LicenseQuery) -> Result<(), ReasonCode>;
-    fn license_next(&self, name: &str) -> Result<LicenseQuery, ReasonCode>;
-    fn license_prev(&self, name: &str) -> Result<LicenseQuery, ReasonCode>;
-    fn license_change(&self, lic: &LicenseQuery) -> Result<(), ReasonCode>;
+    fn init_license(&self) -> DatabaseResult<()>;
+    fn license_by_name(&self, name: &str) -> DatabaseResult<Option<LicenseQuery>>;
+    fn license_add(&self, lic: &LicenseQuery) -> DatabaseResult<()>;
+    fn license_next(&self, name: &str) -> DatabaseResult<Option<LicenseQuery>>;
+    fn license_prev(&self, name: &str) -> DatabaseResult<Option<LicenseQuery>>;
+    fn license_change(&self, lic: &LicenseQuery) -> DatabaseResult<()>;
 }
 
 impl LicenseDB for Database {
-    fn init_license(&self) {
+    fn init_license(&self) -> DatabaseResult<()> {
         let auto_increment_not_null = self.auto_increment_not_null();
         // "Range" has been changed to "WorldSize" because range is now a keyword.
-        self.exec(
+        let r = self.exec(
             format!(
                 r"CREATE TABLE IF NOT EXISTS awu_license ( 
                 ID INTEGER PRIMARY KEY {auto_increment_not_null}, 
@@ -63,34 +60,49 @@ impl LicenseDB for Database {
             ),
             vec![],
         );
+
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 
-    fn license_by_name(&self, name: &str) -> Result<LicenseQuery, ReasonCode> {
-        let rows = self.exec(
+    fn license_by_name(&self, name: &str) -> DatabaseResult<Option<LicenseQuery>> {
+        let r = self.exec(
             r"SELECT * FROM awu_license WHERE Name=?",
             aw_params! {
                 name
             },
         );
 
+        let rows = match r {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
+
         if rows.len() > 1 {
-            return Err(ReasonCode::DatabaseError);
+            log::error!("There is more than one license for world name {name:?}");
+            log::error!("{rows:?}");
+            return DatabaseResult::DatabaseError;
         }
 
-        if let Some(lic) = rows.first() {
-            fetch_license(lic)
-        } else {
-            Err(ReasonCode::DatabaseError)
+        let Some(row) = rows.first() else {
+            return DatabaseResult::Ok(None);
+        };
+
+        match fetch_license(row) {
+            DatabaseResult::Ok(lic) => DatabaseResult::Ok(Some(lic)),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
         }
     }
 
-    fn license_add(&self, lic: &LicenseQuery) -> Result<(), ReasonCode> {
+    fn license_add(&self, lic: &LicenseQuery) -> DatabaseResult<()> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Current time is before the unix epoch.")
             .as_secs();
 
-        self.exec(
+        let r = self.exec(
             r"INSERT INTO awu_license(Creation, Expiration, LastStart, LastAddress, Hidden,
                 Tourists, Users, WorldSize, Voip, Plugins, Name, Password, Email, Comment) 
                 VALUES(?, ?, ?, ?, ?, ?,
@@ -113,49 +125,68 @@ impl LicenseDB for Database {
             },
         );
 
-        Ok(())
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 
-    fn license_next(&self, name: &str) -> Result<LicenseQuery, ReasonCode> {
-        let rows = self.exec(
+    fn license_next(&self, name: &str) -> DatabaseResult<Option<LicenseQuery>> {
+        let r = self.exec(
             r"SELECT * FROM awu_license WHERE Name>? ORDER BY Name LIMIT 1",
             aw_params! {
                 name
             },
         );
 
+        let rows = match r {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
+
         if rows.len() > 1 {
-            return Err(ReasonCode::DatabaseError);
+            return DatabaseResult::DatabaseError;
         }
 
-        if let Some(lic) = rows.first() {
-            fetch_license(lic)
-        } else {
-            Err(ReasonCode::DatabaseError)
+        let Some(row) = rows.first() else {
+            return DatabaseResult::Ok(None);
+        };
+
+        match fetch_license(row) {
+            DatabaseResult::Ok(lic) => DatabaseResult::Ok(Some(lic)),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
         }
     }
 
-    fn license_prev(&self, name: &str) -> Result<LicenseQuery, ReasonCode> {
-        let rows = self.exec(
+    fn license_prev(&self, name: &str) -> DatabaseResult<Option<LicenseQuery>> {
+        let r = self.exec(
             r"SELECT * FROM awu_license WHERE Name<? ORDER BY Name DESC LIMIT 1",
             aw_params! {
                 name
             },
         );
 
+        let rows = match r {
+            DatabaseResult::Ok(rows) => rows,
+            DatabaseResult::DatabaseError => return DatabaseResult::DatabaseError,
+        };
+
         if rows.len() > 1 {
-            return Err(ReasonCode::DatabaseError);
+            return DatabaseResult::DatabaseError;
         }
 
-        if let Some(lic) = rows.first() {
-            fetch_license(lic)
-        } else {
-            Err(ReasonCode::DatabaseError)
+        let Some(row) = rows.first() else {
+            return DatabaseResult::Ok(None);
+        };
+
+        match fetch_license(row) {
+            DatabaseResult::Ok(lic) => DatabaseResult::Ok(Some(lic)),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
         }
     }
 
-    fn license_change(&self, lic: &LicenseQuery) -> Result<(), ReasonCode> {
-        self.exec(
+    fn license_change(&self, lic: &LicenseQuery) -> DatabaseResult<()> {
+        let r = self.exec(
             r"UPDATE awu_license
             SET Changed=NOT Changed, Creation=?, Expiration=?, LastStart=?, 
             LastAddress=?, Hidden=?, Tourists=?, Users=?,
@@ -180,95 +211,96 @@ impl LicenseDB for Database {
             },
         );
 
-        Ok(())
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
     }
 }
 
-fn fetch_license(row: &AWRow) -> Result<LicenseQuery, ReasonCode> {
-    let id: u32 = row
-        .fetch_int("ID")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+fn fetch_license(row: &AWRow) -> DatabaseResult<LicenseQuery> {
+    let id = match row.fetch_int("ID").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let name: String = row.fetch_string("Name").ok_or(ReasonCode::DatabaseError)?;
+    let name = match row.fetch_string("Name") {
+        Some(x) => x,
+        None => return DatabaseResult::DatabaseError,
+    };
 
-    let password: String = row
-        .fetch_string("Password")
-        .ok_or(ReasonCode::DatabaseError)?;
+    let password = match row.fetch_string("Password") {
+        Some(x) => x,
+        None => return DatabaseResult::DatabaseError,
+    };
 
-    let email: String = row.fetch_string("Email").ok_or(ReasonCode::DatabaseError)?;
+    let email = match row.fetch_string("Email") {
+        Some(x) => x,
+        None => return DatabaseResult::DatabaseError,
+    };
 
-    let comment: String = row
-        .fetch_string("Comment")
-        .ok_or(ReasonCode::DatabaseError)?;
+    let comment = match row.fetch_string("Comment") {
+        Some(x) => x,
+        None => return DatabaseResult::DatabaseError,
+    };
 
-    let creation: u32 = row
-        .fetch_int("Creation")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let creation = match row.fetch_int("Creation").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let expiration: u32 = row
-        .fetch_int("Expiration")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let expiration = match row.fetch_int("Expiration").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let last_start: u32 = row
-        .fetch_int("LastStart")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let last_start = match row.fetch_int("LastStart").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
     // It is not unexpected for LastAddress to end up in the database as a negative number.
-    let last_address: u32 = row
-        .fetch_int("LastAddress")
-        .ok_or(ReasonCode::DatabaseError)? as u32;
+    let last_address = match row.fetch_int("LastAddress").map(|x| x as u32) {
+        Some(x) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let users: u32 = row
-        .fetch_int("Users")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let users = match row.fetch_int("Users").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let world_size: u32 = row
-        .fetch_int("WorldSize")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let world_size = match row.fetch_int("WorldSize").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let hidden: u32 = row
-        .fetch_int("Hidden")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let hidden = match row.fetch_int("Hidden").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let changed: u32 = row
-        .fetch_int("Changed")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let changed = match row.fetch_int("Changed").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let tourists: u32 = row
-        .fetch_int("Tourists")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let tourists = match row.fetch_int("Tourists").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let voip: u32 = row
-        .fetch_int("Voip")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let voip = match row.fetch_int("Voip").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    let plugins: u32 = row
-        .fetch_int("Plugins")
-        .ok_or(ReasonCode::DatabaseError)?
-        .try_into()
-        .map_err(|_| ReasonCode::DatabaseError)?;
+    let plugins = match row.fetch_int("Plugins").map(u32::try_from) {
+        Some(Ok(x)) => x,
+        _ => return DatabaseResult::DatabaseError,
+    };
 
-    Ok(LicenseQuery {
+    DatabaseResult::Ok(LicenseQuery {
         id,
         name,
         password,

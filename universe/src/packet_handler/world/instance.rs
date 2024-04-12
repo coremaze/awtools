@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     client::ClientInfo,
-    database::{attrib::Attribute, license::LicenseQuery, AttribDB, LicenseDB},
+    database::{attrib::Attribute, license::LicenseQuery, AttribDB, DatabaseResult, LicenseDB},
     get_conn, get_conn_mut,
     tabs::regenerate_world_list,
     universe_connection::UniverseConnectionID,
@@ -154,7 +154,10 @@ fn validate_world(
     name: &str,
     pass: &str,
 ) -> Result<LicenseQuery, ReasonCode> {
-    let attribs = server.database.attrib_get()?;
+    let attribs = match server.database.attrib_get() {
+        DatabaseResult::Ok(attribs) => attribs,
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    };
 
     // Check to see if the world version is within universe constraints
     let minimum_world_build = attribs
@@ -179,10 +182,11 @@ fn validate_world(
 
     // TODO: Check for ejected client
 
-    let world_lic = server
-        .database
-        .license_by_name(name)
-        .map_err(|_| ReasonCode::InvalidWorld)?;
+    let world_lic = match server.database.license_by_name(name) {
+        DatabaseResult::Ok(Some(lic)) => lic,
+        DatabaseResult::Ok(None) => return Err(ReasonCode::InvalidWorld),
+        DatabaseResult::DatabaseError => return Err(ReasonCode::DatabaseError),
+    };
 
     // Check password
     if world_lic.password != pass {
