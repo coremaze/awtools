@@ -226,9 +226,18 @@ impl PlayerList {
                 continue;
             };
 
-            if group.serialize_len() > 0x1000 {
-                next_continuation_id = Some(list_id);
-                break;
+            match group.serialize_len() {
+                Ok(len) if len > 0x1000 => {
+                    next_continuation_id = Some(list_id);
+                    break;
+                }
+                Err(_) => {
+                    log::error!("group.serialize_len() failed");
+                    // Stop pls, something went wrong
+                    next_continuation_id = None;
+                    break;
+                }
+                _ => {}
             }
 
             let entry_packet = player.make_list_packet(to_admin, list_id);
@@ -260,10 +269,18 @@ impl PlayerList {
         let mut group = AWPacketGroup::new();
 
         for (id, player) in &self.players {
-            if group.serialize_len() > 0x4000 {
-                target.send_group(group);
-                group = AWPacketGroup::new();
+            match group.serialize_len() {
+                Ok(len) if len > 0x4000 => {
+                    target.send_group(group);
+                    group = AWPacketGroup::new();
+                }
+                Err(why) => {
+                    log::error!("group.serialize_len() failed: {why:?}");
+                    return;
+                }
+                _ => {}
             }
+
             let packet = player.make_list_packet(target.has_admin_permissions(), *id);
             group.push(packet).ok();
 
@@ -333,13 +350,13 @@ impl UpdatingPlayerList {
 
         let changed_ids = self.difference();
 
-        for id in self
+        for (id, entry) in self
             .current
             .players
-            .keys()
-            .filter(|id| changed_ids.contains(id))
+            .iter()
+            .filter(|(id, _)| changed_ids.contains(id))
         {
-            list.players.insert(*id, self.current.players[id].clone());
+            list.players.insert(*id, entry.clone());
         }
 
         list

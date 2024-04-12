@@ -55,19 +55,6 @@ impl Config {
     }
 }
 
-impl Default for UniverseConfig {
-    fn default() -> Self {
-        Self {
-            license_ip: Ipv4Addr::new(127, 0, 0, 1),
-            bind_ip: Ipv4Addr::new(0, 0, 0, 0),
-            port: 6670,
-            user_list: true,
-            allow_citizen_changes: true,
-            allow_immigration: true,
-        }
-    }
-}
-
 impl Default for Config {
     fn default() -> Self {
         Self {

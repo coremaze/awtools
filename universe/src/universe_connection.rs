@@ -248,7 +248,7 @@ impl UniverseConnections {
                 .as_secs();
 
             // 30 seconds between each heartbeat
-            let next_heartbeat = conn.last_heartbeat + 30;
+            let next_heartbeat = conn.last_heartbeat.wrapping_add(30);
 
             if next_heartbeat <= now {
                 log::debug!("Sending heartbeat to {}", conn.connection.addr().ip());

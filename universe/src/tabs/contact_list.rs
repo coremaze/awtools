@@ -153,9 +153,18 @@ impl ContactList {
                 continue;
             };
 
-            if group.serialize_len() > 0x1000 {
-                more = true;
-                break;
+            match group.serialize_len() {
+                Ok(len) if len > 0x1000 => {
+                    more = true;
+                    break;
+                }
+                Err(_) => {
+                    log::error!("group.serialize_len() failed");
+                    // Stop pls, something went wrong
+                    more = false;
+                    break;
+                }
+                _ => {}
             }
 
             let mut p = AWPacket::new(PacketType::ContactList);

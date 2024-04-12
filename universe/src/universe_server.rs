@@ -103,7 +103,16 @@ impl UniverseServer {
 
     fn accept_new_clients(&mut self) {
         while let Ok((stream, addr)) = self.listener.accept() {
-            let conn = UniverseConnection::new(AWConnection::new(AWProtocol::new(stream)));
+            let proto = match AWProtocol::new(stream) {
+                Ok(proto) => proto,
+                Err(why) => {
+                    log::error!(
+                        "Failed to create a AWProtocol while accepting new client: {why:?}"
+                    );
+                    continue;
+                }
+            };
+            let conn = UniverseConnection::new(AWConnection::new(proto));
             self.connections.add_connection(conn);
             log::info!("{} connected.", addr.ip());
         }

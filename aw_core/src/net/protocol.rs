@@ -1,6 +1,6 @@
 //! Networking protocol implementation
 use crate::net::packet::{AWPacket, DeserializeError, PacketType};
-use crate::{AWCryptStream, StreamKeyError};
+use crate::{AWCryptStream, StreamCipherError};
 use crate::{PacketTypeResult, ReasonCode};
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -30,14 +30,14 @@ pub struct AWProtocol {
 
 impl AWProtocol {
     /// Create a new AWProtocol instance given a TCP stream that has already been established.
-    pub fn new(stream: TcpStream) -> Self {
+    pub fn new(stream: TcpStream) -> Result<Self, StreamCipherError> {
         let (outbound_packets_tx, outbound_packets_rx) = channel::<ProtocolMessage>();
         let (inbound_packets_tx, inbound_packets_rx) = channel::<ProtocolMessage>();
 
-        Self {
+        Ok(Self {
             stream,
             data: Vec::new(),
-            send_cipher: StreamCipherType::new(),
+            send_cipher: StreamCipherType::new()?,
             should_encrypt: false,
             recv_cipher: None,
             dead: false,
@@ -46,7 +46,7 @@ impl AWProtocol {
             outbound_packets: outbound_packets_rx,
             other_inbound_packets: Some(inbound_packets_rx),
             other_outbound_packets: Some(outbound_packets_tx),
-        }
+        })
     }
 
     /// Get the address of the connected peer
@@ -55,7 +55,7 @@ impl AWProtocol {
     }
 
     /// Set the key to receive data (i.e. the key the other end of the connection is using).
-    pub fn set_recv_key(&mut self, key: &[u8]) -> Result<(), StreamKeyError> {
+    pub fn set_recv_key(&mut self, key: &[u8]) -> Result<(), StreamCipherError> {
         self.recv_cipher = Some(StreamCipherType::from_key(key)?);
         Ok(())
     }
@@ -71,12 +71,13 @@ impl AWProtocol {
     }
 
     /// Remove n oldest bytes from the recv buffer.
-    pub fn remove_from_buf(&mut self, mut n: usize) {
-        n = n.min(self.data.len());
-
-        let new_buf = &self.data[n..];
-
-        self.data = new_buf.to_vec();
+    pub fn remove_from_buf(&mut self, n: usize) {
+        self.data = match self.data.get(n..) {
+            // There are bytes remaining; keep them
+            Some(slice) => slice.to_vec(),
+            // Nothing left, make a new empty buffer
+            None => Vec::<u8>::new(),
+        };
     }
 
     /// Add bytes to the front of the recv buffer.
@@ -122,7 +123,10 @@ impl AWProtocol {
 
         // If the other end of the connection has been given our encryption key, we need to encrypt.
         if self.should_encrypt {
-            bytes_to_send = self.send_cipher.encrypt(&bytes_to_send);
+            bytes_to_send = self.send_cipher.encrypt(&bytes_to_send).map_err(|why| {
+                log::error!("Failed to encrypt data with stream cipher: {why:?}");
+                ReasonCode::SendFailed
+            })?;
         }
 
         // Send the serialized packet.
@@ -137,34 +141,55 @@ impl AWProtocol {
     pub fn recv(&mut self) -> Result<usize, String> {
         let mut buf = [0u8; 0x8000];
         // let mut buf = [0u8; 0x1]; // Can use this to stress-test recv
-        if let Ok(bytes_read) = self.stream.read(&mut buf) {
-            // Decrypt incoming bytes if we have a key.
-            if let Some(cipher) = &mut self.recv_cipher {
-                cipher.decrypt_in_place(&mut buf[..bytes_read]);
-            }
-            self.data.extend(&buf[..bytes_read]);
 
-            if bytes_read == 0 {
-                Err("Connection closed.".to_string())
-            } else {
-                Ok(bytes_read)
-            }
-        } else {
-            Err("Could not receive bytes.".to_string())
+        let Ok(bytes_read) = self.stream.read(&mut buf) else {
+            return Err("Could not receive bytes.".to_string());
+        };
+
+        if bytes_read == 0 {
+            return Err("Connection closed.".to_string());
         }
+
+        let Some(read_buffer) = buf.get_mut(..bytes_read) else {
+            return Err(format!("Received a nonsense number of bytes: {bytes_read}"));
+        };
+
+        // Decrypt incoming bytes if we have a key.
+        if let Some(cipher) = &mut self.recv_cipher {
+            if let Err(why) = cipher.decrypt_in_place(read_buffer) {
+                self.kill();
+                return Err(format!("Failed to decrypt_in_place: {why:?}"));
+            }
+        }
+
+        self.data.extend(read_buffer.iter());
+
+        Ok(bytes_read)
     }
 
-    fn decompress_packet(&mut self, serialized_len: usize) {
+    fn decompress_packet(&mut self, serialized_len: usize) -> Result<(), String> {
         // Decompress it and replace the front of the recv buf with the decompressed packet.
-        let compressed_data = &self.data[..serialized_len];
-        if let Ok(decompressed) = AWPacket::decompress(compressed_data) {
-            self.remove_from_buf(serialized_len);
-            self.insert_into_buf(&decompressed);
-        }
+        let Some(compressed_data) = self.data.get(..serialized_len) else {
+            return Err(format!(
+                "Could not decompress packet because the length is invalid: {serialized_len}"
+            ));
+        };
+
+        let decompressed = AWPacket::decompress(compressed_data)?;
+
+        self.remove_from_buf(serialized_len);
+        self.insert_into_buf(&decompressed);
+        Ok(())
     }
 
     fn deserialize_packet(&mut self, serialized_len: usize) -> Result<Option<AWPacket>, String> {
-        match AWPacket::deserialize(&self.data[..serialized_len]) {
+        let Some(data) = self.data.get(..serialized_len) else {
+            return Err(format!(
+                "Could not deserialize packet due to bad serialized_len {serialized_len}"
+            ));
+        };
+
+        match AWPacket::deserialize(data) {
             Ok((packet, consumed_bytes)) => {
                 // Successfully deserialized a packet, now remove the data from the recv buf.
                 self.remove_from_buf(consumed_bytes);
@@ -191,7 +216,7 @@ impl AWProtocol {
                 }
                 // Received a packet that is still compressed.
                 DeserializeError::Compressed(serialized_len) => {
-                    self.decompress_packet(serialized_len);
+                    self.decompress_packet(serialized_len)?;
                 }
             },
         }
@@ -280,7 +305,11 @@ impl AWProtocol {
                 match StreamCipherType::from_key(&key) {
                     Ok(mut stream_cipher) => {
                         // There may be data that has already been sent, so we need to decrypt it now.
-                        stream_cipher.decrypt_in_place(&mut self.data);
+                        if let Err(why) = stream_cipher.decrypt_in_place(&mut self.data) {
+                            log::error!("Failed to decrypt_in_place: {why:?}");
+                            self.kill();
+                        }
+
                         self.recv_cipher = Some(stream_cipher);
                     }
                     Err(_) => self.kill(),
@@ -373,7 +402,7 @@ mod tests {
             for stream in listener.incoming() {
                 match stream {
                     Ok(stream) => {
-                        let mut proto = AWProtocol::new(stream);
+                        let mut proto = AWProtocol::new(stream).unwrap();
                         let packet = proto.recv_next_packet().unwrap();
                         tx.send(packet).unwrap();
                         break;
@@ -385,7 +414,7 @@ mod tests {
         });
 
         let stream = TcpStream::connect("127.0.0.1:1234").unwrap();
-        let mut proto = AWProtocol::new(stream);
+        let mut proto = AWProtocol::new(stream).unwrap();
 
         // Construct a test packet.
         let mut packet = AWPacket::new(PacketType::AvatarAdd);

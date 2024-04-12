@@ -188,23 +188,27 @@ impl AWPacketVar {
         }
     }
 
-    fn get_data_size(&self) -> usize {
-        match self {
+    fn get_data_size(&self) -> Option<usize> {
+        Some(match self {
             AWPacketVar::Byte(_, _) => 1,
             AWPacketVar::Int(_, _) => 4,
             AWPacketVar::Uint(_, _) => 4,
             AWPacketVar::Float(_, _) => 4,
-            AWPacketVar::String(_, string) => string_to_latin1(string).len() + 1,
+            AWPacketVar::String(_, string) => string_to_latin1(string).len().checked_add(1)?,
             AWPacketVar::Data(_, buf) => buf.len(),
             AWPacketVar::Unknown(_, buf) => buf.len(),
-        }
+        })
     }
 
     pub fn serialize(&self) -> Result<Vec<u8>, String> {
         let mut result = Vec::<u8>::with_capacity(16);
 
         let var_id = self.get_var_id() as u16;
-        let size: usize = self.get_data_size();
+
+        let size = self
+            .get_data_size()
+            .ok_or("Data size invalid".to_string())?;
+
         if size > 0xFFF {
             return Err(format!("Data size is too large: {size}"));
         }
@@ -318,10 +322,14 @@ impl AWPacketVar {
         Ok((result, reader.position()))
     }
 
-    pub fn serialize_len(&self) -> usize {
-        2 /* var id */
-        + 2 /* data type and size */
-        + self.get_data_size()
+    pub fn serialize_len(&self) -> Option<usize> {
+        let var_id_size: usize = 2;
+        let data_type_and_size_size: usize = 2;
+        let data_size: usize = self.get_data_size()?;
+
+        var_id_size
+            .checked_add(data_type_and_size_size)?
+            .checked_add(data_size)
     }
 }
 
@@ -335,7 +343,7 @@ mod tests {
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
-        assert!(var.serialize_len() == data.len());
+        assert!(var.serialize_len().unwrap() == data.len());
     }
 
     #[test]
@@ -344,7 +352,7 @@ mod tests {
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
-        assert!(var.serialize_len() == data.len());
+        assert!(var.serialize_len().unwrap() == data.len());
     }
 
     #[test]
@@ -353,7 +361,7 @@ mod tests {
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
-        assert!(var.serialize_len() == data.len());
+        assert!(var.serialize_len().unwrap() == data.len());
     }
 
     #[test]
@@ -362,7 +370,7 @@ mod tests {
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
-        assert!(var.serialize_len() == data.len());
+        assert!(var.serialize_len().unwrap() == data.len());
     }
 
     #[test]
@@ -374,6 +382,6 @@ mod tests {
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
-        assert!(var.serialize_len() == data.len());
+        assert!(var.serialize_len().unwrap() == data.len());
     }
 }

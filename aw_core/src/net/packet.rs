@@ -147,19 +147,26 @@ impl AWPacket {
     }
 
     /// The expected length of the packet after serialization.
-    fn serialize_len(&self) -> usize {
+    fn serialize_len(&self) -> Result<usize, String> {
         let mut size = TagHeader::length();
 
         for var in &self.vars {
-            size += var.serialize_len();
+            let var_serialized_len = var.serialize_len().ok_or(
+                "serialize_len calculation failed because a var was too large".to_string(),
+            )?;
+
+            size = size.checked_add(var_serialized_len).ok_or(
+                "serialize_len calculation failed because the result would have been too large"
+                    .to_string(),
+            )?;
         }
 
-        size
+        Ok(size)
     }
 
     /// Encode the given packet.
     pub fn serialize(&self) -> Result<Vec<u8>, String> {
-        let serialize_len = self.serialize_len();
+        let serialize_len = self.serialize_len()?;
 
         if serialize_len > u16::MAX.into() {
             return Err(format!("Serializing packet too large: {serialize_len}"));
@@ -189,14 +196,27 @@ impl AWPacket {
         if serialized_bytes.len() > 160 {
             // Serialize the packet and compress it
             let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
-            encoder.write_all(serialized_bytes).unwrap();
+
+            encoder
+                .write_all(serialized_bytes)
+                .map_err(|_| "Failed to write to zlib encoder".to_string())?;
+
             let compressed_bytes = encoder
                 .finish()
                 .map_err(|_| "Failed to compress".to_string())?;
 
+            let serialized_length_usize =
+                compressed_bytes
+                    .len()
+                    .checked_add(TagHeader::length())
+                    .ok_or_else(|| "Serialized length became too large".to_string())?;
+
+            let serialized_length_u16 = u16::try_from(serialized_length_usize)
+                .map_err(|_| "Serialized length became too large to fit in a u16".to_string())?;
+
             // Add a new uncompressed header to the beginning
             let new_header = TagHeader {
-                serialized_length: (compressed_bytes.len() + TagHeader::length()) as u16,
+                serialized_length: serialized_length_u16,
                 header_0: 0,
                 opcode: -1,
                 header_1: 1, // if self.header_1 != 0 { self.header_1 } else { 1 },
@@ -214,11 +234,10 @@ impl AWPacket {
 
     /// Decompress a compressed packet and return its decompressed serialized bytes.
     pub fn decompress(data: &[u8]) -> Result<Vec<u8>, String> {
-        if data.len() < TagHeader::length() {
-            return Err("Data not long enough to do any decompression".to_string());
-        }
+        let compressed_data = data
+            .get(TagHeader::length()..)
+            .ok_or("Data not long enough to do any decompression".to_string())?;
 
-        let compressed_data = &data[TagHeader::length()..];
         let mut decoder = ZlibDecoder::new(compressed_data);
         let mut decompressed_bytes = Vec::<u8>::new();
         match decoder.read_to_end(&mut decompressed_bytes) {
@@ -234,8 +253,14 @@ impl AWPacket {
         let consumed: usize = consumed.try_into().map_err(|why| {
             format!("TagHeader::deserialize consumed too many bytes: {consumed} - {why:?}")
         })?;
-        data = &data[consumed..];
-        total_consumed += consumed;
+
+        data = data
+            .get(consumed..)
+            .ok_or("Not enough data to deserialize".to_string())?;
+
+        total_consumed = total_consumed
+            .checked_add(consumed)
+            .ok_or("Consumed too much data while deserializing".to_string())?;
 
         let mut vars = Vec::<AWPacketVar>::with_capacity(header.var_count as usize);
 
@@ -244,8 +269,13 @@ impl AWPacket {
             let consumed: usize = consumed.try_into().map_err(|why| {
                 format!("AWPacketVar::deserialize consumed too many bytes: {consumed} - {why:?}")
             })?;
-            data = &data[consumed..];
-            total_consumed += consumed;
+            data = data
+                .get(consumed..)
+                .ok_or("Not enough data to deserialize".to_string())?;
+
+            total_consumed = total_consumed
+                .checked_add(consumed)
+                .ok_or("Consumed too much data while deserializing".to_string())?;
 
             vars.push(var);
         }
@@ -309,17 +339,44 @@ impl AWPacketGroup {
         }
     }
     pub fn push(&mut self, packet: AWPacket) -> Result<usize, AWPacket> {
-        let total_len = self.serialize_len() + packet.serialize_len();
-        if total_len < 0x8000 {
-            self.packets.push(packet);
-            Ok(total_len)
-        } else {
-            Err(packet)
+        let packet_serialized_len = match packet.serialize_len() {
+            Ok(len) => len,
+            Err(_) => return Err(packet),
+        };
+
+        let self_serialized_len = match self.serialize_len() {
+            Ok(len) => len,
+            Err(_) => return Err(packet),
+        };
+
+        let total_len = match self_serialized_len.checked_add(packet_serialized_len) {
+            Some(len) => len,
+            None => return Err(packet),
+        };
+
+        if total_len >= 0x8000 {
+            return Err(packet);
         }
+
+        self.packets.push(packet);
+        Ok(total_len)
     }
 
-    pub fn serialize_len(&self) -> usize {
-        self.packets.iter().map(|p| p.serialize_len()).sum()
+    pub fn serialize_len(&self) -> Result<usize, String> {
+        let mut total = 0usize;
+        for p in &self.packets {
+            let packet_serialized_len = p.serialize_len()?;
+
+            total = match total.checked_add(packet_serialized_len) {
+                Some(len) => len,
+                None => return Err(
+                    "serialize_len calculation failed because the result would have been too large"
+                        .to_string(),
+                ),
+            };
+        }
+
+        Ok(total)
     }
 }
 
