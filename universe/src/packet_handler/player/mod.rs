@@ -22,6 +22,9 @@ pub use world::*;
 mod teleport;
 pub use teleport::*;
 
+mod botgram;
+pub use botgram::*;
+
 use crate::{get_conn, get_conn_mut, universe_connection::UniverseConnectionID, UniverseServer};
 use aw_core::*;
 
