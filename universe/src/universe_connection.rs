@@ -6,7 +6,7 @@ use crate::{
     client::ClientInfo,
     player::{GenericPlayer, Player},
     tabs::{WorldListEntry, WorldStatus},
-    world::World,
+    world::{World, WorldServer},
 };
 
 #[derive(Debug)]
@@ -96,6 +96,14 @@ impl UniverseConnection {
 
     pub fn is_bot(&self) -> bool {
         matches!(&self.client, Some(ClientInfo::Player(Player::Bot(_))))
+    }
+
+    pub fn world_server(&self) -> Option<&WorldServer> {
+        self.client.as_ref().and_then(ClientInfo::world_server)
+    }
+
+    pub fn world_server_mut(&mut self) -> Option<&mut WorldServer> {
+        self.client.as_mut().and_then(ClientInfo::world_server_mut)
     }
 }
 

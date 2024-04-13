@@ -10,6 +10,12 @@ pub enum WorldRating {
     X = 4,
 }
 
+impl WorldRating {
+    pub fn from_u8(value: u8) -> Option<Self> {
+        num_traits::FromPrimitive::from_u8(value)
+    }
+}
+
 #[derive(Debug)]
 pub struct World {
     pub name: String,
@@ -22,7 +28,7 @@ pub struct World {
 
 #[derive(Debug)]
 pub struct WorldServer {
-    pub build: i32,
+    pub build: u32,
     pub server_port: u16,
     pub worlds: Vec<World>,
 }

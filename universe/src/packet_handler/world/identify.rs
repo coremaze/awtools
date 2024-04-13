@@ -7,28 +7,81 @@ use crate::{
 };
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
 
+#[derive(Debug)]
+enum IdentifyParamsError {
+    WorldName,
+    Nonce,
+    SessionID,
+    PlayerIP,
+    PlayerPort,
+}
+
+struct IdentifyParams {
+    world_name: String,
+    nonce: Vec<u8>,
+    session_id: u16,
+    player_ip: u32,
+    player_port: u16,
+}
+
+impl TryFrom<&AWPacket> for IdentifyParams {
+    type Error = IdentifyParamsError;
+
+    fn try_from(value: &AWPacket) -> Result<Self, Self::Error> {
+        let world_name = value
+            .get_string(VarID::WorldName)
+            .ok_or(IdentifyParamsError::WorldName)?;
+        let nonce = value
+            .get_data(VarID::WorldUserNonce)
+            .ok_or(IdentifyParamsError::Nonce)?;
+        let session_id = value
+            .get_uint(VarID::SessionID)
+            .and_then(|sid| u16::try_from(sid).ok())
+            .ok_or(IdentifyParamsError::SessionID)?;
+        let player_ip = value
+            .get_uint(VarID::IdentifyUserIP)
+            .ok_or(IdentifyParamsError::PlayerIP)?;
+        let player_port = value
+            .get_uint(VarID::PlayerPort)
+            .and_then(|port| u16::try_from(port).ok())
+            .ok_or(IdentifyParamsError::PlayerPort)?;
+
+        Ok(Self {
+            world_name,
+            nonce,
+            session_id,
+            player_ip,
+            player_port,
+        })
+    }
+}
+
 /// A connection (supposed to be a world server) wants to know information about a player.
 pub fn identify(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let mut p = AWPacket::new(PacketType::Identify);
 
-    let Some(fields) = get_identify_fields(packet) else {
-        return;
+    let params = match IdentifyParams::try_from(packet) {
+        Ok(params) => params,
+        Err(why) => {
+            log::debug!("Could not complete identify: {why:?}");
+            return;
+        }
     };
 
     {
         let conn = get_conn!(server, cid, "identify");
 
-        let Some(ClientInfo::WorldServer(w)) = &conn.client else {
+        let Some(world_server) = conn.world_server() else {
             return;
         };
 
-        if w.get_world(&fields.world_name).is_none() {
+        if world_server.get_world(&params.world_name).is_none() {
             log::info!("Failed to identify player because the world server does not own the world");
             return;
         }
     };
 
-    let rc = identify_player(server, &fields, &mut p);
+    let rc = identify_player(server, &params, &mut p);
 
     p.add_int(VarID::ReasonCode, rc as i32);
     let conn = get_conn!(server, cid, "identify");
@@ -39,58 +92,12 @@ pub fn identify(server: &mut UniverseServer, cid: UniverseConnectionID, packet: 
     regenerate_contact_list_and_mutuals(server, cid);
 }
 
-struct IdentifyFields {
-    world_name: String,
-    nonce: Vec<u8>,
-    session_id: i32,
-    player_ip: u32,
-    player_port: i32,
-}
-
-fn get_identify_fields(packet: &AWPacket) -> Option<IdentifyFields> {
-    let Some(world_name) = packet.get_string(VarID::WorldName) else {
-        log::info!("Failed to identify player because no world name was provided");
-        return None;
-    };
-
-    let Some(nonce) = packet.get_data(VarID::WorldUserNonce) else {
-        log::info!("Failed to identify player because no user nonce was provided");
-        return None;
-    };
-
-    let Some(session_id) = packet.get_int(VarID::SessionID) else {
-        log::info!("Failed to identify player because no session id was provided");
-        return None;
-    };
-
-    let Some(player_ip) = packet.get_uint(VarID::IdentifyUserIP) else {
-        log::info!("Failed to identify player because no user ip was provided");
-        return None;
-    };
-
-    let Some(player_port) = packet.get_int(VarID::PlayerPort) else {
-        log::info!("Failed to identify player because no port was provided");
-        return None;
-    };
-
-    Some(IdentifyFields {
-        world_name,
-        nonce,
-        session_id,
-        player_ip,
-        player_port,
-    })
-}
-
 fn identify_player(
     server: &mut UniverseServer,
-    fields: &IdentifyFields,
+    params: &IdentifyParams,
     response: &mut AWPacket,
 ) -> ReasonCode {
-    let Some(player_cid) = server
-        .connections
-        .get_by_session_id(fields.session_id as u16)
-    else {
+    let Some(player_cid) = server.connections.get_by_session_id(params.session_id) else {
         return ReasonCode::NoSuchSession;
     };
 
@@ -113,16 +120,16 @@ fn identify_player(
         return ReasonCode::NoSuchSession;
     };
 
-    if player_nonce != fields.nonce.as_ref() {
+    if player_nonce != params.nonce.as_ref() {
         log::warn!("World tried to identify a player but did not have the correct nonce");
         return ReasonCode::NoSuchSession;
     }
 
     // Not currently checking IP address or port
-    response.add_string(VarID::WorldName, fields.world_name.clone());
-    response.add_int(VarID::SessionID, fields.session_id);
-    response.add_uint(VarID::IdentifyUserIP, fields.player_ip);
-    response.add_int(VarID::PlayerPort, fields.player_port);
+    response.add_string(VarID::WorldName, params.world_name.clone());
+    response.add_int(VarID::SessionID, params.session_id.into());
+    response.add_uint(VarID::IdentifyUserIP, params.player_ip);
+    response.add_int(VarID::PlayerPort, params.player_port.into());
 
     response.add_uint(VarID::LoginID, player.citizen_id().unwrap_or(0));
     response.add_int(VarID::BrowserBuild, player.base_player().build);
@@ -135,7 +142,7 @@ fn identify_player(
     // Effective privilege controls what rights the World server gives the player.
     response.add_uint(VarID::PrivilegeUserID, effective_privilege);
 
-    player.base_player_mut().world = Some(fields.world_name.clone());
+    player.base_player_mut().world = Some(params.world_name.clone());
 
     // Regenerate the player list becase of possible change in world state
     for cid in server.connections.cids() {

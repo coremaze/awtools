@@ -96,4 +96,18 @@ impl ClientInfo {
             })
             .unwrap_or(0)
     }
+
+    pub fn world_server(&self) -> Option<&WorldServer> {
+        match self {
+            ClientInfo::WorldServer(world_server) => Some(world_server),
+            ClientInfo::Player(_) => None,
+        }
+    }
+
+    pub fn world_server_mut(&mut self) -> Option<&mut WorldServer> {
+        match self {
+            ClientInfo::WorldServer(world_server) => Some(world_server),
+            ClientInfo::Player(_) => None,
+        }
+    }
 }
