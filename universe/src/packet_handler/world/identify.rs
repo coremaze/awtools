@@ -60,7 +60,7 @@ impl TryFrom<&AWPacket> for IdentifyParams {
 pub fn identify(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let mut p = AWPacket::new(PacketType::Identify);
 
-    let params = match IdentifyParams::try_from(packet) {
+    let mut params = match IdentifyParams::try_from(packet) {
         Ok(params) => params,
         Err(why) => {
             log::debug!("Could not complete identify: {why:?}");
@@ -75,9 +75,17 @@ pub fn identify(server: &mut UniverseServer, cid: UniverseConnectionID, packet: 
             return;
         };
 
-        if world_server.get_world(&params.world_name).is_none() {
-            log::info!("Failed to identify player because the world server does not own the world");
-            return;
+        match world_server.get_world(&params.world_name) {
+            Some(world) => {
+                // Correct the identify params in case the client got capitalization wrong
+                params.world_name = world.name.clone();
+            }
+            None => {
+                log::info!(
+                    "Failed to identify player because the world server does not own the world"
+                );
+                return;
+            }
         }
     };
 
