@@ -13,8 +13,8 @@ pub use contact::*;
 mod telegram;
 pub use telegram::*;
 
-mod attribute;
-pub use attribute::*;
+mod attribute_change;
+pub use attribute_change::attribute_change;
 
 mod world;
 pub use world::*;
@@ -23,7 +23,7 @@ mod teleport;
 pub use teleport::*;
 
 mod botgram;
-pub use botgram::*;
+pub use botgram::botgram;
 
 use crate::{get_conn, get_conn_mut, universe_connection::UniverseConnectionID, UniverseServer};
 use aw_core::*;
