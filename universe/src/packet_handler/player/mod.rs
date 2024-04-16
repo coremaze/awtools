@@ -25,6 +25,9 @@ pub use teleport::*;
 mod botgram;
 pub use botgram::botgram;
 
+mod immigrate;
+pub use immigrate::immigrate;
+
 use crate::{get_conn, get_conn_mut, universe_connection::UniverseConnectionID, UniverseServer};
 use aw_core::*;
 
@@ -60,4 +63,38 @@ pub fn user_list(server: &mut UniverseServer, cid: UniverseConnectionID, packet:
     );
 
     current_list.send_list_starting_from(conn, continuation_id);
+}
+
+fn check_valid_name(mut name: &str, is_tourist: bool) -> Result<(), ReasonCode> {
+    if is_tourist {
+        // Tourist names must start and end with quotes
+        if !name.starts_with('"') || !name.ends_with('"') {
+            return Err(ReasonCode::NoSuchCitizen);
+        }
+
+        // Strip quotes to continue check
+        let name_start = 1;
+        let name_end = name.len().checked_sub(1).ok_or(ReasonCode::NameTooShort)?;
+        name = name
+            .get(name_start..name_end)
+            .ok_or(ReasonCode::NameTooShort)?;
+    }
+
+    if name.len() < 2 {
+        return Err(ReasonCode::NameTooShort);
+    }
+
+    if name.ends_with(' ') {
+        return Err(ReasonCode::NameEndsWithBlank);
+    }
+
+    if name.starts_with(' ') {
+        return Err(ReasonCode::NameContainsInvalidBlank);
+    }
+
+    if !name.chars().all(char::is_alphanumeric) {
+        return Err(ReasonCode::NameContainsNonalphanumericChar);
+    }
+
+    Ok(())
 }
