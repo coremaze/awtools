@@ -10,8 +10,11 @@ pub use license::*;
 mod contact;
 pub use contact::*;
 
-mod telegram;
-pub use telegram::*;
+mod telegram_send;
+pub use telegram_send::telegram_send;
+
+mod telegram_get;
+pub use telegram_get::telegram_get;
 
 mod attribute_change;
 pub use attribute_change::attribute_change;
