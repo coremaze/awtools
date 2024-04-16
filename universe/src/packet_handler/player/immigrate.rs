@@ -16,12 +16,31 @@ struct ImmigrateParams {
     email: String,
 }
 
-impl ImmigrateParams {
-    fn from_packet(packet: &AWPacket) -> Option<Self> {
-        Some(ImmigrateParams {
-            name: packet.get_string(VarID::CitizenName)?,
-            password: packet.get_string(VarID::CitizenPassword)?,
-            email: packet.get_string(VarID::CitizenEmail)?,
+#[derive(Debug)]
+enum ImmigrateParamsError {
+    Name,
+    Password,
+    Email,
+}
+
+impl TryFrom<&AWPacket> for ImmigrateParams {
+    type Error = ImmigrateParamsError;
+
+    fn try_from(value: &AWPacket) -> Result<Self, Self::Error> {
+        let name = value
+            .get_string(VarID::CitizenName)
+            .ok_or(ImmigrateParamsError::Name)?;
+        let password = value
+            .get_string(VarID::CitizenPassword)
+            .ok_or(ImmigrateParamsError::Password)?;
+        let email = value
+            .get_string(VarID::CitizenEmail)
+            .ok_or(ImmigrateParamsError::Email)?;
+
+        Ok(Self {
+            name,
+            password,
+            email,
         })
     }
 }
@@ -32,8 +51,12 @@ pub fn immigrate(server: &UniverseServer, cid: UniverseConnectionID, packet: &AW
 
     log::trace!("immigrate");
 
-    let Some(params) = ImmigrateParams::from_packet(packet) else {
-        return;
+    let params = match ImmigrateParams::try_from(packet) {
+        Ok(params) => params,
+        Err(why) => {
+            log::debug!("Could not complete immigrate: {why:?}");
+            return;
+        }
     };
 
     log::trace!("immigrate params {params:?}");
