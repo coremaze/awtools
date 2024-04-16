@@ -579,7 +579,7 @@ pub enum PacketType {
     WorldStop = 100,
     Tunnel = 101,
     WorldStatsUpdate = 102,
-    Join = 103,
+    JoinRequest = 103,
     JoinReply = 104,
     Xfer = 105,
     XferReply = 106,

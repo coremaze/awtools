@@ -260,7 +260,7 @@ impl UniverseServer {
             PacketType::SetAFK => packet_handler::set_afk(self, cid, packet),
             PacketType::ContactConfirm => packet_handler::contact_confirm(self, cid, packet),
             PacketType::ContactList => packet_handler::contact_list(self, cid, packet),
-            PacketType::Join => packet_handler::join(self, cid, packet),
+            PacketType::JoinRequest => packet_handler::join_request(self, cid, packet),
             PacketType::JoinReply => packet_handler::join_reply(self, cid, packet),
             PacketType::Botgram => packet_handler::botgram(self, cid, packet),
             PacketType::Immigrate => packet_handler::immigrate(self, cid, packet),

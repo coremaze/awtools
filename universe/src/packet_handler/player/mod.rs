@@ -22,8 +22,8 @@ pub use attribute_change::attribute_change;
 mod world;
 pub use world::*;
 
-mod teleport;
-pub use teleport::*;
+mod join;
+pub use join::*;
 
 mod botgram;
 pub use botgram::botgram;
