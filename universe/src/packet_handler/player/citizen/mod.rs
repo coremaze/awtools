@@ -16,6 +16,9 @@ pub use citizen_change::citizen_change;
 mod citizen_add;
 pub use citizen_add::citizen_add;
 
+mod citizen_delete;
+pub use citizen_delete::citizen_delete;
+
 use crate::{database::citizen::CitizenQuery, UniverseConnection};
 use aw_core::*;
 use aw_db::DatabaseResult;

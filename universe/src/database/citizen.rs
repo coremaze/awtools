@@ -35,6 +35,7 @@ pub trait CitizenDB {
     fn citizen_add(&self, citizen: &CitizenQuery) -> DatabaseResult<()>;
     fn citizen_add_next(&self, citizen: CitizenQuery) -> DatabaseResult<()>;
     fn citizen_change(&self, citizen: &CitizenQuery) -> DatabaseResult<()>;
+    fn citizen_delete(&self, citizen_id: u32) -> DatabaseResult<()>;
 }
 
 impl CitizenDB for UniverseDatabase {
@@ -295,6 +296,23 @@ impl CitizenDB for UniverseDatabase {
                 citizen.id
             },
         );
+
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
+    }
+
+    fn citizen_delete(&self, citizen_id: u32) -> DatabaseResult<()> {
+        let r = self.db.exec(
+            r"DELETE FROM awu_citizen WHERE ID=?;",
+            aw_params! {
+                citizen_id
+            },
+        );
+
+        // Supposed to make AUTO_INCREMENT decrease by 1 so the ID can be reused,
+        // but due to different keywords in SQLite we are holding off on that for now
 
         match r {
             DatabaseResult::Ok(_) => DatabaseResult::Ok(()),

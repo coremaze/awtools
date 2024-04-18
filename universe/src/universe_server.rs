@@ -271,6 +271,7 @@ impl UniverseServer {
             PacketType::EjectNext => packet_handler::eject_next(self, cid, packet),
             PacketType::EjectPrev => packet_handler::eject_prev(self, cid, packet),
             PacketType::EjectDelete => packet_handler::eject_delete(self, cid, packet),
+            PacketType::CitizenDelete => packet_handler::citizen_delete(self, cid, packet),
             _ => {
                 log::warn!("Unhandled packet {packet:?}");
             }
