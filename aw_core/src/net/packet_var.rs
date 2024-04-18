@@ -151,7 +151,7 @@ pub enum VarID {
     WorldUsers = 201,
     BrowserVersion = 211,
     EjectionAddress = 216,
-    Ejection217 = 217,
+    EjectionCreation = 217,
     EjectionExpiration = 218,
     EjectionComment = 219,
     CAVEnabled = 226,

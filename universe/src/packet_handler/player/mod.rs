@@ -40,6 +40,9 @@ pub use heartbeat::heartbeat;
 mod user_list;
 pub use user_list::user_list;
 
+mod eject;
+pub use eject::*;
+
 use aw_core::*;
 
 fn check_valid_name(mut name: &str, is_tourist: bool) -> Result<(), ReasonCode> {

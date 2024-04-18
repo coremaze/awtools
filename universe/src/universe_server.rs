@@ -266,6 +266,11 @@ impl UniverseServer {
             PacketType::Immigrate => packet_handler::immigrate(self, cid, packet),
             PacketType::ContactDelete => packet_handler::contact_delete(self, cid, packet),
             PacketType::ContactChange => packet_handler::contact_change(self, cid, packet),
+            PacketType::EjectAdd => packet_handler::eject_add(self, cid, packet),
+            PacketType::EjectLookup => packet_handler::eject_lookup(self, cid, packet),
+            PacketType::EjectNext => packet_handler::eject_next(self, cid, packet),
+            PacketType::EjectPrev => packet_handler::eject_prev(self, cid, packet),
+            PacketType::EjectDelete => packet_handler::eject_delete(self, cid, packet),
             _ => {
                 log::warn!("Unhandled packet {packet:?}");
             }
