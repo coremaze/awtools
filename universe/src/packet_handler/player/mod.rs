@@ -19,8 +19,11 @@ pub use telegram_get::telegram_get;
 mod attribute_change;
 pub use attribute_change::attribute_change;
 
-mod world;
-pub use world::*;
+mod world_list;
+pub use world_list::world_list;
+
+mod world_lookup;
+pub use world_lookup::world_lookup;
 
 mod join;
 pub use join::*;
