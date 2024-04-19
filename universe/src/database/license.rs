@@ -31,6 +31,7 @@ pub trait LicenseDB {
     fn license_next(&self, name: &str) -> DatabaseResult<Option<LicenseQuery>>;
     fn license_prev(&self, name: &str) -> DatabaseResult<Option<LicenseQuery>>;
     fn license_change(&self, lic: &LicenseQuery) -> DatabaseResult<()>;
+    fn license_delete(&self, name: &str) -> DatabaseResult<()>;
 }
 
 impl LicenseDB for UniverseDatabase {
@@ -205,6 +206,20 @@ impl LicenseDB for UniverseDatabase {
                 &lic.email,
                 &lic.comment,
                 &lic.name
+            },
+        );
+
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
+    }
+
+    fn license_delete(&self, name: &str) -> DatabaseResult<()> {
+        let r = self.db.exec(
+            r"DELETE FROM awu_license WHERE Name=?;",
+            aw_params! {
+                name
             },
         );
 

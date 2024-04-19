@@ -10,6 +10,9 @@ pub use license_next::license_next;
 mod license_prev;
 pub use license_prev::license_prev;
 
+mod license_delete;
+pub use license_delete::license_delete;
+
 use crate::{
     database::{license::LicenseQuery, LicenseDB, UniverseDatabase},
     get_conn,
