@@ -16,6 +16,7 @@ pub mod telegram;
 pub mod universe_connection;
 pub mod world;
 pub use universe_connection::UniverseConnection;
+pub mod ejection;
 pub mod player;
 pub mod timestamp;
 

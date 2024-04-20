@@ -1,3 +1,5 @@
+use std::net::IpAddr;
+
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
 
 use crate::{
@@ -40,9 +42,8 @@ impl TryFrom<&AWPacket> for EjectAddParams {
     }
 }
 
-pub fn eject_add(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
+pub fn eject_add(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let conn = get_conn!(server, cid, "eject_add");
-
     if !conn.has_admin_permissions() {
         log::trace!("eject_add failed because the client did not have permission");
         return;
@@ -64,12 +65,28 @@ pub fn eject_add(server: &UniverseServer, cid: UniverseConnectionID, packet: &AW
         creation,
         &params.comment,
     ) {
-        aw_db::DatabaseResult::Ok(_) => ReasonCode::Success,
+        aw_db::DatabaseResult::Ok(_) => {
+            // Remove the ejected connection if it is present.
+            if creation > params.expiration {
+                for (_id, conn) in server.connections.iter_mut() {
+                    let IpAddr::V4(ipv4) = conn.addr().ip() else {
+                        continue;
+                    };
+                    let ip_u32 = u32::from_le_bytes(ipv4.octets());
+
+                    if ip_u32 == params.address {
+                        conn.disconnect();
+                    }
+                }
+            }
+            ReasonCode::Success
+        }
         aw_db::DatabaseResult::DatabaseError => ReasonCode::DatabaseError,
     };
 
     let mut response = AWPacket::new(PacketType::EjectResult);
     response.add_uint(VarID::ReasonCode, rc.into());
 
+    let conn = get_conn!(server, cid, "eject_add");
     conn.send(response);
 }

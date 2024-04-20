@@ -4,6 +4,7 @@ use super::check_valid_name;
 use crate::{
     client::ClientInfo,
     database::{citizen::CitizenQuery, CitizenDB},
+    ejection::is_connection_ejected,
     get_conn_mut,
     player::{Bot, Citizen, GenericPlayer, Player},
     tabs::{regenerate_contact_list_and_mutuals, regenerate_player_list, regenerate_world_list},
@@ -88,6 +89,14 @@ fn validate_login(
         log::error!("validate_login was given an invalid CID");
         return Err(ReasonCode::NoSuchCitizen);
     };
+
+    let Some(is_ejected) = is_connection_ejected(&server.database, conn) else {
+        return Err(ReasonCode::DatabaseError);
+    };
+
+    if is_ejected {
+        return Err(ReasonCode::Ejected);
+    }
 
     let ip = conn.addr().ip();
     let login_type: LoginType = {

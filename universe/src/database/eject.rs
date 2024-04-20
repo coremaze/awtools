@@ -15,6 +15,7 @@ pub trait EjectDB {
     fn ejection_next(&self, address: u32) -> DatabaseResult<Option<EjectionQuery>>;
     fn ejection_prev(&self, address: u32) -> DatabaseResult<Option<EjectionQuery>>;
     fn ejection_delete(&self, address: u32) -> DatabaseResult<()>;
+    fn ejection_clean(&self, timestamp: u32) -> DatabaseResult<()>;
 }
 
 pub struct EjectionQuery {
@@ -177,6 +178,20 @@ impl EjectDB for UniverseDatabase {
             r"DELETE FROM awu_eject WHERE Address=?;",
             aw_params! {
                 address
+            },
+        );
+
+        match r {
+            DatabaseResult::Ok(_) => DatabaseResult::Ok(()),
+            DatabaseResult::DatabaseError => DatabaseResult::DatabaseError,
+        }
+    }
+
+    fn ejection_clean(&self, timestamp: u32) -> DatabaseResult<()> {
+        let r = self.db.exec(
+            r"DELETE FROM awu_eject WHERE Expiration>0 AND Expiration<?;",
+            aw_params! {
+                timestamp
             },
         );
 
