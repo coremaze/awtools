@@ -29,10 +29,6 @@ fn try_citizen_lookup(
     response: &mut AWPacket,
     how: impl Fn() -> DatabaseResult<Option<CitizenQuery>>,
 ) -> ReasonCode {
-    if !conn.has_admin_permissions() {
-        return ReasonCode::Unauthorized;
-    }
-
     let Some(player_citizen) = conn.client.as_ref().and_then(|x| x.citizen()) else {
         // The user attempting to do this should be a citizen
         return ReasonCode::Unauthorized;

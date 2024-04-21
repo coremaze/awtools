@@ -39,7 +39,6 @@ pub fn citizen_lookup_by_number(
         }
     };
 
-    let _rc = ReasonCode::Success;
     let mut response = AWPacket::new(PacketType::CitizenInfo);
 
     let conn = get_conn!(server, cid, "citizen_lookup_by_number");
