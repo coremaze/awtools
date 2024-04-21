@@ -21,6 +21,8 @@ pub struct UniverseConfig {
     pub user_list: bool,
     pub allow_citizen_changes: bool,
     pub allow_immigration: bool,
+    pub connection_limit: u16,
+    pub player_limit: u16,
 }
 
 impl Config {
@@ -65,6 +67,8 @@ impl Default for Config {
                 user_list: true,
                 allow_citizen_changes: true,
                 allow_immigration: true,
+                connection_limit: 200,
+                player_limit: 100,
             },
             sql: DatabaseConfig {
                 database_type: DatabaseType::Internal,

@@ -13,7 +13,8 @@ use crate::{
 pub struct UniverseConnection {
     connection: AWConnection,
     pub rsa: AWCryptRSA,
-    last_heartbeat: Instant,
+    pub last_heartbeat_sent: Instant,
+    pub last_heartbeat_received: Instant,
     /// A connection may not have one of these yet if they just connected.
     pub client: Option<ClientInfo>,
 }
@@ -23,7 +24,8 @@ impl UniverseConnection {
         Self {
             connection,
             rsa: AWCryptRSA::new(),
-            last_heartbeat: Instant::now(),
+            last_heartbeat_sent: Instant::now(),
+            last_heartbeat_received: Instant::now(),
             client: None,
         }
     }
@@ -242,14 +244,14 @@ impl UniverseConnections {
     pub fn send_heartbeats(&mut self) {
         for conn in self.connections.values_mut() {
             let now = Instant::now();
-            let time_since_heartbeat = now.duration_since(conn.last_heartbeat);
+            let time_since_heartbeat = now.duration_since(conn.last_heartbeat_sent);
 
             // 30 seconds between each heartbeat
             if time_since_heartbeat.as_secs() >= 30 {
                 log::debug!("Sending heartbeat to {}", conn.connection.addr().ip());
                 let packet = AWPacket::new(PacketType::Heartbeat);
                 conn.connection.send(packet);
-                conn.last_heartbeat = now;
+                conn.last_heartbeat_sent = now;
             }
         }
     }

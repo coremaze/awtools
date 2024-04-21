@@ -11,7 +11,6 @@ use crate::{
     universe_license::LicenseGenerator,
     UniverseConnection,
 };
-use std::sync::Arc;
 use std::{
     collections::HashMap,
     net::{SocketAddrV4, TcpListener},
@@ -21,6 +20,7 @@ use std::{
     thread::sleep,
     time::Duration,
 };
+use std::{sync::Arc, time::Instant};
 
 pub struct UniverseServer {
     pub config: configuration::UniverseConfig,
@@ -102,6 +102,13 @@ impl UniverseServer {
     }
 
     fn accept_new_clients(&mut self) {
+        // Don't accept any new clients if there are too many connected
+        let currently_connected = self.connections.iter().len();
+        let limit = self.config.connection_limit;
+        if currently_connected >= usize::from(limit) {
+            return;
+        }
+
         while let Ok((stream, addr)) = self.listener.accept() {
             let proto = match AWProtocol::new(stream) {
                 Ok(proto) => proto,
@@ -140,6 +147,25 @@ impl UniverseServer {
     }
 
     pub fn remove_dead_clients(&mut self) {
+        // Remove clients which have not sent heartbeats in too long
+        let now = Instant::now();
+        for (_id, conn) in self.connections.iter_mut() {
+            let Some(since) = now
+                .checked_duration_since(conn.last_heartbeat_received)
+                .map(|duration| duration.as_secs())
+            else {
+                continue;
+            };
+
+            if since >= 120 {
+                log::info!(
+                    "Disconnecting {:?} because it has been {since} seconds since last heartbeat.",
+                    conn.addr(),
+                );
+                conn.disconnect();
+            }
+        }
+
         let disconnected_conn_ids = self.connections.disconnected_cids();
         if disconnected_conn_ids.is_empty() {
             return;

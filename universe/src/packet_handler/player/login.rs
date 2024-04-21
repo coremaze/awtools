@@ -123,6 +123,7 @@ fn validate_human(
     packet: &AWPacket,
     response: &mut AWPacket,
 ) -> Result<Player, ReasonCode> {
+    check_server_full(server)?;
     let username = packet
         .get_string(VarID::LoginUsername)
         .ok_or(ReasonCode::NoSuchCitizen)?;
@@ -505,4 +506,18 @@ fn add_license_data_to_packet(
             .license_generator
             .create_license_data(browser_build.unwrap_or(0)),
     );
+}
+
+fn check_server_full(server: &UniverseServer) -> Result<(), ReasonCode> {
+    let player_count = server
+        .connections
+        .iter()
+        .filter(|(_id, conn)| conn.is_player() && !conn.is_bot())
+        .count();
+
+    if player_count >= usize::from(server.config.player_limit) {
+        Err(ReasonCode::UniverseFull)
+    } else {
+        Ok(())
+    }
 }
