@@ -3,6 +3,7 @@ use crate::{
     database::{citizen::CitizenQuery, CitizenDB, UniverseDatabase},
     get_conn,
     player::Player,
+    timestamp::unix_epoch_timestamp_u32,
     universe_connection::UniverseConnectionID,
     UniverseConnection, UniverseServer,
 };
@@ -72,7 +73,7 @@ fn try_add_citizen(
         priv_pass: String::default(),
         comment: String::default(),
         url: String::default(),
-        immigration: 0,
+        immigration: unix_epoch_timestamp_u32(),
         expiration,
         last_login: 0,
         last_address: 0,
