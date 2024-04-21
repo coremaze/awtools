@@ -3,12 +3,13 @@ use std::net::IpAddr;
 use super::check_valid_name;
 use crate::{
     client::ClientInfo,
-    database::{citizen::CitizenQuery, CitizenDB},
+    database::{citizen::CitizenQuery, CitizenDB, UniverseDatabase},
     ejection::is_connection_ejected,
     get_conn_mut,
     player::{Bot, Citizen, GenericPlayer, Player},
     tabs::{regenerate_contact_list_and_mutuals, regenerate_player_list, regenerate_world_list},
     telegram::send_telegram_update_available,
+    timestamp::unix_epoch_timestamp_u32,
     universe_connection::UniverseConnectionID,
     UniverseServer,
 };
@@ -176,6 +177,8 @@ fn validate_human(
         response.add_uint(VarID::CitizenNumber, cit.id);
         response.add_uint(VarID::CitizenPrivacy, cit.privacy);
         response.add_uint(VarID::CAVEnabled, cit.cav_enabled);
+
+        update_last_login_info(&server.database, &ip, cit.id);
 
         Ok(Player::Citizen(Citizen {
             cit_id: cit.id,
@@ -519,5 +522,32 @@ fn check_server_full(server: &UniverseServer) -> Result<(), ReasonCode> {
         Err(ReasonCode::UniverseFull)
     } else {
         Ok(())
+    }
+}
+
+fn update_last_login_info(database: &UniverseDatabase, address: &IpAddr, cit_id: u32) {
+    let IpAddr::V4(ipv4) = address else {
+        return;
+    };
+
+    let ip_u32 = u32::from_le_bytes(ipv4.octets());
+
+    let mut cit_query = match database.citizen_by_number(cit_id) {
+        DatabaseResult::Ok(Some(q)) => q,
+        DatabaseResult::Ok(None) => {
+            log::debug!("Can't get last login info because cit id {cit_id} does not exist.");
+            return;
+        }
+        DatabaseResult::DatabaseError => {
+            log::debug!("Can't get last login info due to database failure");
+            return;
+        }
+    };
+
+    cit_query.last_address = ip_u32;
+    cit_query.last_login = unix_epoch_timestamp_u32();
+
+    if let DatabaseResult::DatabaseError = database.citizen_change(&cit_query) {
+        log::debug!("Can't update last login info due to database failure");
     }
 }
