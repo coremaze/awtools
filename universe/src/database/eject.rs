@@ -127,7 +127,7 @@ impl EjectDB for UniverseDatabase {
 
     fn ejection_next(&self, address: u32) -> DatabaseResult<Option<EjectionQuery>> {
         let r = self.db.exec(
-            r"SELECT * FROM awu_eject WHERE Address>? ORDER BY Address;",
+            r"SELECT * FROM awu_eject WHERE Address>? ORDER BY Address LIMIT 1;",
             aw_params! {
                 address
             },
@@ -151,7 +151,7 @@ impl EjectDB for UniverseDatabase {
 
     fn ejection_prev(&self, address: u32) -> DatabaseResult<Option<EjectionQuery>> {
         let r = self.db.exec(
-            r"SELECT * FROM awu_eject WHERE Address<? ORDER BY Address DESC;",
+            r"SELECT * FROM awu_eject WHERE Address<? ORDER BY Address DESC LIMIT 1;",
             aw_params! {
                 address
             },
