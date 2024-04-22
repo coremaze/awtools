@@ -1,10 +1,8 @@
-use std::net::IpAddr;
-
 use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
 
 use crate::{
-    database::EjectDB, get_conn, timestamp::unix_epoch_timestamp_u32,
-    universe_connection::UniverseConnectionID, UniverseServer,
+    database::EjectDB, ejection::is_connection_ejected, get_conn,
+    timestamp::unix_epoch_timestamp_u32, universe_connection::UniverseConnectionID, UniverseServer,
 };
 
 struct EjectAddParams {
@@ -67,16 +65,11 @@ pub fn eject_add(server: &mut UniverseServer, cid: UniverseConnectionID, packet:
     ) {
         aw_db::DatabaseResult::Ok(_) => {
             // Remove the ejected connection if it is present.
-            if creation > params.expiration {
-                for (_id, conn) in server.connections.iter_mut() {
-                    let IpAddr::V4(ipv4) = conn.addr().ip() else {
-                        continue;
-                    };
-                    let ip_u32 = u32::from_le_bytes(ipv4.octets());
-
-                    if ip_u32 == params.address {
-                        conn.disconnect();
-                    }
+            for (_id, conn) in server.connections.iter_mut() {
+                match is_connection_ejected(&server.database, conn) {
+                    Some(true) => conn.disconnect(),
+                    Some(false) => log::trace!("New ejection is not logged in"),
+                    None => log::debug!("Failed to check if client is ejected"),
                 }
             }
             ReasonCode::Success

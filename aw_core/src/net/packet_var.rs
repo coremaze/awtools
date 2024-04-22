@@ -37,7 +37,7 @@ pub enum VarID {
     AttributeMinimumBrowser = 3,
     AttributeLatestBrowser = 4,
     AttributeUniverseBuild = 5,
-    AttributeCitizenChanges = 6,
+    AttributeCitizenChanges = 6, // Also VolumeSerial
     AttributeUnknownBilling7 = 7,
     AttributeBillingMethod = 8,
     AttributeBillingUnknown9 = 9,

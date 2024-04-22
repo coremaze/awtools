@@ -22,6 +22,7 @@ pub struct GenericPlayer {
     pub world: Option<String>,
     pub ip: IpAddr,
     pub afk: bool,
+    pub serial: Option<u32>,
 
     pub tabs: Tabs,
 }

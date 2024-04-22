@@ -62,6 +62,22 @@ pub fn login(server: &mut UniverseServer, cid: UniverseConnectionID, packet: &AW
     let conn = get_conn_mut!(server, cid, "login");
     conn.client = new_clientinfo;
 
+    // This needs to be done after the connection's client info is created
+    // because ejections can be based on the user's serial number,
+    // which is parsed out of the login packet and stored in the client info
+    match is_connection_ejected(&server.database, conn) {
+        Some(true) => {
+            conn.disconnect();
+            log::info!(
+                "Preventing {:?} from logging in because they are ejected",
+                conn.addr().ip()
+            );
+            return;
+        }
+        Some(false) => {}
+        None => log::warn!("Cannot determine whether client is ejected"),
+    }
+
     response.add_int(VarID::ReasonCode, rc as i32);
     conn.send(response);
 
@@ -90,14 +106,6 @@ fn validate_login(
         log::error!("validate_login was given an invalid CID");
         return Err(ReasonCode::NoSuchCitizen);
     };
-
-    let Some(is_ejected) = is_connection_ejected(&server.database, conn) else {
-        return Err(ReasonCode::DatabaseError);
-    };
-
-    if is_ejected {
-        return Err(ReasonCode::Ejected);
-    }
 
     let ip = conn.addr().ip();
     let login_type: LoginType = {
@@ -134,6 +142,10 @@ fn validate_human(
     let browser_build = packet
         .get_int(VarID::BrowserBuild)
         .ok_or(ReasonCode::NoSuchCitizen)?;
+    let serial = packet.get_uint(VarID::AttributeCitizenChanges);
+    if let Some(serial) = serial {
+        log::trace!("User logging in with serial {serial:X}");
+    }
 
     // A user is a tourist if they have quotes around their name
     if username.starts_with('"') {
@@ -148,6 +160,7 @@ fn validate_human(
             world: None,
             ip,
             afk: false,
+            serial,
             tabs: Default::default(),
         }))
     } else {
@@ -191,6 +204,7 @@ fn validate_human(
                 world: None,
                 ip,
                 afk: false,
+                serial,
                 tabs: Default::default(),
             },
         }))
@@ -203,6 +217,8 @@ fn validate_bot(
     packet: &AWPacket,
     response: &mut AWPacket,
 ) -> Result<Player, ReasonCode> {
+    let serial = packet.get_uint(VarID::AttributeCitizenChanges);
+
     // Build is typically much lower for SDK than for browsers
     let build = packet
         .get_int(VarID::BrowserBuild)
@@ -293,6 +309,7 @@ fn validate_bot(
             world: None,
             ip,
             afk: false,
+            serial,
             tabs: Default::default(),
         },
     }))
