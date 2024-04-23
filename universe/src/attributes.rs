@@ -137,6 +137,38 @@ pub fn send_attributes(conn: &UniverseConnection, database: &UniverseDatabase) {
             .to_string(),
     );
 
+    packet.add_string(
+        VarID::AttributePAVObjectPath,
+        attribs
+            .get(&Attribute::PAVObjectPath)
+            .unwrap_or(&String::new())
+            .to_string(),
+    );
+
+    packet.add_data(
+        VarID::AttributePAVObjectPasswordObfuscated,
+        attribs
+            .get(&Attribute::PAVObjectPasswordObfuscated)
+            .unwrap_or(&String::new())
+            .as_bytes()
+            .to_vec(),
+    );
+
+    packet.add_string(
+        VarID::AttributeTextureAndSeqObjectPath,
+        attribs
+            .get(&Attribute::TextureAndSeqObjectPath)
+            .unwrap_or(&String::new())
+            .to_string(),
+    );
+    packet.add_string(
+        VarID::AttributeObjectRefresh,
+        attribs
+            .get(&Attribute::ObjectRefresh)
+            .unwrap_or(&String::new())
+            .to_string(),
+    );
+
     conn.send(packet);
 }
 

@@ -34,6 +34,8 @@ pub enum Attribute {
     MailCommand = 21,
     PAVObjectPath = 22,
     TextureAndSeqObjectPath = 23,
+    ObjectRefresh = 24,
+    PAVObjectPasswordObfuscated = 25,
 }
 
 pub trait AttribDB {
