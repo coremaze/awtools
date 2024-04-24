@@ -1,5 +1,5 @@
 //! Packet (de)serialization for AW
-use crate::net::packet_var::{AWPacketVar, VarID};
+use crate::net::packet_var::AWPacketVar;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
@@ -47,7 +47,8 @@ impl AWPacket {
     }
 
     /// Get a variable from a packet.
-    pub fn get_var(&self, var_id: VarID) -> Option<&AWPacketVar> {
+    pub fn get_var(&self, var_id: impl Into<u16>) -> Option<&AWPacketVar> {
+        let var_id: u16 = var_id.into();
         self.vars.iter().find(|&var| var.get_var_id() == var_id)
     }
 
@@ -55,11 +56,12 @@ impl AWPacket {
         &self.vars
     }
 
-    pub fn add_byte(&mut self, id: VarID, value: u8) {
-        self.add_var(AWPacketVar::Byte(id, value));
+    pub fn add_byte(&mut self, id: impl Into<u16>, value: u8) {
+        self.add_var(AWPacketVar::Byte(id.into(), value));
     }
 
-    pub fn get_byte(&self, var_id: VarID) -> Option<u8> {
+    pub fn get_byte(&self, var_id: impl Into<u16>) -> Option<u8> {
+        let var_id: u16 = var_id.into();
         for var in &self.vars {
             match var {
                 AWPacketVar::Byte(id, x) if *id == var_id => return Some(*x),
@@ -70,11 +72,12 @@ impl AWPacket {
         None
     }
 
-    pub fn add_int(&mut self, id: VarID, value: i32) {
-        self.add_var(AWPacketVar::Int(id, value));
+    pub fn add_int(&mut self, id: impl Into<u16>, value: i32) {
+        self.add_var(AWPacketVar::Int(id.into(), value));
     }
 
-    pub fn get_int(&self, var_id: VarID) -> Option<i32> {
+    pub fn get_int(&self, var_id: impl Into<u16>) -> Option<i32> {
+        let var_id: u16 = var_id.into();
         for var in &self.vars {
             match var {
                 AWPacketVar::Int(id, x) if *id == var_id => return Some(*x),
@@ -85,12 +88,13 @@ impl AWPacket {
         None
     }
 
-    pub fn add_uint(&mut self, id: VarID, value: u32) {
-        self.add_var(AWPacketVar::Uint(id, value));
+    pub fn add_uint(&mut self, id: impl Into<u16>, value: u32) {
+        self.add_var(AWPacketVar::Uint(id.into(), value));
     }
 
     // Convenience conversion to u32
-    pub fn get_uint(&self, var_id: VarID) -> Option<u32> {
+    pub fn get_uint(&self, var_id: impl Into<u16>) -> Option<u32> {
+        let var_id: u16 = var_id.into();
         for var in &self.vars {
             match var {
                 AWPacketVar::Int(id, x) if *id == var_id => return Some(*x as u32),
@@ -101,11 +105,12 @@ impl AWPacket {
         None
     }
 
-    pub fn add_float(&mut self, id: VarID, value: f32) {
-        self.add_var(AWPacketVar::Float(id, value));
+    pub fn add_float(&mut self, id: impl Into<u16>, value: f32) {
+        self.add_var(AWPacketVar::Float(id.into(), value));
     }
 
-    pub fn get_float(&self, var_id: VarID) -> Option<f32> {
+    pub fn get_float(&self, var_id: impl Into<u16>) -> Option<f32> {
+        let var_id: u16 = var_id.into();
         for var in &self.vars {
             match var {
                 AWPacketVar::Float(id, x) if *id == var_id => return Some(*x),
@@ -116,11 +121,12 @@ impl AWPacket {
         None
     }
 
-    pub fn add_string(&mut self, id: VarID, value: String) {
-        self.add_var(AWPacketVar::String(id, value));
+    pub fn add_string(&mut self, id: impl Into<u16>, value: String) {
+        self.add_var(AWPacketVar::String(id.into(), value));
     }
 
-    pub fn get_string(&self, var_id: VarID) -> Option<String> {
+    pub fn get_string(&self, var_id: impl Into<u16>) -> Option<String> {
+        let var_id: u16 = var_id.into();
         for var in &self.vars {
             match var {
                 AWPacketVar::String(id, x) if *id == var_id => return Some(x.clone()),
@@ -131,11 +137,12 @@ impl AWPacket {
         None
     }
 
-    pub fn add_data(&mut self, id: VarID, value: Vec<u8>) {
-        self.add_var(AWPacketVar::Data(id, value));
+    pub fn add_data(&mut self, id: impl Into<u16>, value: Vec<u8>) {
+        self.add_var(AWPacketVar::Data(id.into(), value));
     }
 
-    pub fn get_data(&self, var_id: VarID) -> Option<Vec<u8>> {
+    pub fn get_data(&self, var_id: impl Into<u16>) -> Option<Vec<u8>> {
+        let var_id: u16 = var_id.into();
         for var in &self.vars {
             match var {
                 AWPacketVar::Data(id, x) if *id == var_id => return Some(x.clone()),
@@ -661,8 +668,8 @@ mod tests {
     #[test]
     pub fn test_serialize() {
         let mut packet = AWPacket::new(PacketType::Address);
-        packet.add_var(AWPacketVar::String(VarID::AFKStatus, "Hello".to_string()));
-        packet.add_var(AWPacketVar::Byte(VarID::AttributeAllowTourists, 1));
+        packet.add_var(AWPacketVar::String(1, "Hello".to_string()));
+        packet.add_var(AWPacketVar::Byte(2, 1));
         let serialized = packet.serialize().unwrap();
         let (deserialized, _) = AWPacket::deserialize(&serialized).unwrap();
         assert!(packet == deserialized);

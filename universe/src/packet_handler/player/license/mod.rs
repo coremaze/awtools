@@ -163,25 +163,25 @@ pub fn license_change(server: &UniverseServer, cid: UniverseConnectionID, packet
 
 fn license_to_vars(lic: &LicenseQuery, admin: bool) -> Vec<AWPacketVar> {
     let mut result = vec![
-        AWPacketVar::String(VarID::WorldName, lic.name.clone()),
-        AWPacketVar::Uint(VarID::WorldLicenseID, lic.id),
-        AWPacketVar::Uint(VarID::WorldLicenseUsers, lic.users),
-        AWPacketVar::Uint(VarID::WorldLicenseRange, lic.world_size),
+        AWPacketVar::string(VarID::WorldName, lic.name.clone()),
+        AWPacketVar::uint(VarID::WorldLicenseID, lic.id),
+        AWPacketVar::uint(VarID::WorldLicenseUsers, lic.users),
+        AWPacketVar::uint(VarID::WorldLicenseRange, lic.world_size),
     ];
 
     if admin {
         result.extend(vec![
-            AWPacketVar::String(VarID::WorldLicensePassword, lic.password.clone()),
-            AWPacketVar::String(VarID::WorldLicenseEmail, lic.email.clone()),
-            AWPacketVar::String(VarID::WorldLicenseComment, lic.comment.clone()),
-            AWPacketVar::Uint(VarID::WorldLicenseCreation, lic.creation),
-            AWPacketVar::Uint(VarID::WorldLicenseExpiration, lic.expiration),
-            AWPacketVar::Uint(VarID::WorldLicenseLastStart, lic.last_start),
-            AWPacketVar::Uint(VarID::WorldLicenseLastAddress, lic.last_address),
-            AWPacketVar::Uint(VarID::WorldLicenseTourists, lic.tourists),
-            AWPacketVar::Uint(VarID::WorldLicenseHidden, lic.hidden),
-            AWPacketVar::Uint(VarID::WorldLicenseVoip, lic.voip),
-            AWPacketVar::Uint(VarID::WorldLicensePlugins, lic.plugins),
+            AWPacketVar::string(VarID::WorldLicensePassword, lic.password.clone()),
+            AWPacketVar::string(VarID::WorldLicenseEmail, lic.email.clone()),
+            AWPacketVar::string(VarID::WorldLicenseComment, lic.comment.clone()),
+            AWPacketVar::uint(VarID::WorldLicenseCreation, lic.creation),
+            AWPacketVar::uint(VarID::WorldLicenseExpiration, lic.expiration),
+            AWPacketVar::uint(VarID::WorldLicenseLastStart, lic.last_start),
+            AWPacketVar::uint(VarID::WorldLicenseLastAddress, lic.last_address),
+            AWPacketVar::uint(VarID::WorldLicenseTourists, lic.tourists),
+            AWPacketVar::uint(VarID::WorldLicenseHidden, lic.hidden),
+            AWPacketVar::uint(VarID::WorldLicenseVoip, lic.voip),
+            AWPacketVar::uint(VarID::WorldLicensePlugins, lic.plugins),
         ]);
     }
 

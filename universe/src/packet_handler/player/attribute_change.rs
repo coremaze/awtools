@@ -1,5 +1,9 @@
-use crate::{attributes, get_conn, universe_connection::UniverseConnectionID, UniverseServer};
+use crate::{
+    attributes, database::attrib::Attribute, get_conn, universe_connection::UniverseConnectionID,
+    UniverseServer,
+};
 use aw_core::*;
+use num_traits::FromPrimitive;
 
 pub fn attribute_change(server: &UniverseServer, cid: UniverseConnectionID, packet: &AWPacket) {
     let conn = get_conn!(server, cid, "attribute_change");
@@ -21,7 +25,15 @@ pub fn attribute_change(server: &UniverseServer, cid: UniverseConnectionID, pack
     for var in packet.get_vars().iter() {
         if let AWPacketVar::String(id, val) = var {
             log::info!("Client {} setting {:?} to {:?}", conn.addr().ip(), id, val);
-            attributes::set_attribute(*id, val, &server.database);
+
+            let Some(id) = Attribute::from_u64((*id).into()) else {
+                log::warn!(
+                    "Couldn't set attribute because {id:?} is not a valid attribute variable"
+                );
+                return;
+            };
+
+            attributes::set_attribute(id, val, &server.database);
         }
     }
 

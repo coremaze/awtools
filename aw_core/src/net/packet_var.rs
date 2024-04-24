@@ -18,48 +18,21 @@ pub enum DataType {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AWPacketVar {
-    Unknown(VarID, Vec<u8>),
-    Byte(VarID, u8),
-    Int(VarID, i32),
-    Uint(VarID, u32),
-    Float(VarID, f32),
-    String(VarID, String),
-    Data(VarID, Vec<u8>),
+    Unknown(u16, Vec<u8>),
+    Byte(u16, u8),
+    Int(u16, i32),
+    Uint(u16, u32),
+    Float(u16, f32),
+    String(u16, String),
+    Data(u16, Vec<u8>),
 }
 
 #[derive(FromPrimitive, Clone, Copy, Debug, PartialEq)]
+#[repr(u16)]
 pub enum VarID {
-    // These have the same IDs as the attributes,
-    // but are for packets
-    AttributeAllowTourists = 0,
-    AttributeUnknownBilling1 = 1,
-    AttributeBetaBrowser = 2,
-    AttributeMinimumBrowser = 3,
-    AttributeLatestBrowser = 4,
-    AttributeUniverseBuild = 5,
-    AttributeCitizenChanges = 6, // Also VolumeSerial
-    AttributeUnknownBilling7 = 7,
-    AttributeBillingMethod = 8,
-    AttributeBillingUnknown9 = 9,
-    AttributeSearchTabURL = 10,
-    AttributeTimestamp = 11,
-    AttributeWelcomeMessage = 12,
-    AttributeBetaWorld = 13,
-    AttributeMinimumWorld = 14,
-    AttributeLatestWorld = 15,
-    AttributeDefaultStartWorld = 16,
-    AttributeUserlist = 17, // Used for password hash in AW 6
-    AttributeNotepadTabURL = 18,
-    AttributeMailTemplate = 19,
-    AttributeMailFile = 20,
-    AttributeMailCommand = 21,
-    AttributePAVObjectPath = 22,
-    AttributeTextureAndSeqObjectPath = 23,
-    AttributeObjectRefresh = 24,
-    AttributePAVObjectPasswordObfuscated = 25,
-    IdentifyUserIP = 26, // Also AttributeAllowTouristsCAV? AW is reusing this.
-    AttributeAllowBotsCAV = 27,
-    AttributePerCitizenCAV = 28,
+    VolumeSerial = 6,
+
+    IdentifyUserIP = 26,
 
     PositionNorth = 36,
     PositionHeight = 37,
@@ -161,12 +134,44 @@ pub enum VarID {
     WorldLicensePlugins = 264,
     CitizenPrivacy = 301,
     TrialUser = 302,
+}
 
-    Unknown = 65535,
+impl From<VarID> for u16 {
+    fn from(value: VarID) -> Self {
+        value as u16
+    }
 }
 
 impl AWPacketVar {
-    pub fn get_var_id(&self) -> VarID {
+    pub fn unknown(var_id: impl Into<u16>, data: Vec<u8>) -> Self {
+        Self::Unknown(var_id.into(), data)
+    }
+
+    pub fn byte(var_id: impl Into<u16>, data: u8) -> Self {
+        Self::Byte(var_id.into(), data)
+    }
+
+    pub fn int(var_id: impl Into<u16>, data: i32) -> Self {
+        Self::Int(var_id.into(), data)
+    }
+
+    pub fn uint(var_id: impl Into<u16>, data: u32) -> Self {
+        Self::Uint(var_id.into(), data)
+    }
+
+    pub fn float(var_id: impl Into<u16>, data: f32) -> Self {
+        Self::Float(var_id.into(), data)
+    }
+
+    pub fn string(var_id: impl Into<u16>, data: String) -> Self {
+        Self::String(var_id.into(), data)
+    }
+
+    pub fn data(var_id: impl Into<u16>, data: Vec<u8>) -> Self {
+        Self::Data(var_id.into(), data)
+    }
+
+    pub fn get_var_id(&self) -> u16 {
         match &self {
             AWPacketVar::Byte(var_id, _) => *var_id,
             AWPacketVar::Int(var_id, _) => *var_id,
@@ -207,7 +212,7 @@ impl AWPacketVar {
     pub fn serialize(&self) -> Result<Vec<u8>, String> {
         let mut result = Vec::<u8>::with_capacity(16);
 
-        let var_id = self.get_var_id() as u16;
+        let var_id = self.get_var_id();
 
         let size = self
             .get_data_size()
@@ -272,11 +277,6 @@ impl AWPacketVar {
         let size = data_type_and_size & 0xFFF;
         let data_type_num = (data_type_and_size & 0xF000) >> 12;
 
-        let var_id: VarID = VarID::from_u16(var_id_num).unwrap_or_else(|| {
-            log::debug!("Received unknown variable id {var_id_num}");
-            VarID::Unknown
-        });
-
         let data_type: DataType = DataType::from_u16(data_type_num)
             .ok_or_else(|| format!("Received invalid data type {data_type_num}"))?;
 
@@ -286,40 +286,40 @@ impl AWPacketVar {
                 let x = reader
                     .read_u8()
                     .map_err(|_| "Could not deserialize Byte data")?;
-                AWPacketVar::Byte(var_id, x)
+                AWPacketVar::Byte(var_id_num, x)
             }
             DataType::Int => {
                 let x = reader
                     .read_i32::<LittleEndian>()
                     .map_err(|_| "Could not deserialize Int data")?;
-                AWPacketVar::Int(var_id, x)
+                AWPacketVar::Int(var_id_num, x)
             }
             DataType::Float => {
                 let x = reader
                     .read_f32::<LittleEndian>()
                     .map_err(|_| "Could not deserialize Float data")?;
-                AWPacketVar::Float(var_id, x)
+                AWPacketVar::Float(var_id_num, x)
             }
             DataType::String => {
                 let mut buf = vec![0u8; size as usize];
                 reader
                     .read_exact(&mut buf)
                     .map_err(|_| "Could not deserialize String data")?;
-                AWPacketVar::String(var_id, latin1_to_string(&buf))
+                AWPacketVar::String(var_id_num, latin1_to_string(&buf))
             }
             DataType::Data => {
                 let mut buf = vec![0u8; size as usize];
                 reader
                     .read_exact(&mut buf)
                     .map_err(|_| "Could not deserialize Data data")?;
-                AWPacketVar::Data(var_id, buf)
+                AWPacketVar::Data(var_id_num, buf)
             }
             DataType::Unknown => {
                 let mut buf = vec![0u8; size as usize];
                 reader
                     .read_exact(&mut buf)
                     .map_err(|_| "Could not deserialize Unknown data")?;
-                AWPacketVar::Unknown(var_id, buf)
+                AWPacketVar::Unknown(var_id_num, buf)
             }
         };
 
@@ -343,7 +343,7 @@ mod tests {
 
     #[test]
     pub fn test_byte() {
-        let var = AWPacketVar::Byte(VarID::AFKStatus, 123u8);
+        let var = AWPacketVar::Byte(1, 123u8);
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
@@ -352,7 +352,7 @@ mod tests {
 
     #[test]
     pub fn test_int() {
-        let var = AWPacketVar::Int(VarID::AFKStatus, 0x12345678);
+        let var = AWPacketVar::Int(1, 0x12345678);
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     pub fn test_float() {
-        let var = AWPacketVar::Float(VarID::AFKStatus, 3.141_592_7);
+        let var = AWPacketVar::Float(1, 3.141_592_7);
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     pub fn test_string() {
-        let var = AWPacketVar::String(VarID::AFKStatus, "Hello, World!".to_string());
+        let var = AWPacketVar::String(1, "Hello, World!".to_string());
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
@@ -379,10 +379,7 @@ mod tests {
 
     #[test]
     pub fn test_data() {
-        let var = AWPacketVar::Data(
-            VarID::AFKStatus,
-            vec![0u8, 1, 3, 5, 7, 8, 4, 2, 5, 23, 111, 222],
-        );
+        let var = AWPacketVar::Data(1, vec![0u8, 1, 3, 5, 7, 8, 4, 2, 5, 23, 111, 222]);
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);

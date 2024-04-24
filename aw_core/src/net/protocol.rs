@@ -386,7 +386,7 @@ pub enum ProtocolMessage {
 mod tests {
 
     use super::*;
-    use crate::{AWPacketVar, VarID};
+    use crate::AWPacketVar;
     use std::net::TcpListener;
     use std::sync::mpsc::channel;
     use std::thread;
@@ -418,12 +418,9 @@ mod tests {
 
         // Construct a test packet.
         let mut packet = AWPacket::new(PacketType::AvatarAdd);
-        packet.add_var(AWPacketVar::String(
-            VarID::AFKStatus,
-            "Hello, World!".to_string(),
-        ));
+        packet.add_var(AWPacketVar::String(1, "Hello, World!".to_string()));
         let data = (0..=255).collect::<Vec<u8>>();
-        packet.add_var(AWPacketVar::Data(VarID::AttributeBetaWorld, data));
+        packet.add_var(AWPacketVar::Data(2, data));
 
         // Send the test packet to other thread.
         let _ = proto.send(&mut [packet.clone()], true);

@@ -56,12 +56,12 @@ fn citizen_info_vars(
     admin_vars: bool,
 ) -> Vec<AWPacketVar> {
     let mut vars = vec![
-        AWPacketVar::Uint(VarID::CitizenNumber, citizen.id),
-        AWPacketVar::String(VarID::CitizenName, citizen.name.clone()),
-        AWPacketVar::String(VarID::CitizenURL, citizen.url.clone()),
-        AWPacketVar::Byte(VarID::TrialUser, citizen.trial as u8),
-        AWPacketVar::Byte(VarID::CAVEnabled, citizen.cav_enabled as u8),
-        AWPacketVar::Uint(
+        AWPacketVar::uint(VarID::CitizenNumber, citizen.id),
+        AWPacketVar::string(VarID::CitizenName, citizen.name.clone()),
+        AWPacketVar::string(VarID::CitizenURL, citizen.url.clone()),
+        AWPacketVar::byte(VarID::TrialUser, citizen.trial as u8),
+        AWPacketVar::byte(VarID::CAVEnabled, citizen.cav_enabled as u8),
+        AWPacketVar::uint(
             VarID::CAVTemplate,
             if citizen.cav_enabled != 0 {
                 citizen.cav_template
@@ -73,25 +73,25 @@ fn citizen_info_vars(
 
     if self_vars || admin_vars {
         vars.extend(vec![
-            AWPacketVar::Uint(VarID::CitizenImmigration, citizen.immigration),
-            AWPacketVar::Uint(VarID::CitizenExpiration, citizen.expiration),
-            AWPacketVar::Uint(VarID::CitizenLastLogin, citizen.last_login),
-            AWPacketVar::Uint(VarID::CitizenTotalTime, citizen.total_time),
-            AWPacketVar::Uint(VarID::CitizenBotLimit, citizen.bot_limit),
-            AWPacketVar::Byte(VarID::BetaUser, citizen.beta as u8),
-            AWPacketVar::Byte(VarID::CitizenEnabled, citizen.enabled as u8),
-            AWPacketVar::Uint(VarID::CitizenPrivacy, citizen.privacy),
-            AWPacketVar::String(VarID::CitizenPassword, citizen.password.clone()),
-            AWPacketVar::String(VarID::CitizenEmail, citizen.email.clone()),
-            AWPacketVar::String(VarID::CitizenPrivilegePassword, citizen.priv_pass.clone()),
-            AWPacketVar::Uint(VarID::CitizenImmigration, citizen.immigration),
+            AWPacketVar::uint(VarID::CitizenImmigration, citizen.immigration),
+            AWPacketVar::uint(VarID::CitizenExpiration, citizen.expiration),
+            AWPacketVar::uint(VarID::CitizenLastLogin, citizen.last_login),
+            AWPacketVar::uint(VarID::CitizenTotalTime, citizen.total_time),
+            AWPacketVar::uint(VarID::CitizenBotLimit, citizen.bot_limit),
+            AWPacketVar::byte(VarID::BetaUser, citizen.beta as u8),
+            AWPacketVar::byte(VarID::CitizenEnabled, citizen.enabled as u8),
+            AWPacketVar::uint(VarID::CitizenPrivacy, citizen.privacy),
+            AWPacketVar::string(VarID::CitizenPassword, citizen.password.clone()),
+            AWPacketVar::string(VarID::CitizenEmail, citizen.email.clone()),
+            AWPacketVar::string(VarID::CitizenPrivilegePassword, citizen.priv_pass.clone()),
+            AWPacketVar::uint(VarID::CitizenImmigration, citizen.immigration),
         ]);
     }
 
     if admin_vars {
         vars.extend(vec![
-            AWPacketVar::String(VarID::CitizenComment, citizen.comment.clone()),
-            AWPacketVar::Uint(VarID::IdentifyUserIP, citizen.last_address),
+            AWPacketVar::string(VarID::CitizenComment, citizen.comment.clone()),
+            AWPacketVar::uint(VarID::IdentifyUserIP, citizen.last_address),
         ]);
     }
 

@@ -142,7 +142,7 @@ fn validate_human(
     let browser_build = packet
         .get_int(VarID::BrowserBuild)
         .ok_or(ReasonCode::NoSuchCitizen)?;
-    let serial = packet.get_uint(VarID::AttributeCitizenChanges);
+    let serial = packet.get_uint(VarID::VolumeSerial);
     if let Some(serial) = serial {
         log::trace!("User logging in with serial {serial:X}");
     }
@@ -179,7 +179,7 @@ fn validate_human(
             server,
             cid,
             &username,
-            packet.get_data(VarID::AttributeUserlist).as_ref(), // V6 only
+            packet.get_data(17).as_ref(), // V6 only
             privilege_id,
             privilege_password.as_ref(),
         )?;
@@ -217,7 +217,7 @@ fn validate_bot(
     packet: &AWPacket,
     response: &mut AWPacket,
 ) -> Result<Player, ReasonCode> {
-    let serial = packet.get_uint(VarID::AttributeCitizenChanges);
+    let serial = packet.get_uint(VarID::VolumeSerial);
 
     // Build is typically much lower for SDK than for browsers
     let build = packet

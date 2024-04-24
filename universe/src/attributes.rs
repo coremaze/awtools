@@ -5,7 +5,7 @@ use aw_db::DatabaseResult;
 use crate::database::attrib::{AttribDB, Attribute};
 use crate::database::UniverseDatabase;
 use crate::timestamp::unix_epoch_timestamp_str;
-use crate::{AWPacket, PacketType, UniverseConnection, VarID};
+use crate::{AWPacket, PacketType, UniverseConnection};
 
 pub fn send_attributes(conn: &UniverseConnection, database: &UniverseDatabase) {
     let mut packet = AWPacket::new(PacketType::Attributes);
@@ -17,120 +17,120 @@ pub fn send_attributes(conn: &UniverseConnection, database: &UniverseDatabase) {
     log::trace!("get attributes done");
 
     packet.add_string(
-        VarID::AttributeAllowTourists,
+        Attribute::AllowTourists,
         attribs
             .get(&Attribute::AllowTourists)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeBetaBrowser,
+        Attribute::BetaBrowser,
         attribs
             .get(&Attribute::BetaBrowser)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeUniverseBuild,
+        Attribute::UniverseBuild,
         attribs
             .get(&Attribute::UniverseBuild)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeCitizenChanges,
+        Attribute::CitizenChanges,
         attribs
             .get(&Attribute::CitizenChanges)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeSearchTabURL,
+        Attribute::SearchTabURL,
         attribs
             .get(&Attribute::SearchTabURL)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeTimestamp,
+        Attribute::Timestamp,
         attribs
             .get(&Attribute::Timestamp)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeWelcomeMessage,
+        Attribute::WelcomeMessage,
         attribs
             .get(&Attribute::WelcomeMessage)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeBetaWorld,
+        Attribute::BetaWorld,
         attribs
             .get(&Attribute::BetaWorld)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeMinimumWorld,
+        Attribute::MinimumWorld,
         attribs
             .get(&Attribute::MinimumWorld)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeLatestWorld,
+        Attribute::LatestWorld,
         attribs
             .get(&Attribute::LatestWorld)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeDefaultStartWorld,
+        Attribute::DefaultStartWorld,
         attribs
             .get(&Attribute::DefaultStartWorld)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeUserlist,
+        Attribute::Userlist,
         attribs
             .get(&Attribute::Userlist)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeNotepadTabURL,
+        Attribute::NotepadTabURL,
         attribs
             .get(&Attribute::NotepadTabURL)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeMinimumBrowser,
+        Attribute::MinimumBrowser,
         attribs
             .get(&Attribute::MinimumBrowser)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeLatestBrowser,
+        Attribute::LatestBrowser,
         attribs
             .get(&Attribute::LatestBrowser)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeUnknownBilling7,
+        Attribute::UnknownBilling7,
         attribs
             .get(&Attribute::UnknownBilling7)
             .unwrap_or(&String::new())
             .to_string(),
     );
-    packet.add_string(VarID::AttributeBillingMethod, "".to_string());
+    packet.add_string(Attribute::BillingMethod, "".to_string());
     packet.add_string(
-        VarID::AttributeBillingUnknown9,
+        Attribute::BillingUnknown9,
         attribs
             .get(&Attribute::BillingUnknown9)
             .unwrap_or(&String::new())
@@ -138,7 +138,7 @@ pub fn send_attributes(conn: &UniverseConnection, database: &UniverseDatabase) {
     );
 
     packet.add_string(
-        VarID::AttributePAVObjectPath,
+        Attribute::PAVObjectPath,
         attribs
             .get(&Attribute::PAVObjectPath)
             .unwrap_or(&String::new())
@@ -146,7 +146,7 @@ pub fn send_attributes(conn: &UniverseConnection, database: &UniverseDatabase) {
     );
 
     packet.add_data(
-        VarID::AttributePAVObjectPasswordObfuscated,
+        Attribute::PAVObjectPasswordObfuscated,
         attribs
             .get(&Attribute::PAVObjectPasswordObfuscated)
             .unwrap_or(&String::new())
@@ -155,14 +155,14 @@ pub fn send_attributes(conn: &UniverseConnection, database: &UniverseDatabase) {
     );
 
     packet.add_string(
-        VarID::AttributeTextureAndSeqObjectPath,
+        Attribute::TextureAndSeqObjectPath,
         attribs
             .get(&Attribute::TextureAndSeqObjectPath)
             .unwrap_or(&String::new())
             .to_string(),
     );
     packet.add_string(
-        VarID::AttributeObjectRefresh,
+        Attribute::ObjectRefresh,
         attribs
             .get(&Attribute::ObjectRefresh)
             .unwrap_or(&String::new())
@@ -189,40 +189,7 @@ pub fn get_attributes(database: &UniverseDatabase) -> HashMap<Attribute, String>
     result
 }
 
-pub fn set_attribute(var_id: VarID, value: &str, database: &UniverseDatabase) {
-    let id = match var_id {
-        VarID::AttributeAllowTourists => Attribute::AllowTourists,
-        VarID::AttributeUnknownBilling1 => Attribute::UnknownBilling1,
-        VarID::AttributeBetaBrowser => Attribute::BetaBrowser,
-        VarID::AttributeMinimumBrowser => Attribute::MinimumBrowser,
-        VarID::AttributeLatestBrowser => Attribute::LatestBrowser,
-        VarID::AttributeUniverseBuild => Attribute::UniverseBuild,
-        VarID::AttributeCitizenChanges => Attribute::CitizenChanges,
-        VarID::AttributeUnknownBilling7 => Attribute::UnknownBilling7,
-        VarID::AttributeBillingMethod => Attribute::BillingMethod,
-        VarID::AttributeBillingUnknown9 => Attribute::BillingUnknown9,
-        VarID::AttributeSearchTabURL => Attribute::SearchTabURL,
-        VarID::AttributeTimestamp => Attribute::Timestamp,
-        VarID::AttributeWelcomeMessage => Attribute::WelcomeMessage,
-        VarID::AttributeBetaWorld => Attribute::BetaWorld,
-        VarID::AttributeMinimumWorld => Attribute::MinimumWorld,
-        VarID::AttributeLatestWorld => Attribute::LatestWorld,
-        VarID::AttributeDefaultStartWorld => Attribute::DefaultStartWorld,
-        VarID::AttributeUserlist => Attribute::Userlist,
-        VarID::AttributeNotepadTabURL => Attribute::NotepadTabURL,
-        VarID::AttributeMailTemplate => Attribute::MailTemplate,
-        VarID::AttributeMailFile => Attribute::MailFile,
-        VarID::AttributeMailCommand => Attribute::MailCommand,
-        VarID::AttributePAVObjectPath => Attribute::PAVObjectPath,
-        VarID::AttributeTextureAndSeqObjectPath => Attribute::TextureAndSeqObjectPath,
-        _ => {
-            log::warn!(
-                "Couldn't set attribute because {var_id:?} is not a valid attribute variable"
-            );
-            return;
-        }
-    };
-
+pub fn set_attribute(id: Attribute, value: &str, database: &UniverseDatabase) {
     match id {
         Attribute::Timestamp | Attribute::UniverseBuild => {
             // It doesn't make sense to set these.

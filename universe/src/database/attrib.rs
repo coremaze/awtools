@@ -9,6 +9,7 @@ use num_traits::FromPrimitive;
 use super::UniverseDatabase;
 
 #[derive(Clone, Copy, Debug, FromPrimitive, Eq, Hash, PartialEq)]
+#[repr(u16)]
 pub enum Attribute {
     AllowTourists = 0,
     UnknownBilling1 = 1,
@@ -36,6 +37,15 @@ pub enum Attribute {
     TextureAndSeqObjectPath = 23,
     ObjectRefresh = 24,
     PAVObjectPasswordObfuscated = 25,
+    AllowTouristsCAV = 26,
+    AllowBotsCAV = 27,
+    PerCitizenCAV = 28,
+}
+
+impl From<Attribute> for u16 {
+    fn from(value: Attribute) -> Self {
+        value as u16
+    }
 }
 
 pub trait AttribDB {
