@@ -72,7 +72,7 @@ fn check_valid_name(mut name: &str, is_tourist: bool) -> Result<(), ReasonCode> 
         return Err(ReasonCode::NameContainsInvalidBlank);
     }
 
-    if !name.chars().all(char::is_alphanumeric) {
+    if !name.chars().all(|c| c.is_alphanumeric() || c == ' ') {
         return Err(ReasonCode::NameContainsNonalphanumericChar);
     }
 
