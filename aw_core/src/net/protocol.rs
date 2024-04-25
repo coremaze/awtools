@@ -418,9 +418,9 @@ mod tests {
 
         // Construct a test packet.
         let mut packet = AWPacket::new(PacketType::AvatarAdd);
-        packet.add_var(AWPacketVar::String(1, "Hello, World!".to_string()));
+        packet.add_var(AWPacketVar::string(1u16, "Hello, World!".to_string()));
         let data = (0..=255).collect::<Vec<u8>>();
-        packet.add_var(AWPacketVar::Data(2, data));
+        packet.add_var(AWPacketVar::data(2u16, data));
 
         // Send the test packet to other thread.
         let _ = proto.send(&mut [packet.clone()], true);

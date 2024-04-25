@@ -7,7 +7,7 @@ use num_traits::FromPrimitive;
 use std::io::{Cursor, Read, Write};
 
 #[derive(FromPrimitive)]
-pub enum DataType {
+enum DataType {
     Unknown = 0,
     Byte = 1,
     Int = 2,
@@ -17,14 +17,48 @@ pub enum DataType {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum AWPacketVar {
-    Unknown(u16, Vec<u8>),
-    Byte(u16, u8),
-    Int(u16, i32),
-    Uint(u16, u32),
-    Float(u16, f32),
-    String(u16, String),
-    Data(u16, Vec<u8>),
+pub enum PacketData {
+    Unknown(Vec<u8>),
+    Byte(u8),
+    Int(i32),
+    Uint(u32),
+    Float(f32),
+    String(String),
+    Data(Vec<u8>),
+}
+
+impl PacketData {
+    fn get_data_type(&self) -> DataType {
+        match self {
+            Self::Byte(_) => DataType::Byte,
+            Self::Int(_) => DataType::Int,
+            // Uint being DataType::Int is intentional. This does not have its
+            // own ID, it is only for convenience.
+            Self::Uint(_) => DataType::Int,
+            Self::Float(_) => DataType::Float,
+            Self::String(_) => DataType::String,
+            Self::Data(_) => DataType::Data,
+            Self::Unknown(_) => DataType::Unknown,
+        }
+    }
+
+    fn get_data_size(&self) -> Option<usize> {
+        Some(match self {
+            Self::Byte(_) => 1,
+            Self::Int(_) => 4,
+            Self::Uint(_) => 4,
+            Self::Float(_) => 4,
+            Self::String(string) => string_to_latin1(string).len().checked_add(1)?,
+            Self::Data(buf) => buf.len(),
+            Self::Unknown(buf) => buf.len(),
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct AWPacketVar {
+    pub id: u16,
+    pub data: PacketData,
 }
 
 #[derive(FromPrimitive, Clone, Copy, Debug, PartialEq)]
@@ -143,70 +177,51 @@ impl From<VarID> for u16 {
 }
 
 impl AWPacketVar {
+    pub fn new(var_id: impl Into<u16>, packet_data: PacketData) -> Self {
+        Self {
+            id: var_id.into(),
+            data: packet_data,
+        }
+    }
+
     pub fn unknown(var_id: impl Into<u16>, data: Vec<u8>) -> Self {
-        Self::Unknown(var_id.into(), data)
+        Self::new(var_id, PacketData::Unknown(data))
     }
 
     pub fn byte(var_id: impl Into<u16>, data: u8) -> Self {
-        Self::Byte(var_id.into(), data)
+        Self::new(var_id, PacketData::Byte(data))
     }
 
     pub fn int(var_id: impl Into<u16>, data: i32) -> Self {
-        Self::Int(var_id.into(), data)
+        Self::new(var_id, PacketData::Int(data))
     }
 
     pub fn uint(var_id: impl Into<u16>, data: u32) -> Self {
-        Self::Uint(var_id.into(), data)
+        Self::new(var_id, PacketData::Uint(data))
     }
 
     pub fn float(var_id: impl Into<u16>, data: f32) -> Self {
-        Self::Float(var_id.into(), data)
+        Self::new(var_id, PacketData::Float(data))
     }
 
     pub fn string(var_id: impl Into<u16>, data: String) -> Self {
-        Self::String(var_id.into(), data)
+        Self::new(var_id, PacketData::String(data))
     }
 
     pub fn data(var_id: impl Into<u16>, data: Vec<u8>) -> Self {
-        Self::Data(var_id.into(), data)
+        Self::new(var_id, PacketData::Data(data))
     }
 
     pub fn get_var_id(&self) -> u16 {
-        match &self {
-            AWPacketVar::Byte(var_id, _) => *var_id,
-            AWPacketVar::Int(var_id, _) => *var_id,
-            AWPacketVar::Uint(var_id, _) => *var_id,
-            AWPacketVar::Float(var_id, _) => *var_id,
-            AWPacketVar::String(var_id, _) => *var_id,
-            AWPacketVar::Data(var_id, _) => *var_id,
-            AWPacketVar::Unknown(var_id, _) => *var_id,
-        }
+        self.id
     }
 
-    pub fn get_data_type(&self) -> DataType {
-        match self {
-            AWPacketVar::Byte(_, _) => DataType::Byte,
-            AWPacketVar::Int(_, _) => DataType::Int,
-            // Uint being DataType::Int is intentional. This does not have its
-            // own ID, it is only for convenience.
-            AWPacketVar::Uint(_, _) => DataType::Int,
-            AWPacketVar::Float(_, _) => DataType::Float,
-            AWPacketVar::String(_, _) => DataType::String,
-            AWPacketVar::Data(_, _) => DataType::Data,
-            AWPacketVar::Unknown(_, _) => DataType::Unknown,
-        }
+    fn get_data_type(&self) -> DataType {
+        self.data.get_data_type()
     }
 
     fn get_data_size(&self) -> Option<usize> {
-        Some(match self {
-            AWPacketVar::Byte(_, _) => 1,
-            AWPacketVar::Int(_, _) => 4,
-            AWPacketVar::Uint(_, _) => 4,
-            AWPacketVar::Float(_, _) => 4,
-            AWPacketVar::String(_, string) => string_to_latin1(string).len().checked_add(1)?,
-            AWPacketVar::Data(_, buf) => buf.len(),
-            AWPacketVar::Unknown(_, buf) => buf.len(),
-        })
+        self.data.get_data_size()
     }
 
     pub fn serialize(&self) -> Result<Vec<u8>, String> {
@@ -234,27 +249,27 @@ impl AWPacketVar {
             .unwrap();
 
         // Little endian time 😎
-        match &self {
-            AWPacketVar::Byte(_, x) => {
+        match &self.data {
+            PacketData::Byte(x) => {
                 result.write_u8(*x).unwrap();
             }
-            AWPacketVar::Int(_, x) => {
+            PacketData::Int(x) => {
                 result.write_i32::<LittleEndian>(*x).unwrap();
             }
-            AWPacketVar::Uint(_, x) => {
+            PacketData::Uint(x) => {
                 result.write_u32::<LittleEndian>(*x).unwrap();
             }
-            AWPacketVar::Float(_, x) => {
+            PacketData::Float(x) => {
                 result.write_f32::<LittleEndian>(*x).unwrap();
             }
-            AWPacketVar::String(_, x) => {
+            PacketData::String(x) => {
                 result.write_all(&string_to_latin1(x)).unwrap();
                 result.write_all(&[0u8]).unwrap();
             }
-            AWPacketVar::Data(_, x) => {
+            PacketData::Data(x) => {
                 result.write_all(x).unwrap();
             }
-            AWPacketVar::Unknown(_, x) => {
+            PacketData::Unknown(x) => {
                 result.write_all(x).unwrap();
             }
         };
@@ -286,40 +301,40 @@ impl AWPacketVar {
                 let x = reader
                     .read_u8()
                     .map_err(|_| "Could not deserialize Byte data")?;
-                AWPacketVar::Byte(var_id_num, x)
+                Self::byte(var_id_num, x)
             }
             DataType::Int => {
                 let x = reader
                     .read_i32::<LittleEndian>()
                     .map_err(|_| "Could not deserialize Int data")?;
-                AWPacketVar::Int(var_id_num, x)
+                Self::int(var_id_num, x)
             }
             DataType::Float => {
                 let x = reader
                     .read_f32::<LittleEndian>()
                     .map_err(|_| "Could not deserialize Float data")?;
-                AWPacketVar::Float(var_id_num, x)
+                Self::float(var_id_num, x)
             }
             DataType::String => {
                 let mut buf = vec![0u8; size as usize];
                 reader
                     .read_exact(&mut buf)
                     .map_err(|_| "Could not deserialize String data")?;
-                AWPacketVar::String(var_id_num, latin1_to_string(&buf))
+                Self::string(var_id_num, latin1_to_string(&buf))
             }
             DataType::Data => {
                 let mut buf = vec![0u8; size as usize];
                 reader
                     .read_exact(&mut buf)
                     .map_err(|_| "Could not deserialize Data data")?;
-                AWPacketVar::Data(var_id_num, buf)
+                Self::data(var_id_num, buf)
             }
             DataType::Unknown => {
                 let mut buf = vec![0u8; size as usize];
                 reader
                     .read_exact(&mut buf)
                     .map_err(|_| "Could not deserialize Unknown data")?;
-                AWPacketVar::Unknown(var_id_num, buf)
+                AWPacketVar::unknown(var_id_num, buf)
             }
         };
 
@@ -343,7 +358,7 @@ mod tests {
 
     #[test]
     pub fn test_byte() {
-        let var = AWPacketVar::Byte(1, 123u8);
+        let var = AWPacketVar::byte(1u16, 123u8);
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
@@ -352,7 +367,7 @@ mod tests {
 
     #[test]
     pub fn test_int() {
-        let var = AWPacketVar::Int(1, 0x12345678);
+        let var = AWPacketVar::int(1u16, 0x12345678);
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
@@ -361,7 +376,7 @@ mod tests {
 
     #[test]
     pub fn test_float() {
-        let var = AWPacketVar::Float(1, 3.141_592_7);
+        let var = AWPacketVar::float(1u16, 3.141_592_7);
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
@@ -370,7 +385,7 @@ mod tests {
 
     #[test]
     pub fn test_string() {
-        let var = AWPacketVar::String(1, "Hello, World!".to_string());
+        let var = AWPacketVar::string(1u16, "Hello, World!".to_string());
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);
@@ -379,7 +394,7 @@ mod tests {
 
     #[test]
     pub fn test_data() {
-        let var = AWPacketVar::Data(1, vec![0u8, 1, 3, 5, 7, 8, 4, 2, 5, 23, 111, 222]);
+        let var = AWPacketVar::data(1u16, vec![0u8, 1, 3, 5, 7, 8, 4, 2, 5, 23, 111, 222]);
         let data = var.serialize().unwrap();
         let (decoded, _) = AWPacketVar::deserialize(&data).unwrap();
         assert!(var == decoded);

@@ -23,10 +23,11 @@ pub fn attribute_change(server: &UniverseServer, cid: UniverseConnectionID, pack
 
     // Set each of the received attributes
     for var in packet.get_vars().iter() {
-        if let AWPacketVar::String(id, val) = var {
+        if let PacketData::String(val) = &var.data {
+            let id = var.id;
             log::info!("Client {} setting {:?} to {:?}", conn.addr().ip(), id, val);
 
-            let Some(id) = Attribute::from_u64((*id).into()) else {
+            let Some(id) = Attribute::from_u64(id.into()) else {
                 log::warn!(
                     "Couldn't set attribute because {id:?} is not a valid attribute variable"
                 );
