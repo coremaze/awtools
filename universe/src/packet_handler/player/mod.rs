@@ -43,6 +43,9 @@ pub use user_list::user_list;
 mod eject;
 pub use eject::*;
 
+mod cav_get;
+pub use cav_get::get_cav;
+
 use aw_core::*;
 
 fn check_valid_name(mut name: &str, is_tourist: bool) -> Result<(), ReasonCode> {

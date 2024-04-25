@@ -163,6 +163,7 @@ pub enum VarID {
     EjectionComment = 219,
     CAVEnabled = 226,
     CAVTemplate = 227,
+    CAVCitizen = 233,
     AFKStatus = 261,
     WorldLicenseVoip = 263,
     WorldLicensePlugins = 264,

@@ -296,6 +296,7 @@ impl UniverseServer {
             PacketType::EjectLookup => packet_handler::eject_lookup(self, cid, packet),
             PacketType::EjectNext => packet_handler::eject_next(self, cid, packet),
             PacketType::EjectPrev => packet_handler::eject_prev(self, cid, packet),
+            PacketType::CAVGet => packet_handler::get_cav(self, cid, packet),
             PacketType::SetAFK => packet_handler::set_afk(self, cid, packet),
             PacketType::Immigrate => packet_handler::immigrate(self, cid, packet),
             PacketType::ContactConfirm => packet_handler::contact_confirm(self, cid, packet),

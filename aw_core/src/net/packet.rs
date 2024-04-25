@@ -611,7 +611,7 @@ pub enum PacketType {
     CavTemplateChange = 125,
     CavTemplateDelete = 126,
     WorldCAVDefinitionChange = 127,
-    WorldCAV = 128,
+    CAVGet = 128,
 
     CavDelete = 130,
     WorldCAVResult = 131,
