@@ -6,7 +6,7 @@ pub use contact_list::{
     regenerate_contact_list, regenerate_contact_list_and_mutuals, ContactList, ContactListEntry,
     ContactState,
 };
-pub use player_list::{regenerate_player_list, PlayerListEntry};
+pub use player_list::regenerate_player_list;
 pub use world_list::{regenerate_world_list, WorldListEntry, WorldStatus};
 
 #[derive(Debug)]

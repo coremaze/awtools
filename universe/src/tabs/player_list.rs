@@ -35,6 +35,7 @@ pub struct PlayerListEntry {
     pub ip: IpAddr,
     pub state: PlayerState,
     pub afk: bool,
+    bot: bool,
 }
 
 impl PlayerListEntry {
@@ -58,10 +59,16 @@ impl PlayerListEntry {
                 PlayerState::Available
             },
             afk: player.base_player().afk,
+            bot: player.is_bot(),
         }
     }
 
-    pub fn make_list_packet(&self, to_admin: bool, id_in_list: PlayerListID) -> AWPacket {
+    pub fn make_list_packet(&self, to_admin: bool, id_in_list: PlayerListID) -> Option<AWPacket> {
+        // Don't let non-admins see bots
+        if self.bot && !to_admin {
+            return None;
+        }
+
         let mut p = AWPacket::new(PacketType::UserList);
 
         // p.add_string(VarID::UserListEmailAddress, format!("178"));
@@ -78,7 +85,7 @@ impl PlayerListEntry {
             p.add_string(VarID::UserListWorldName, world_name.clone());
         }
 
-        p
+        Some(p)
     }
 }
 
@@ -240,7 +247,10 @@ impl PlayerList {
                 _ => {}
             }
 
-            let entry_packet = player.make_list_packet(to_admin, list_id);
+            let Some(entry_packet) = player.make_list_packet(to_admin, list_id) else {
+                continue;
+            };
+
             // This generally should not fail because we are stopping way before the max size of a group
             if group.push(entry_packet).is_err() {
                 log::warn!("Failed to add a packet to a player list group. (1)");
@@ -281,7 +291,10 @@ impl PlayerList {
                 _ => {}
             }
 
-            let packet = player.make_list_packet(target.has_admin_permissions(), *id);
+            let Some(packet) = player.make_list_packet(target.has_admin_permissions(), *id) else {
+                continue;
+            };
+
             group.push(packet).ok();
 
             let mut more = AWPacket::new(PacketType::UserListResult);

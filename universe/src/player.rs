@@ -78,4 +78,8 @@ impl Player {
     pub fn username(&self) -> String {
         self.base_player().username.clone()
     }
+
+    pub fn is_bot(&self) -> bool {
+        matches!(self, Self::Bot(_))
+    }
 }
