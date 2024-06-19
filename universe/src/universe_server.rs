@@ -119,7 +119,7 @@ impl UniverseServer {
                     continue;
                 }
             };
-            let conn = UniverseConnection::new(AWConnection::new(proto));
+            let conn = UniverseConnection::new(AWConnection::new(proto, addr));
             self.connections.add_connection(conn);
             log::info!("{} connected.", addr.ip());
         }

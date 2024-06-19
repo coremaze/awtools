@@ -14,11 +14,9 @@ pub struct AWConnection {
 }
 
 impl AWConnection {
-    pub fn new(protocol: AWProtocol) -> Self {
+    pub fn new(protocol: AWProtocol, addr: SocketAddr) -> Self {
         let a4_send_key = protocol.get_send_key();
-        let addr = protocol
-            .peer_addr()
-            .expect("All connected peers should have an address");
+
         let (outbound, inbound) = protocol.start_process_loop();
 
         Self {
