@@ -84,17 +84,10 @@ impl ClientInfo {
     }
 
     pub fn effective_privilege(&self) -> u32 {
-        self.player_info()
-            .and_then(|player| {
-                player.privilege_id.and_then(|priv_id| {
-                    if priv_id != 0 {
-                        Some(priv_id)
-                    } else {
-                        self.citizen_id()
-                    }
-                })
-            })
-            .unwrap_or(0)
+        // The client's privilege ID if they have one, or their citizen id if they have one, or 0
+        let priv_id = self.player_info().and_then(|player| player.privilege_id);
+        let cit_id = self.citizen_id();
+        priv_id.or(cit_id).unwrap_or(0)
     }
 
     pub fn world_server(&self) -> Option<&WorldServer> {
