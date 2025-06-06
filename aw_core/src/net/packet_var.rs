@@ -55,19 +55,39 @@ impl PacketData {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct AWPacketVar {
     pub id: u16,
     pub data: PacketData,
 }
 
+impl std::fmt::Debug for AWPacketVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let var_id_name = match VarID::from_u16(self.id) {
+            Some(var_id) => format!(" ({:?})", var_id),
+            None => String::new(),
+        };
+        f.debug_struct("AWPacketVar")
+            .field("id", &format!("{}{}", self.id, var_id_name))
+            .field("data", &self.data)
+            .finish()
+    }
+}
+
 #[derive(FromPrimitive, Clone, Copy, Debug, PartialEq)]
 #[repr(u16)]
 pub enum VarID {
+    PluginString = 1,
     VolumeSerial = 6,
 
     IdentifyUserIP = 26,
 
+    MyGesture = 28,
+    MyName = 29,
+    MyPitch = 30,
+    MySession = 32,
+    MyState = 33,
+    MyType = 34,
     PositionNorth = 36,
     PositionHeight = 37,
     PositionRotation = 38,
@@ -124,6 +144,8 @@ pub enum VarID {
     PrivilegeUsername = 99,
     PrivilegeUserID = 100,
     PrivilegePassword = 101,
+    ChatMessage = 102,
+    ChatType = 103,
     PlayerPort = 120,
     ReasonCode = 121,
     SessionID = 140,
@@ -155,6 +177,8 @@ pub enum VarID {
     WorldList3DayUnknown = 196,
     WorldListStatus = 197,
     WorldListUsers = 198,
+
+    WorldEnterGlobal = 200,
     WorldUsers = 201,
     BrowserVersion = 211,
     EjectionAddress = 216,
@@ -165,10 +189,12 @@ pub enum VarID {
     CAVTemplate = 227,
     CAVCitizen = 233,
     AFKStatus = 261,
+    EventMask = 262,
     WorldLicenseVoip = 263,
     WorldLicensePlugins = 264,
     CitizenPrivacy = 301,
     TrialUser = 302,
+    MyZone = 349,
 }
 
 impl From<VarID> for u16 {

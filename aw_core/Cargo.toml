@@ -19,6 +19,7 @@ flate2 = { version = "1.0.17", features = ["zlib"], default-features = false }
 log = "0.4.17"
 ofb = "0.6.1"
 aes = "0.8.3"
+num_enum = "0.7.2"
 
 [features]
 stream_cipher_aes = []

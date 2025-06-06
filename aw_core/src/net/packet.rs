@@ -503,7 +503,6 @@ pub enum PacketType {
 
     Botgram = 14,
     BotgramResponse = 15,
-
     Capabilities = 16,
     CellBegin = 17,
     CellEnd = 18,
@@ -558,6 +557,7 @@ pub enum PacketType {
     ServerWorldListResult = 69,
     ServerWorldResult = 70,
 
+    StateChange = 74,
     TelegramDeliver = 75,
     TelegramGet = 76,
     TelegramNotify = 77,
@@ -623,8 +623,8 @@ pub enum PacketType {
     MoverRiderDelete = 149,
     MoverRiderChange = 150,
     MoverLinks = 151,
-
     SetAFK = 152,
+    EventMask = 153,
 
     Immigrate = 155,
     ImmigrateResponse = 156,

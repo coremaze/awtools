@@ -1,4 +1,7 @@
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+use num_enum::TryFromPrimitive;
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
+#[repr(i32)]
 pub enum ReasonCode {
     Success = 0,
     CitizenshipExpired = 1,
