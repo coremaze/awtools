@@ -96,8 +96,8 @@ impl AwInstance {
         msg::out::login::login(self, params)
     }
 
-    pub fn enter(&mut self, world: &str) -> SdkResult<()> {
-        msg::out::enter::enter(self, world)
+    pub fn enter(&mut self, world: &str, global: bool) -> SdkResult<()> {
+        msg::out::enter::enter(self, world, global)
     }
 
     pub fn state_change(&mut self, params: StateChangeParams) -> SdkResult<()> {
