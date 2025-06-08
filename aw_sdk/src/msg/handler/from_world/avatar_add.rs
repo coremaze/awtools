@@ -2,37 +2,38 @@ use aw_core::{AWPacket, VarID};
 
 use crate::{AwEvent, AwInstance, SdkError};
 
-pub fn handle_avatar_change(
-    _instance: &mut AwInstance,
-    packet: &AWPacket,
-    events: &mut Vec<AwEvent>,
-) {
-    match AvatarChangeInfo::try_from(packet) {
-        Ok(avatar_change_info) => {
-            events.push(AwEvent::AvatarChange(avatar_change_info));
+pub fn handle_avatar_add(_instance: &mut AwInstance, packet: &AWPacket, events: &mut Vec<AwEvent>) {
+    match AvatarAddInfo::try_from(packet) {
+        Ok(avatar_add_info) => {
+            events.push(AwEvent::AvatarAdd(avatar_add_info));
         }
         Err(e) => {
-            println!("Failed to parse avatar change info: {e:?} {packet:?}");
+            println!("Failed to parse avatar add info: {e:?} {packet:?}");
             return;
         }
     };
 }
 
 #[derive(Debug, Clone)]
-pub struct AvatarChangeInfo {
+pub struct AvatarAddInfo {
+    pub citizen_id: Option<u32>,
     pub session_id: u32,
     pub name: String,
-    pub north: i32,    // x
-    pub height: i32,   // y
-    pub west: i32,     // z
-    pub rotation: i32, // yaw
+    pub north: i32,
+    pub height: i32,
+    pub west: i32,
+    pub rotation: i32,
+    pub pitch: i32,
+    pub state: Option<u32>,
+    // Also has build and pluginstring
 }
 
-impl TryFrom<&AWPacket> for AvatarChangeInfo {
+impl TryFrom<&AWPacket> for AvatarAddInfo {
     type Error = SdkError;
 
     fn try_from(packet: &AWPacket) -> Result<Self, Self::Error> {
         Ok(Self {
+            citizen_id: packet.get_uint(VarID::MyID).filter(|&id| id != 0),
             session_id: packet
                 .get_uint(VarID::MySession)
                 .ok_or(SdkError::missing_field("MySession"))?,
@@ -51,6 +52,10 @@ impl TryFrom<&AWPacket> for AvatarChangeInfo {
             rotation: packet
                 .get_int(VarID::PositionRotation)
                 .ok_or(SdkError::missing_field("PositionRotation"))?,
+            pitch: packet
+                .get_int(VarID::MyPitch)
+                .ok_or(SdkError::missing_field("Pitch"))?,
+            state: packet.get_uint(VarID::MyState),
         })
     }
 }

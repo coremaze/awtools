@@ -1,9 +1,6 @@
-use aw_core::{AWPacket, PacketType, VarID};
+use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
 
-use crate::{
-    AwInstance, SdkError, SdkResult, instance_conn::AwInstanceConnection,
-    msg::handler::from_world::attributes::WorldAttributes, world::World,
-};
+use crate::{AwInstance, SdkError, SdkResult, instance_conn::AwInstanceConnection, world::World};
 
 pub fn enter(instance: &mut AwInstance, world: &str, global: bool) -> SdkResult<()> {
     instance.world = None;
@@ -36,11 +33,23 @@ pub fn enter(instance: &mut AwInstance, world: &str, global: bool) -> SdkResult<
     let response = world_conn
         .wait_for_packet(PacketType::Enter, None)
         .ok_or(SdkError::Timeout)?;
-    eprintln!("Enter response: {response:?}");
+
+    // Only returns a reason code
+    let Some(reason_code) = response.get_int(VarID::ReasonCode) else {
+        return Err(SdkError::MissingField("ReasonCode".to_string()));
+    };
+
+    let reason_code =
+        ReasonCode::try_from(reason_code).map_err(|_| SdkError::protocol("Invalid reason code"))?;
+
+    if reason_code != ReasonCode::Success {
+        return Err(SdkError::ActiveWorldsError(reason_code));
+    }
 
     instance.world = Some(World {
         connection: world_conn,
         attributes: None,
     });
+
     Ok(())
 }

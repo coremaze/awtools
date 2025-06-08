@@ -2,7 +2,7 @@ use aw_core::{AWPacket, PacketType, ReasonCode, VarID};
 
 use crate::{AwInstance, SdkError, SdkResult, instance::Session};
 
-pub fn login(instance: &mut AwInstance, params: LoginParams) -> SdkResult<LoginResponse> {
+pub fn login(instance: &mut AwInstance, params: LoginParams) -> SdkResult<LoginResult> {
     let packet = {
         let mut p = AWPacket::new(PacketType::Login);
         match params {
@@ -48,7 +48,7 @@ pub fn login(instance: &mut AwInstance, params: LoginParams) -> SdkResult<LoginR
         ReasonCode::try_from(reason_code).map_err(|_| SdkError::protocol("Invalid reason code"))?;
 
     if reason_code == ReasonCode::Success {
-        eprintln!("Login response: {response:?}");
+        // eprintln!("Login response: {response:?}");
 
         let session_id = response
             .get_uint(VarID::SessionID)
@@ -66,9 +66,9 @@ pub fn login(instance: &mut AwInstance, params: LoginParams) -> SdkResult<LoginR
             .get_string(VarID::CitizenName)
             .ok_or_else(|| SdkError::missing_field("CitizenName"))?;
 
-        let login_response = LoginResponse { name };
+        let login_result = LoginResult { name };
 
-        Ok(login_response)
+        Ok(login_result)
     } else {
         Err(SdkError::ActiveWorldsError(reason_code))
     }
@@ -88,6 +88,6 @@ pub enum LoginParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct LoginResponse {
+pub struct LoginResult {
     pub name: String,
 }
