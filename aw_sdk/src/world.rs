@@ -27,6 +27,8 @@ pub fn handle_world_packet(instance: &mut AwInstance, packet: AWPacket, events: 
         PacketType::Attributes => msg::handler::from_world::attributes::handle_attributes,
         PacketType::AvatarAdd => msg::handler::from_world::avatar_add::handle_avatar_add,
         PacketType::AvatarDelete => msg::handler::from_world::avatar_delete::handle_avatar_delete,
+        PacketType::ObjectClick => msg::handler::from_world::object_click::handle_object_click,
+        PacketType::ObjectBump => msg::handler::from_world::object_bump::handle_object_bump,
         _ => {
             println!("Unhandled packet type: {packet_type:?}: {packet:?}",);
             return;

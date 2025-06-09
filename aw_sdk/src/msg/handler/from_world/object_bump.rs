@@ -2,24 +2,20 @@ use aw_core::{AWPacket, VarID};
 
 use crate::{AwEvent, AwInstance, SdkError};
 
-pub fn handle_object_click(
-    instance: &mut AwInstance,
-    packet: &AWPacket,
-    events: &mut Vec<AwEvent>,
-) {
-    let object_click_info = match ObjectClickInfo::try_from(packet) {
-        Ok(object_click_info) => object_click_info,
+pub fn handle_object_bump(instance: &mut AwInstance, packet: &AWPacket, events: &mut Vec<AwEvent>) {
+    let object_bump_info = match ObjectBumpInfo::try_from(packet) {
+        Ok(object_bump_info) => {
+            events.push(AwEvent::ObjectBump(object_bump_info));
+        }
         Err(e) => {
-            println!("Failed to parse object click: {packet:?}, {e}");
+            println!("Failed to parse object bump: {packet:?}, {e}");
             return;
         }
     };
-
-    events.push(AwEvent::ObjectClick(object_click_info));
 }
 
 #[derive(Debug, Clone)]
-pub struct ObjectClickInfo {
+pub struct ObjectBumpInfo {
     pub avatar_session: u32,
     pub avatar_name: String,
     pub cell_x: i32,
@@ -42,7 +38,7 @@ pub struct ObjectClickInfo {
     pub object_data: Vec<u8>,
 }
 
-impl TryFrom<&AWPacket> for ObjectClickInfo {
+impl TryFrom<&AWPacket> for ObjectBumpInfo {
     type Error = SdkError;
 
     fn try_from(packet: &AWPacket) -> Result<Self, Self::Error> {
@@ -98,7 +94,7 @@ impl TryFrom<&AWPacket> for ObjectClickInfo {
         // Object data may default to empty vector if not set
         let object_data = packet.get_data(VarID::ObjectData).unwrap_or_default();
 
-        Ok(ObjectClickInfo {
+        Ok(ObjectBumpInfo {
             avatar_session,
             avatar_name,
             cell_x,

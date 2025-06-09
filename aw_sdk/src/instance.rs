@@ -3,8 +3,8 @@ use std::time::Duration;
 use aw_core::ProtocolMessage;
 
 use crate::{
-    AwEvent, HudCreateParams, LoginParams, LoginResult, SdkError, SdkResult, StateChangeParams,
-    TeleportParams, WorldInfo,
+    AwEvent, ConsoleMessageParams, HudCreateParams, LoginParams, LoginResult, SdkError, SdkResult,
+    StateChangeParams, TeleportParams, WorldInfo,
     instance_conn::AwInstanceConnection,
     msg::{self, handler::from_world::attributes::WorldAttributes, out::hud::HudCreateResult},
     uni::handle_uni_packet,
@@ -135,5 +135,9 @@ impl AwInstance {
 
     pub fn teleport(&mut self, params: TeleportParams) -> SdkResult<()> {
         msg::out::teleport::teleport(self, params)
+    }
+
+    pub fn console_message(&mut self, params: ConsoleMessageParams) -> SdkResult<()> {
+        msg::out::console_message::console_message(self, params)
     }
 }

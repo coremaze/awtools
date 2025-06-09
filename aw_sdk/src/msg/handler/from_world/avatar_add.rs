@@ -40,21 +40,11 @@ impl TryFrom<&AWPacket> for AvatarAddInfo {
             name: packet
                 .get_string(VarID::MyName)
                 .ok_or(SdkError::missing_field("MyName"))?,
-            north: packet
-                .get_int(VarID::PositionNorth)
-                .ok_or(SdkError::missing_field("PositionNorth"))?,
-            height: packet
-                .get_int(VarID::PositionHeight)
-                .ok_or(SdkError::missing_field("PositionHeight"))?,
-            west: packet
-                .get_int(VarID::PositionWest)
-                .ok_or(SdkError::missing_field("PositionWest"))?,
-            rotation: packet
-                .get_int(VarID::PositionRotation)
-                .ok_or(SdkError::missing_field("PositionRotation"))?,
-            pitch: packet
-                .get_int(VarID::MyPitch)
-                .ok_or(SdkError::missing_field("Pitch"))?,
+            north: packet.get_int(VarID::PositionNorth).unwrap_or(0),
+            height: packet.get_int(VarID::PositionHeight).unwrap_or(0),
+            west: packet.get_int(VarID::PositionWest).unwrap_or(0),
+            rotation: packet.get_int(VarID::PositionRotation).unwrap_or(0),
+            pitch: packet.get_int(VarID::MyPitch).unwrap_or(0),
             state: packet.get_uint(VarID::MyState),
         })
     }

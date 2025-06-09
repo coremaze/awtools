@@ -1,3 +1,4 @@
+pub mod console_message;
 pub mod enter;
 pub mod heartbeat;
 pub mod hud;
