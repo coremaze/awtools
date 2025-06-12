@@ -1,5 +1,5 @@
 [workspace]
-members = ["aw_sdk","licgen", "licinfo", "universe"]
+members = ["aw_sdk", "licgen", "licinfo", "universe"]
 
 [profile.release]
 strip = true

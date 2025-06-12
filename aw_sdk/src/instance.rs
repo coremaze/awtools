@@ -3,8 +3,8 @@ use std::time::Duration;
 use aw_core::ProtocolMessage;
 
 use crate::{
-    AwEvent, ConsoleMessageParams, HudCreateParams, LoginParams, LoginResult, SdkError, SdkResult,
-    StateChangeParams, TeleportParams, WorldInfo,
+    AwEvent, ConsoleMessageParams, HudCreateParams, LoginParams, LoginResult, ObjectInfo,
+    QueryResult, SdkError, SdkResult, StateChangeParams, TeleportParams, WorldInfo,
     instance_conn::AwInstanceConnection,
     msg::{self, handler::from_world::attributes::WorldAttributes, out::hud::HudCreateResult},
     uni::handle_uni_packet,
@@ -50,6 +50,7 @@ impl AwInstance {
                 ProtocolMessage::Disconnect => {
                     // TODO: Handle disconnect properly - for now just log
                     eprintln!("Received disconnect message");
+                    events.push(AwEvent::UniverseDisconnected);
                 }
                 ProtocolMessage::PacketGroup(_)
                 | ProtocolMessage::StreamKey(_)
@@ -80,6 +81,8 @@ impl AwInstance {
                     ProtocolMessage::Disconnect => {
                         // TODO: Handle disconnect properly - for now just log
                         eprintln!("Received world disconnect message");
+                        self.world = None;
+                        events.push(AwEvent::WorldDisconnected);
                     }
                     ProtocolMessage::PacketGroup(_)
                     | ProtocolMessage::StreamKey(_)
@@ -139,5 +142,13 @@ impl AwInstance {
 
     pub fn console_message(&mut self, params: ConsoleMessageParams) -> SdkResult<()> {
         msg::out::console_message::console_message(self, params)
+    }
+
+    pub fn query(&mut self, sector_x: i32, sector_z: i32) -> SdkResult<QueryResult> {
+        msg::out::query::query(self, sector_x, sector_z)
+    }
+
+    pub fn object_change(&mut self, object_info: ObjectInfo) -> SdkResult<()> {
+        msg::out::object_change::object_change(self, object_info)
     }
 }

@@ -3,6 +3,8 @@ pub mod enter;
 pub mod heartbeat;
 pub mod hud;
 pub mod login;
+pub mod object_change;
+pub mod query;
 pub mod say;
 pub mod state_change;
 pub mod teleport;

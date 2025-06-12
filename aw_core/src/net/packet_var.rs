@@ -99,6 +99,7 @@ pub enum VarID {
     BotgramMessage = 42,
     BotgramCitizenNumber = 43,
     BotgramType = 44,
+    ObjectCellSize = 47,
     ObjectCellX = 48,
     ObjectCellZ = 49,
 
@@ -169,6 +170,9 @@ pub enum VarID {
 
     PlayerPort = 120,
     ReasonCode = 121,
+    ObjectQueryX = 122,
+    ObjectQueryZ = 123,
+    ObjectCellSequence = 124,
     SessionID = 140,
     TelegramCitizenName = 141,
     TelegramMessage = 142,

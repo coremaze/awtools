@@ -538,14 +538,14 @@ pub enum PacketType {
     Login = 47,
     Message = 48,
     ObjectAdd = 49,
-
+    ObjectChange = 50,
     ObjectClick = 51,
     ObjectDelete = 52,
     ObjectDeleteAll = 53,
 
     ObjectResult = 55,
     ObjectSelect = 56,
-
+    ObjectQuery3x3 = 57,
     QueryNeedMore = 59,
     QueryUpToDate = 60,
     RegistryReload = 61,

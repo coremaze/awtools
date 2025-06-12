@@ -22,9 +22,9 @@ pub fn state_change(instance: &mut AwInstance, params: StateChangeParams) -> Sdk
 }
 
 pub struct StateChangeParams {
-    pub north: i32,    // x
+    pub west: i32,     // x
     pub height: i32,   // y
-    pub west: i32,     // z
+    pub north: i32,    // z
     pub rotation: i32, // yaw
     pub gesture: u32,
     pub av_type: u32,

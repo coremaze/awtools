@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 aw_core = { path = "../aw_core" }
 thiserror = "1.0"
+rand = "0.8"

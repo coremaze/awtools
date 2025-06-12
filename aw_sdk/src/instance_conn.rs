@@ -130,6 +130,14 @@ impl AwInstanceConnection {
         packet_type: PacketType,
         timeout: Option<Duration>,
     ) -> Option<AWPacket> {
+        self.wait_for_packets(&[packet_type], timeout)
+    }
+
+    pub fn wait_for_packets(
+        &mut self,
+        packet_types: &[PacketType],
+        timeout: Option<Duration>,
+    ) -> Option<AWPacket> {
         let start = Instant::now();
         while !self.is_disconnected() {
             // Check timeout
@@ -144,7 +152,7 @@ impl AwInstanceConnection {
                     ProtocolMessage::Packet(packet) => {
                         let pkt_type = packet.get_type();
                         if let PacketTypeResult::PacketType(pkt_type) = pkt_type {
-                            if pkt_type == packet_type {
+                            if packet_types.contains(&pkt_type) {
                                 return Some(packet);
                             }
                         }
